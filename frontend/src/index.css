@@ -1,0 +1,164 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════
+   SmartDiagram — Design System (TailwindCSS v4)
+   ═══════════════════════════════════════════ */
+
+/* Tailwind v4 custom theme tokens */
+@theme {
+  --color-dark-900: #0f1724;
+  --color-dark-800: #131d30;
+  --color-dark-700: #182540;
+  --color-dark-600: #1e2d4a;
+  --color-dark-500: #253a5c;
+}
+
+/* ── Global Reset ── */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.4); }
+
+/* ══════════════════════════════════════════════════
+   Excalidraw Fix — undo TailwindCSS v4 Preflight
+   inside the Excalidraw container.
+   
+   Tailwind v4 Preflight does:
+     - svg { display: block } → blows up toolbar icons
+     - *, *::before, *::after { box-sizing: border-box } → breaks Excalidraw sizing
+     - button { background: transparent } → removes toolbar button backgrounds
+     - img, svg { max-width: 100% } → can clip icons
+   ══════════════════════════════════════════════════ */
+.excalidraw-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.excalidraw-wrapper .excalidraw {
+  width: 100%;
+  height: 100%;
+}
+
+/* Restore box-sizing for all Excalidraw internals */
+.excalidraw-wrapper .excalidraw,
+.excalidraw-wrapper .excalidraw *,
+.excalidraw-wrapper .excalidraw *::before,
+.excalidraw-wrapper .excalidraw *::after {
+  box-sizing: content-box;
+}
+
+/* Critical: Restore SVG display for toolbar icons */
+.excalidraw-wrapper .excalidraw svg {
+  display: inline;
+  vertical-align: middle;
+  max-width: none;
+}
+
+/* Restore img display */
+.excalidraw-wrapper .excalidraw img {
+  display: inline;
+  max-width: none;
+}
+
+/* Restore button styles */
+.excalidraw-wrapper .excalidraw button {
+  background: initial;
+  border: initial;
+  cursor: pointer;
+}
+
+/* Restore input/select styles */
+.excalidraw-wrapper .excalidraw input,
+.excalidraw-wrapper .excalidraw select,
+.excalidraw-wrapper .excalidraw textarea {
+  border: initial;
+}
+
+/* Fix the main canvas element (the drawing surface itself should stay block) */
+.excalidraw-wrapper .excalidraw canvas {
+  display: block;
+}
+
+/* Ensure Excalidraw tooltips and popovers render correctly */
+.excalidraw-wrapper .excalidraw .popover,
+.excalidraw-wrapper .excalidraw .dropdown-menu-container {
+  box-sizing: border-box;
+}
+
+/* Fix toolbar icon sizing — constrain SVGs within toolbar buttons */
+.excalidraw-wrapper .excalidraw .ToolIcon__icon svg,
+.excalidraw-wrapper .excalidraw .ToolIcon svg,
+.excalidraw-wrapper .excalidraw [class*="ToolIcon"] svg,
+.excalidraw-wrapper .excalidraw .Island svg {
+  width: 1em;
+  height: 1em;
+}
+
+/* ── Separator ── */
+.sd-separator {
+  width: 6px;
+  height: 100%;
+  flex-shrink: 0;
+  cursor: col-resize;
+  position: relative;
+  background: #e2e8f0;
+  transition: background 0.2s ease;
+}
+.sd-separator:hover { background: #cbd5e1; }
+.sd-separator-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 28px;
+  border-radius: 3px;
+  background: #94a3b8;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.sd-separator:hover .sd-separator-dot { opacity: 1; background: #3b82f6; }
+
+/* ── Animations ── */
+@keyframes sd-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes sd-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes sd-pulse {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 1; }
+}
+
+.sd-fade-in { animation: sd-fade-in 0.3s ease-out both; }
+.sd-slide-up { animation: sd-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* ── Hide scrollbar for horizontal scroll ── */
+.sd-no-scrollbar::-webkit-scrollbar { display: none; }
+.sd-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
