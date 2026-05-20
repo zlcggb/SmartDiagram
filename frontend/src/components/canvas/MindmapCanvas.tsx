@@ -23,11 +23,32 @@ const stripHtmlAndDecode = (html: string) => {
 };
 
 /** Convert markmap tree node → mind-elixir tree node */
-const convertToMindElixir = (node: any): any => ({
+const convertToMindElixir = (node: any, pathId: string = 'root'): any => ({
   topic: stripHtmlAndDecode(node.content),
-  id: Math.random().toString(36).substr(2, 9),
-  children: node.children?.map((c: any) => convertToMindElixir(c)) || [],
+  id: pathId,
+  children: node.children?.map((c: any, index: number) => convertToMindElixir(c, `${pathId}-${index}`)) || [],
 });
+
+/**
+ * Recursively restores expanded states from the old instance to the new data node tree
+ */
+const restoreExpandedStates = (newNode: any, oldInstance: any) => {
+  if (!oldInstance) return;
+  try {
+    const oldData = oldInstance.getData?.();
+    if (oldData?.nodeData) {
+      const oldNode = oldInstance.getObjById?.(newNode.id, oldData.nodeData);
+      if (oldNode && oldNode.expanded === false) {
+        newNode.expanded = false;
+      }
+    }
+  } catch (err) {
+    // Quietly ignore if node lookup fails
+  }
+  if (newNode.children) {
+    newNode.children.forEach((child: any) => restoreExpandedStates(child, oldInstance));
+  }
+};
 
 /** Convert MindElixir tree back to Markdown (for canvasCode sync) */
 const convertToMarkdown = (node: any, level: number = 1): string => {
@@ -143,6 +164,17 @@ export default function MindmapCanvas() {
   const isSyncingRef = useRef(false);
   const lastCanvasMode = useRef(canvasMode);
 
+  // Ref for double-write avoidance in markdown sync
+  const lastRenderedMarkdownRef = useRef('');
+
+  // MiniMap states
+  const [miniMapNodes, setMiniMapNodes] = useState<{ id: string; cx: number; cy: number }[]>([]);
+  const [miniMapLines, setMiniMapLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
+  const [viewBoxRect, setViewBoxRect] = useState<{ x: number; y: number; width: number; height: number }>({ x: 0, y: 0, width: 0, height: 0 });
+  const miniMapBoundsRef = useRef({ minX: 0, maxX: 1, minY: 0, maxY: 1 });
+  const isDraggingRef = useRef(false);
+  const startDragRef = useRef({ x: 0, y: 0, frameX: 0, frameY: 0 });
+
   // Clean up mindmap instance ref in store on unmount
   useEffect(() => {
     return () => {
@@ -158,6 +190,7 @@ export default function MindmapCanvas() {
     if (data?.nodeData) {
       isSyncingRef.current = true;
       const markdown = convertToMarkdown(data.nodeData);
+      lastRenderedMarkdownRef.current = markdown; // Record active markdown
       setCanvasCode(markdown);
       requestAnimationFrame(() => { isSyncingRef.current = false; });
     }
@@ -166,10 +199,159 @@ export default function MindmapCanvas() {
   // Determine active markdown code: use streamingCode during generation, canvasCode when done
   const codeToRender = (isStreaming && streamingCode) ? streamingCode : canvasCode;
 
+  // ─── MiniMap Update Logic ───
+  const updateMiniMap = useCallback(() => {
+    if (!mindInstance.current || !containerRef.current) return;
+
+    const container = containerRef.current;
+    const mapContainer = container.querySelector('.map-container') as HTMLElement;
+    if (!mapContainer) return;
+
+    // Retrieve all node DOMs inside MindElixir
+    const topics = mapContainer.querySelectorAll('tpc, .topic, [node-id]') as NodeListOf<HTMLElement>;
+    if (!topics.length) return;
+
+    const scale = mindInstance.current.scaleVal || 1;
+
+    const nodesData: { id: string; x: number; y: number; w: number; h: number }[] = [];
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+    const mapRect = mapContainer.getBoundingClientRect();
+
+    topics.forEach((el) => {
+      const id = el.getAttribute('node-id') || el.id || '';
+      const elRect = el.getBoundingClientRect();
+
+      // De-scaled coordinates relative to map-container
+      const x = (elRect.left - mapRect.left) / scale;
+      const y = (elRect.top - mapRect.top) / scale;
+      const w = elRect.width / scale;
+      const h = elRect.height / scale;
+
+      if (id) {
+        nodesData.push({ id, x, y, w, h });
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x + w);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y + h);
+      }
+    });
+
+    if (nodesData.length === 0 || minX === Infinity) return;
+
+    // Apply safe padding to prevent nodes clipping boundary
+    const pad = 80;
+    minX -= pad;
+    maxX += pad;
+    minY -= pad;
+    maxY += pad;
+
+    const boundsWidth = maxX - minX;
+    const boundsHeight = maxY - minY;
+
+    const mmW = 160;
+    const mmH = 120;
+    const scaleX = mmW / boundsWidth;
+    const scaleY = mmH / boundsHeight;
+    const miniScale = Math.min(scaleX, scaleY);
+
+    const offsetX = (mmW - boundsWidth * miniScale) / 2;
+    const offsetY = (mmH - boundsHeight * miniScale) / 2;
+
+    const mappedNodes = nodesData.map(n => ({
+      id: n.id,
+      cx: (n.x - minX) * miniScale + offsetX,
+      cy: (n.y - minY) * miniScale + offsetY,
+    }));
+
+    // Reconstruct lines from tree structure
+    const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    const buildLines = (node: any) => {
+      const fromNode = mappedNodes.find(mn => mn.id === node.id);
+      if (fromNode && node.children) {
+        node.children.forEach((child: any) => {
+          const toNode = mappedNodes.find(mn => mn.id === child.id);
+          if (toNode) {
+            lines.push({
+              x1: fromNode.cx,
+              y1: fromNode.cy,
+              x2: toNode.cx,
+              y2: toNode.cy,
+            });
+          }
+          buildLines(child);
+        });
+      }
+    };
+
+    try {
+      const currentData = mindInstance.current.getData();
+      if (currentData?.nodeData) {
+        buildLines(currentData.nodeData);
+      }
+    } catch (e) {
+      // Quiet fail if data is not fully ready
+    }
+
+    // Viewport frame calculation
+    const containerRect = container.getBoundingClientRect();
+    const viewX = (containerRect.left - mapRect.left) / scale;
+    const viewY = (containerRect.top - mapRect.top) / scale;
+    const viewW = containerRect.width / scale;
+    const viewH = containerRect.height / scale;
+
+    const frameX = (viewX - minX) * miniScale + offsetX;
+    const frameY = (viewY - minY) * miniScale + offsetY;
+    const frameW = viewW * miniScale;
+    const frameH = viewH * miniScale;
+
+    setViewBoxRect({
+      x: Math.max(-40, Math.min(mmW + 40, frameX)),
+      y: Math.max(-40, Math.min(mmH + 40, frameY)),
+      width: Math.max(8, Math.min(mmW * 2, frameW)),
+      height: Math.max(8, Math.min(mmH * 2, frameH)),
+    });
+
+    setMiniMapNodes(mappedNodes);
+    setMiniMapLines(lines);
+
+    miniMapBoundsRef.current = { minX, maxX, minY, maxY };
+  }, []);
+
+  // Sync interaction event listeners
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleInteraction = () => {
+      requestAnimationFrame(updateMiniMap);
+    };
+
+    el.addEventListener('wheel', handleInteraction, { passive: true });
+    el.addEventListener('pointermove', handleInteraction);
+    el.addEventListener('pointerup', handleInteraction);
+
+    const observer = new ResizeObserver(handleInteraction);
+    observer.observe(el);
+
+    return () => {
+      el.removeEventListener('wheel', handleInteraction);
+      el.removeEventListener('pointermove', handleInteraction);
+      el.removeEventListener('pointerup', handleInteraction);
+      observer.disconnect();
+    };
+  }, [updateMiniMap]);
+
   // Render / re-render when code changes
   useEffect(() => {
     if (!codeToRender || !containerRef.current) return;
     if (isSyncingRef.current) return;
+
+    // Check if new code matches our internal edits to avoid redundant init
+    if (codeToRender.trim() === lastRenderedMarkdownRef.current.trim()) {
+      return;
+    }
+
     setError(null);
 
     // 如果背景模式切换了，强制清空并重建 MindElixir 实例以加载正确的主题
@@ -215,6 +397,11 @@ export default function MindmapCanvas() {
 
       const data = { nodeData: convertToMindElixir(root) };
 
+      // Restore expanded states from old instance if present
+      if (mindInstance.current) {
+        restoreExpandedStates(data.nodeData, mindInstance.current);
+      }
+
       if (!mindInstance.current) {
         // First render: create new instance
         const me = new MindElixir({
@@ -233,6 +420,7 @@ export default function MindmapCanvas() {
         // Listen for edit events to sync back
         me.bus.addListener('operation', () => {
           syncToCanvasCode();
+          requestAnimationFrame(updateMiniMap);
         });
 
         // Listen for node selection to invoke precise optimization
@@ -249,8 +437,11 @@ export default function MindmapCanvas() {
           setSelectedNode(null);
         });
 
-        // Fit after initial layout
-        setTimeout(() => fitWithPadding(me), 0);
+        // Fit after initial layout and refresh minimap
+        setTimeout(() => {
+          fitWithPadding(me);
+          updateMiniMap();
+        }, 50);
       } else {
         // Subsequent renders: re-init with new data
         mindInstance.current.init(data);
@@ -258,6 +449,7 @@ export default function MindmapCanvas() {
         // Re-register listener (init clears listeners)
         mindInstance.current.bus.addListener('operation', () => {
           syncToCanvasCode();
+          requestAnimationFrame(updateMiniMap);
         });
 
         // Re-register node selection listeners
@@ -278,6 +470,7 @@ export default function MindmapCanvas() {
         if (!isStreaming) {
           fitWithPadding(mindInstance.current);
         }
+        setTimeout(updateMiniMap, 50);
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -287,7 +480,7 @@ export default function MindmapCanvas() {
         setError(msg);
       }
     }
-  }, [isStreaming, codeToRender, syncToCanvasCode, setMindmapInstance, canvasMode]);
+  }, [isStreaming, codeToRender, syncToCanvasCode, setMindmapInstance, canvasMode, updateMiniMap]);
 
   // Final fit and center adjustment when streaming concludes
   useEffect(() => {
@@ -295,11 +488,72 @@ export default function MindmapCanvas() {
       const timer = setTimeout(() => {
         if (mindInstance.current) {
           fitWithPadding(mindInstance.current);
+          updateMiniMap();
         }
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [isStreaming, canvasCode]);
+  }, [isStreaming, canvasCode, updateMiniMap]);
+
+  // ─── MiniMap Panning Pointer Events ───
+  const handleMiniMapPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    isDraggingRef.current = true;
+    startDragRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      frameX: viewBoxRect.x,
+      frameY: viewBoxRect.y,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleMiniMapPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current || !mindInstance.current || !containerRef.current) return;
+    e.stopPropagation();
+
+    const dx = e.clientX - startDragRef.current.x;
+    const dy = e.clientY - startDragRef.current.y;
+
+    const newFrameX = startDragRef.current.frameX + dx;
+    const newFrameY = startDragRef.current.frameY + dy;
+
+    const mapContainer = containerRef.current.querySelector('.map-container') as HTMLElement;
+    if (!mapContainer) return;
+
+    const scale = mindInstance.current.scaleVal || 1;
+    const bounds = miniMapBoundsRef.current;
+
+    const boundsWidth = bounds.maxX - bounds.minX;
+    const boundsHeight = bounds.maxY - bounds.minY;
+    if (boundsWidth <= 0 || boundsHeight <= 0) return;
+
+    const mmW = 160;
+    const mmH = 120;
+    const scaleX = mmW / boundsWidth;
+    const scaleY = mmH / boundsHeight;
+    const miniScale = Math.min(scaleX, scaleY);
+
+    if (miniScale <= 0) return;
+
+    // Apply incremental translation to main canvas
+    const moveX = -(dx / miniScale) * scale;
+    const moveY = -(dy / miniScale) * scale;
+
+    mindInstance.current.move(moveX, moveY);
+
+    startDragRef.current.x = e.clientX;
+    startDragRef.current.y = e.clientY;
+    startDragRef.current.frameX = newFrameX;
+    startDragRef.current.frameY = newFrameY;
+
+    updateMiniMap();
+  };
+
+  const handleMiniMapPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDraggingRef.current = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
 
   return (
     <div className={`w-full h-full relative transition-colors duration-300 ${canvasMode === 'light' ? 'bg-white' : 'bg-slate-950'}`}>
@@ -314,7 +568,151 @@ export default function MindmapCanvas() {
           <p className="text-xs text-slate-400 mt-1 max-w-xs">{error}</p>
         </div>
       ) : (
-        <div ref={containerRef} className="w-full h-full" />
+        <>
+          <div ref={containerRef} className="w-full h-full animate-fadeIn" />
+
+          {/* MiniMap and Floating Controls */}
+          {!isStreaming && mindInstance.current && (
+            <div className="absolute bottom-5 right-5 z-20 flex flex-col gap-2.5 items-end">
+              {/* Zoom & Fit & Collapse Controls */}
+              <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border shadow-lg backdrop-blur-md transition-colors duration-300 ${
+                canvasMode === 'light' ? 'bg-white/80 border-slate-200 text-slate-600' : 'bg-slate-900/80 border-slate-800/50 text-slate-300'
+              }`}>
+                <button
+                  onClick={() => {
+                    if (mindInstance.current) {
+                      mindInstance.current.scale(mindInstance.current.scaleVal + 0.1);
+                      updateMiniMap();
+                    }
+                  }}
+                  title="放大"
+                  className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => {
+                    if (mindInstance.current) {
+                      mindInstance.current.scale(Math.max(0.1, mindInstance.current.scaleVal - 0.1));
+                      updateMiniMap();
+                    }
+                  }}
+                  title="缩小"
+                  className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => {
+                    if (mindInstance.current) {
+                      fitWithPadding(mindInstance.current);
+                      updateMiniMap();
+                    }
+                  }}
+                  title="自适应"
+                  className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4" />
+                  </svg>
+                </button>
+                <div className="w-[1px] h-3.5 bg-slate-300 dark:bg-slate-700 mx-1" />
+                <button
+                  onClick={() => {
+                    if (mindInstance.current) {
+                      const rootNode = mindInstance.current.getData().nodeData;
+                      if (rootNode.children) {
+                        rootNode.children.forEach((c: any) => {
+                          mindInstance.current.expandNode(mindInstance.current.findEle(c.id), false);
+                        });
+                      }
+                      syncToCanvasCode();
+                      updateMiniMap();
+                    }
+                  }}
+                  title="全部折叠"
+                  className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => {
+                    if (mindInstance.current) {
+                      mindInstance.current.expandNodeAll(mindInstance.current.findEle('root'), true);
+                      syncToCanvasCode();
+                      updateMiniMap();
+                    }
+                  }}
+                  title="全部展开"
+                  className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* MiniMap Canvas Viewport */}
+              <div
+                onPointerDown={handleMiniMapPointerDown}
+                onPointerMove={handleMiniMapPointerMove}
+                onPointerUp={handleMiniMapPointerUp}
+                className={`w-40 h-30 rounded-xl border shadow-xl backdrop-blur-md relative overflow-hidden select-none cursor-grab active:cursor-grabbing transition-colors duration-300 ${
+                  canvasMode === 'light' ? 'bg-white/95 border-slate-200' : 'bg-slate-900/95 border-slate-800/80'
+                }`}
+              >
+                <svg className="w-full h-full">
+                  {/* Lines */}
+                  {miniMapLines.map((line, idx) => (
+                    <line
+                      key={`line-${idx}`}
+                      x1={line.x1}
+                      y1={line.y1}
+                      x2={line.x2}
+                      y2={line.y2}
+                      stroke={canvasMode === 'light' ? '#cbd5e1' : '#334155'}
+                      strokeWidth="1.2"
+                    />
+                  ))}
+                  {/* Nodes */}
+                  {miniMapNodes.map(node => (
+                    <circle
+                      key={`node-${node.id}`}
+                      cx={node.cx}
+                      cy={node.cy}
+                      r={node.id === 'root' ? '3.5' : '2'}
+                      fill={
+                        node.id === 'root'
+                          ? '#3b82f6'
+                          : canvasMode === 'light'
+                          ? '#64748b'
+                          : '#94a3b8'
+                      }
+                      className={node.id === 'root' ? 'shadow-sm shadow-blue-500' : ''}
+                    />
+                  ))}
+                  {/* Viewport Frame */}
+                  <rect
+                    x={viewBoxRect.x}
+                    y={viewBoxRect.y}
+                    width={viewBoxRect.width}
+                    height={viewBoxRect.height}
+                    fill="none"
+                    stroke="#3b82f6"
+                    strokeWidth="1.5"
+                    className="opacity-70 fill-blue-500/10 pointer-events-none"
+                  />
+                </svg>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
