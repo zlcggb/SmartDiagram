@@ -168,8 +168,8 @@ export default function MindmapCanvas() {
   const lastRenderedMarkdownRef = useRef('');
 
   // MiniMap states
-  const [miniMapNodes, setMiniMapNodes] = useState<{ id: string; cx: number; cy: number }[]>([]);
-  const [miniMapLines, setMiniMapLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
+  const [miniMapNodes, setMiniMapNodes] = useState<{ id: string; cx: number; cy: number; depth: number }[]>([]);
+  const [miniMapLines, setMiniMapLines] = useState<{ x1: number; y1: number; x2: number; y2: number; toDepth: number }[]>([]);
   const [viewBoxRect, setViewBoxRect] = useState<{ x: number; y: number; width: number; height: number }>({ x: 0, y: 0, width: 0, height: 0 });
   const miniMapBoundsRef = useRef({ minX: 0, maxX: 1, minY: 0, maxY: 1 });
   const isDraggingRef = useRef(false);
@@ -213,7 +213,7 @@ export default function MindmapCanvas() {
 
     const scale = mindInstance.current.scaleVal || 1;
 
-    const nodesData: { id: string; x: number; y: number; w: number; h: number }[] = [];
+    const nodesData: { id: string; x: number; y: number; w: number; h: number; depth: number }[] = [];
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
 
     const mapRect = mapContainer.getBoundingClientRect();
@@ -230,7 +230,9 @@ export default function MindmapCanvas() {
       const h = elRect.height / scale;
 
       if (id) {
-        nodesData.push({ id, x, y, w, h });
+        // Calculate tree depth from stable ID path (number of dashes)
+        const depth = id === 'root' ? 0 : id.split('-').length - 1;
+        nodesData.push({ id, x, y, w, h, depth });
         minX = Math.min(minX, x);
         maxX = Math.max(maxX, x + w);
         minY = Math.min(minY, y);
@@ -263,10 +265,11 @@ export default function MindmapCanvas() {
       id: n.id,
       cx: (n.x - minX) * miniScale + offsetX,
       cy: (n.y - minY) * miniScale + offsetY,
+      depth: n.depth,
     }));
 
     // Reconstruct lines from tree structure
-    const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    const lines: { x1: number; y1: number; x2: number; y2: number; toDepth: number }[] = [];
     const buildLines = (node: any) => {
       const fromNode = mappedNodes.find(mn => mn.id === node.id);
       if (fromNode && node.children) {
@@ -278,6 +281,7 @@ export default function MindmapCanvas() {
               y1: fromNode.cy,
               x2: toNode.cx,
               y2: toNode.cy,
+              toDepth: toNode.depth,
             });
           }
           buildLines(child);
@@ -319,7 +323,7 @@ export default function MindmapCanvas() {
     miniMapBoundsRef.current = { minX, maxX, minY, maxY };
   }, []);
 
-  // Sync interaction event listeners
+  // Sync interaction event listeners and DOM mutations
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -332,6 +336,15 @@ export default function MindmapCanvas() {
     el.addEventListener('pointermove', handleInteraction);
     el.addEventListener('pointerup', handleInteraction);
 
+    // Setup MutationObserver to watch DOM additions/deletions and attribute expansions
+    const mutationObserver = new MutationObserver(handleInteraction);
+    mutationObserver.observe(el, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'expanded'],
+    });
+
     const observer = new ResizeObserver(handleInteraction);
     observer.observe(el);
 
@@ -339,6 +352,7 @@ export default function MindmapCanvas() {
       el.removeEventListener('wheel', handleInteraction);
       el.removeEventListener('pointermove', handleInteraction);
       el.removeEventListener('pointerup', handleInteraction);
+      mutationObserver.disconnect();
       observer.disconnect();
     };
   }, [updateMiniMap]);
@@ -423,6 +437,12 @@ export default function MindmapCanvas() {
           syncToCanvasCode();
           requestAnimationFrame(updateMiniMap);
         });
+        me.bus.addListener('move', () => {
+          requestAnimationFrame(updateMiniMap);
+        });
+        me.bus.addListener('scale', () => {
+          requestAnimationFrame(updateMiniMap);
+        });
 
         // Listen for node selection to invoke precise optimization
         (me.bus as any).addListener('select-node', (node: any) => {
@@ -450,6 +470,12 @@ export default function MindmapCanvas() {
         // Re-register listener (init clears listeners)
         mindInstance.current.bus.addListener('operation', () => {
           syncToCanvasCode();
+          requestAnimationFrame(updateMiniMap);
+        });
+        mindInstance.current.bus.addListener('move', () => {
+          requestAnimationFrame(updateMiniMap);
+        });
+        mindInstance.current.bus.addListener('scale', () => {
           requestAnimationFrame(updateMiniMap);
         });
 
@@ -669,35 +695,116 @@ export default function MindmapCanvas() {
                 }`}
               >
                 <svg className="w-full h-full">
+                  <defs>
+                    {/* Grid pattern background */}
+                    <pattern id="minimap-grid" width="12" height="12" patternUnits="userSpaceOnUse">
+                      <circle
+                        cx="1.5"
+                        cy="1.5"
+                        r="0.75"
+                        fill={canvasMode === 'light' ? '#cbd5e1' : '#475569'}
+                        className="opacity-40"
+                      />
+                    </pattern>
+                    {/* Glowing effect for the active Viewport */}
+                    <filter id="glowing-viewport" x="-10%" y="-10%" width="120%" height="120%">
+                      <feGaussianBlur stdDeviation="0.8" result="blur" />
+                      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                    </filter>
+                    {/* Gentle glow for the root node */}
+                    <filter id="root-glow" x="-40%" y="-40%" width="180%" height="180%">
+                      <feGaussianBlur stdDeviation="0.6" result="blur" />
+                      <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                  </defs>
+
+                  {/* Grid background */}
+                  <rect width="100%" height="100%" fill="url(#minimap-grid)" />
+
                   {/* Lines */}
-                  {miniMapLines.map((line, idx) => (
-                    <line
-                      key={`line-${idx}`}
-                      x1={line.x1}
-                      y1={line.y1}
-                      x2={line.x2}
-                      y2={line.y2}
-                      stroke={canvasMode === 'light' ? '#cbd5e1' : '#334155'}
-                      strokeWidth="1.2"
-                    />
-                  ))}
+                  {miniMapLines.map((line, idx) => {
+                    let strokeColor = canvasMode === 'light' ? '#e2e8f0' : '#1e293b';
+                    let strokeWidth = '0.7';
+                    if (line.toDepth === 1) {
+                      strokeColor = canvasMode === 'light' ? 'rgba(99, 102, 241, 0.5)' : 'rgba(129, 140, 248, 0.45)';
+                      strokeWidth = '1.2';
+                    } else if (line.toDepth === 2) {
+                      strokeColor = canvasMode === 'light' ? 'rgba(8, 145, 178, 0.4)' : 'rgba(34, 211, 238, 0.35)';
+                      strokeWidth = '0.9';
+                    } else if (line.toDepth >= 3) {
+                      strokeColor = canvasMode === 'light' ? 'rgba(148, 163, 184, 0.25)' : 'rgba(71, 85, 105, 0.25)';
+                      strokeWidth = '0.6';
+                    }
+                    return (
+                      <line
+                        key={`line-${idx}`}
+                        x1={line.x1}
+                        y1={line.y1}
+                        x2={line.x2}
+                        y2={line.y2}
+                        stroke={strokeColor}
+                        strokeWidth={strokeWidth}
+                        strokeLinecap="round"
+                      />
+                    );
+                  })}
+
                   {/* Nodes */}
-                  {miniMapNodes.map(node => (
-                    <circle
-                      key={`node-${node.id}`}
-                      cx={node.cx}
-                      cy={node.cy}
-                      r={node.id === 'root' ? '3.5' : '2'}
-                      fill={
-                        node.id === 'root'
-                          ? '#3b82f6'
-                          : canvasMode === 'light'
-                          ? '#64748b'
-                          : '#94a3b8'
-                      }
-                      className={node.id === 'root' ? 'shadow-sm shadow-blue-500' : ''}
-                    />
-                  ))}
+                  {miniMapNodes.map(node => {
+                    let r = '1.2';
+                    let fill = canvasMode === 'light' ? '#94a3b8' : '#475569';
+                    if (node.id === 'root') {
+                      r = '3.5';
+                      fill = '#3b82f6';
+                    } else if (node.depth === 1) {
+                      r = '2.2';
+                      fill = canvasMode === 'light' ? '#4f46e5' : '#818cf8';
+                    } else if (node.depth === 2) {
+                      r = '1.6';
+                      fill = canvasMode === 'light' ? '#0891b2' : '#22d3ee';
+                    } else if (node.depth >= 3) {
+                      r = '1.2';
+                      fill = canvasMode === 'light' ? '#94a3b8' : '#475569';
+                    }
+
+                    return (
+                      <g key={`node-group-${node.id}`}>
+                        {/* Glowing Ring for Root Node */}
+                        {node.id === 'root' && (
+                          <>
+                            <circle
+                              cx={node.cx}
+                              cy={node.cy}
+                              r="7"
+                              fill="none"
+                              stroke="#3b82f6"
+                              strokeWidth="0.75"
+                              className="opacity-30 animate-ping [animation-duration:3s]"
+                            />
+                            <circle
+                              cx={node.cx}
+                              cy={node.cy}
+                              r="3.5"
+                              fill={fill}
+                              filter="url(#root-glow)"
+                            />
+                          </>
+                        )}
+                        {node.id !== 'root' && (
+                          <circle
+                            cx={node.cx}
+                            cy={node.cy}
+                            r={r}
+                            fill={fill}
+                          />
+                        )}
+                      </g>
+                    );
+                  })}
+
                   {/* Viewport Frame */}
                   <rect
                     x={viewBoxRect.x}
@@ -705,9 +812,10 @@ export default function MindmapCanvas() {
                     width={viewBoxRect.width}
                     height={viewBoxRect.height}
                     fill="none"
-                    stroke="#3b82f6"
+                    stroke={canvasMode === 'light' ? '#3b82f6' : '#60a5fa'}
                     strokeWidth="1.5"
-                    className="opacity-70 fill-blue-500/10 pointer-events-none"
+                    filter="url(#glowing-viewport)"
+                    className="opacity-90 fill-blue-500/5 transition-[x,y,width,height] duration-75 ease-out pointer-events-none"
                   />
                 </svg>
               </div>
