@@ -4,7 +4,7 @@
  * ALL styles are pure Tailwind v4 utility classes.
  */
 
-import { Suspense, lazy, useRef, useEffect } from 'react';
+import { Suspense, lazy, useRef, useEffect, useState } from 'react';
 import { useChatStore } from '../../store/chatStore';
 import { PenTool, Loader2 } from 'lucide-react';
 import { ReactFlowProvider } from 'reactflow';
@@ -25,44 +25,65 @@ const DrawioCanvas = lazy(() => import('../canvas/DrawioCanvas'));
 const InfographicCanvas = lazy(() => import('../canvas/InfographicCanvas'));
 
 function CanvasLoader() {
+  const { canvasMode } = useChatStore();
   return (
-    <div className="w-full h-full flex items-center justify-center bg-white">
+    <div className={`w-full h-full flex items-center justify-center transition-colors duration-300 ${canvasMode === 'light' ? 'bg-white' : 'bg-slate-950'}`}>
       <div className="flex flex-col items-center gap-3 sd-fade-in">
-        <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-        <span className="text-xs text-slate-400">加载渲染引擎...</span>
+        <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+        <span className={`text-xs ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>加载渲染引擎...</span>
       </div>
     </div>
   );
 }
 
 function EmptyCanvas() {
+  const { canvasMode } = useChatStore();
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden"
-      style={{ background: 'linear-gradient(160deg, #fafbfc 0%, #f0f4ff 40%, #f5f3ff 70%, #fafbfc 100%)' }}>
+    <div className={`w-full h-full flex flex-col items-center justify-center relative overflow-hidden transition-colors duration-300 ${
+      canvasMode === 'light'
+        ? 'bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200'
+        : 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950'
+    }`}>
+      {/* Glow effects in background */}
+      <div className={`absolute top-1/4 left-1/4 w-96 h-96 rounded-full filter blur-3xl pointer-events-none ${canvasMode === 'light' ? 'bg-blue-400/10' : 'bg-blue-500/5'}`} />
+      <div className={`absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full filter blur-3xl pointer-events-none ${canvasMode === 'light' ? 'bg-indigo-400/10' : 'bg-indigo-500/5'}`} />
+
       {/* Dot grid */}
-      <div className="absolute inset-0 pointer-events-none opacity-40"
+      <div className={`absolute inset-0 pointer-events-none ${canvasMode === 'light' ? 'opacity-30' : 'opacity-20'}`}
         style={{
-          backgroundImage: 'radial-gradient(circle, #cbd5e1 0.5px, transparent 0.5px)',
+          backgroundImage: canvasMode === 'light'
+            ? 'radial-gradient(circle, #6366f1 0.8px, transparent 0.8px)'
+            : 'radial-gradient(circle, #3b82f6 0.8px, transparent 0.8px)',
           backgroundSize: '24px 24px',
         }} />
 
-      <div className="relative z-10 flex flex-col items-center sd-fade-in">
-        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-7 bg-gradient-to-br from-blue-100 to-indigo-100 border border-blue-200/50 shadow-xl shadow-blue-100/20">
-          <PenTool className="w-9 h-9 text-blue-500/70" />
+      <div className="relative z-10 flex flex-col items-center sd-fade-in text-center">
+        <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-7 border shadow-2xl ${
+          canvasMode === 'light'
+            ? 'bg-white border-slate-200 shadow-slate-200/50'
+            : 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700/50 shadow-indigo-500/10'
+        }`}>
+          <PenTool className="w-9 h-9 text-indigo-500" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-800 mb-2">SmartDiagram</h1>
-        <p className="text-sm text-slate-400 max-w-xs text-center leading-relaxed mb-10">
-          在右侧描述任务目标，AI 会先理解你要表达什么，再选择合适的图形引擎
+        <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-3">
+          SmartDiagram Pro
+        </h1>
+        <p className={`text-sm max-w-sm text-center leading-relaxed mb-10 font-normal px-4 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
+          在右侧描述您的绘图任务，AI 将自动分析、构思设计并逐步渲染出精美的图表。
         </p>
-        <div className="flex items-center gap-2 flex-wrap justify-center">
+        <div className="flex items-center gap-2.5 flex-wrap justify-center max-w-lg px-4">
           {DIAGRAM_AGENTS.map((agent, i) => (
             <div key={agent.id}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 border border-slate-200/80 shadow-sm text-xs sd-slide-up"
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-md text-xs sd-slide-up backdrop-blur-sm ${
+                canvasMode === 'light'
+                  ? 'bg-white border border-slate-200 text-slate-700'
+                  : 'bg-slate-900/60 border border-slate-800/80 text-slate-200'
+              }`}
               style={{ animationDelay: `${300 + i * 60}ms` }}>
               <span className={`w-2 h-2 rounded-full ${agent.dotClass}`} />
-              <span className="font-medium text-slate-700">{agent.label}</span>
-              <span className="text-slate-300">·</span>
-              <span className="text-slate-400">{agent.engineLabel}</span>
+              <span className={`font-semibold ${canvasMode === 'light' ? 'text-slate-700' : 'text-slate-200'}`}>{agent.label}</span>
+              <span className="text-slate-400">·</span>
+              <span className={canvasMode === 'light' ? 'text-slate-500' : 'text-slate-400'}>{agent.engineLabel}</span>
             </div>
           ))}
         </div>
@@ -71,8 +92,9 @@ function EmptyCanvas() {
   );
 }
 
-export default function CanvasPanel() {
-  const { canvasTask, canvasEngine, canvasCode, isStreaming, canvasPhase, designConcept, streamingCode } = useChatStore();
+function CanvasPanelInner() {
+  const { canvasTask, canvasEngine, canvasCode, isStreaming, canvasPhase, designConcept, streamingCode, pendingElements, canvasMode } = useChatStore();
+  const [conceptOpen, setConceptOpen] = useState(true);
 
   // No engine selected → welcome screen
   if (!canvasEngine && !canvasCode) {
@@ -92,8 +114,11 @@ export default function CanvasPanel() {
     }
   })();
 
-  // Engine is selected but code not ready → show generating state
-  const isGenerating = canvasEngine && canvasPhase !== 'done' && !canvasCode;
+  // Precision streaming check: if we already have streaming code or pending elements, we should render the actual canvas
+  const hasStreamingContent = !!streamingCode || (canvasEngine === 'excalidraw' && pendingElements.length > 0);
+  
+  // Engine is selected but code not ready → show generating view ONLY if we don't have streaming content yet
+  const isGenerating = canvasEngine && canvasPhase !== 'done' && !canvasCode && !hasStreamingContent;
 
   const renderCanvas = () => {
     switch (canvasEngine) {
@@ -119,8 +144,8 @@ export default function CanvasPanel() {
         return <Suspense fallback={<CanvasLoader />}><InfographicCanvas /></Suspense>;
       default:
         return (
-          <div className="w-full h-full flex items-center justify-center p-10 bg-white">
-            <div className="max-w-xl text-slate-600 text-sm whitespace-pre-wrap leading-relaxed">
+          <div className={`w-full h-full flex items-center justify-center p-10 transition-colors duration-300 ${canvasMode === 'light' ? 'bg-white text-slate-800 border border-slate-200' : 'bg-slate-950 text-slate-300'}`}>
+            <div className={`max-w-xl text-sm whitespace-pre-wrap leading-relaxed ${canvasMode === 'light' ? 'text-slate-700' : 'text-slate-400'}`}>
               {canvasCode || '暂无可渲染内容'}
             </div>
           </div>
@@ -129,17 +154,21 @@ export default function CanvasPanel() {
   };
 
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden bg-white">
+    <div className={`w-full h-full flex flex-col overflow-hidden transition-colors duration-300 ${canvasMode === 'light' ? 'bg-white' : 'bg-slate-950'}`}>
       {/* Top toolbar */}
       {canvasEngine && (
-        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200/60 bg-slate-50/80 backdrop-blur-sm shrink-0 relative overflow-visible" style={{ zIndex: 20 }}>
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
+        <div className={`flex items-center justify-between px-4 py-2 border-b shrink-0 relative overflow-visible ${
+          canvasMode === 'light'
+            ? 'border-slate-200 bg-slate-50/80 text-slate-800'
+            : 'border-slate-800 bg-slate-900/60 text-slate-200'
+        } backdrop-blur-md`} style={{ zIndex: 20 }}>
+          <div className="flex items-center gap-2 text-xs font-semibold">
             <span className={`w-2 h-2 rounded-full ${agentDot}`} />
             {getTaskDisplayName(canvasTask)}
             {canvasEngine && (
-              <span className="text-slate-400 font-normal">· {getAgentEngineName(canvasEngine)}</span>
+              <span className={`${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-500'} font-normal`}>· {getAgentEngineName(canvasEngine)}</span>
             )}
-            {isStreaming && <Loader2 className="w-3 h-3 animate-spin ml-1 text-blue-500" />}
+            {isStreaming && <Loader2 className="w-3.5 h-3.5 animate-spin ml-1 text-indigo-500" />}
           </div>
           <ExportButton />
         </div>
@@ -157,11 +186,162 @@ export default function CanvasPanel() {
             streamingCode={streamingCode}
           />
         ) : (
-          renderCanvas()
+          <>
+            {renderCanvas()}
+            
+            {/* Floating AINodeOptimizeOverlay */}
+            <AINodeOptimizeOverlay />
+            
+            {/* Floating Design Concept Overlay Widget */}
+            {designConcept && (
+              <div className="absolute bottom-4 left-4 z-30 transition-all duration-300 select-none">
+                {conceptOpen ? (
+                  <div className={`w-80 rounded-xl border p-3.5 shadow-xl transition-all duration-300 ${
+                    canvasMode === 'light'
+                      ? 'border-slate-200 bg-white/95 text-slate-800 shadow-slate-200/50'
+                      : 'border-slate-800 bg-slate-900/90 text-slate-100'
+                  } backdrop-blur-md`}>
+                    <div className={`flex items-center justify-between gap-4 mb-2 border-b pb-1.5 ${canvasMode === 'light' ? 'border-slate-100' : 'border-slate-800'}`}>
+                      <p className="text-[10px] font-bold text-amber-500 flex items-center gap-1">
+                        <span>💡</span> AI 设计思路
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {isStreaming && (
+                          <span className="flex items-center gap-1 text-[9px] text-indigo-500 font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                            生成中
+                          </span>
+                        )}
+                        <button 
+                          onClick={() => setConceptOpen(false)}
+                          className={`text-[10px] cursor-pointer px-1 py-0.5 rounded transition-colors ${
+                            canvasMode === 'light' ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-100' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                          }`}
+                        >
+                          收起
+                        </button>
+                      </div>
+                    </div>
+                    <p className={`text-[11px] leading-relaxed max-h-28 overflow-y-auto pr-1 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>
+                      {designConcept}
+                    </p>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => setConceptOpen(true)}
+                    className={`w-8 h-8 rounded-full border flex items-center justify-center shadow-lg hover:shadow-xl text-amber-500 cursor-pointer transition-all ${
+                      canvasMode === 'light' ? 'border-slate-200 bg-white/95 hover:bg-slate-100 shadow-slate-200/50' : 'border-slate-800 bg-slate-900/90 hover:bg-slate-800'
+                    }`}
+                    title="查看 AI 设计思路"
+                  >
+                    💡
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
+}
+
+/* ── Precise Node Optimization Overlay ── */
+function AINodeOptimizeOverlay() {
+  const { selectedNode, setSelectedNode, canvasMode } = useChatStore();
+  const [inputVal, setInputVal] = useState('');
+
+  // Auto-reset input when selected node changes
+  useEffect(() => {
+    setInputVal('');
+  }, [selectedNode]);
+
+  if (!selectedNode) return null;
+
+  if (selectedNode.type !== 'mindmap' && selectedNode.type !== 'flow') return null;
+
+  const handleSend = () => {
+    if (!inputVal.trim()) return;
+    const prompt = `@${selectedNode.type === 'mindmap' ? 'mindmap' : 'flow'} 对节点「${selectedNode.text}」(ID: ${selectedNode.id}) 进行如下优化：${inputVal.trim()}`;
+    window.dispatchEvent(new CustomEvent('send-ai-message', { detail: { text: prompt } }));
+    setInputVal('');
+    setSelectedNode(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const badgeColor = selectedNode.type === 'mindmap' 
+    ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400' 
+    : 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400';
+
+  return (
+    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 w-full max-w-lg px-4 sd-slide-up">
+      <div className={`flex flex-col gap-2.5 p-3 border rounded-2xl shadow-2xl backdrop-blur-xl ${
+        canvasMode === 'light' ? 'bg-white/95 border-slate-200 shadow-slate-200/50' : 'bg-slate-900/90 border-slate-800'
+      }`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 overflow-hidden mr-2">
+            <span className="flex h-1.5 w-1.5 relative shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500"></span>
+            </span>
+            <span className={`text-[10px] font-semibold uppercase tracking-wider shrink-0 ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>AI 局部编辑</span>
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${badgeColor} truncate`}>
+              {selectedNode.type === 'mindmap' ? '脑图' : '流程图'}: {selectedNode.text}
+            </span>
+          </div>
+          <button
+            onClick={() => setSelectedNode(null)}
+            className={`cursor-pointer p-0.5 rounded transition-colors shrink-0 ${
+              canvasMode === 'light' ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className={`flex items-center gap-2 border rounded-xl px-3 py-1.5 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/20 transition-all ${
+          canvasMode === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800/80'
+        }`}>
+          <input
+            type="text"
+            value={inputVal}
+            onChange={(e) => setInputVal(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="描述你想如何修改或扩写这个节点..."
+            className={`flex-1 bg-transparent border-none outline-none text-xs py-1 ${
+              canvasMode === 'light' ? 'text-slate-800 placeholder-slate-400' : 'text-slate-200 placeholder-slate-500'
+            }`}
+            autoFocus
+          />
+          <button
+            onClick={handleSend}
+            disabled={!inputVal.trim()}
+            className={`flex items-center justify-center p-1.5 rounded-lg transition-all ${
+              inputVal.trim()
+                ? 'bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shadow-lg shadow-indigo-500/20'
+                : 'text-slate-700 bg-slate-800/40 cursor-not-allowed'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Keep original exported component name same to avoid breaking other imports
+export default function CanvasPanel() {
+  return <CanvasPanelInner />;
 }
 
 /* ── Generating View ── */
@@ -176,6 +356,7 @@ function GeneratingView({
   designConcept: string;
   streamingCode: string;
 }) {
+  const { canvasMode } = useChatStore();
   const codeRef = useRef<HTMLPreElement>(null);
 
   // Auto-scroll code area to bottom
@@ -188,100 +369,92 @@ function GeneratingView({
   const showCode = canvasPhase === 'generating' && streamingCode;
 
   return (
-    <div className="w-full h-full flex flex-col relative overflow-hidden"
-      style={{ background: 'linear-gradient(160deg, #fafbfc 0%, #f0f4ff 40%, #f5f3ff 70%, #fafbfc 100%)' }}>
+    <div className={`w-full h-full flex flex-col relative overflow-hidden transition-colors duration-300 ${
+      canvasMode === 'light'
+        ? 'bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200'
+        : 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950'
+    }`}>
       {/* Dot grid */}
-      <div className="absolute inset-0 pointer-events-none opacity-20"
+      <div className={`absolute inset-0 pointer-events-none ${canvasMode === 'light' ? 'opacity-30' : 'opacity-10'}`}
         style={{
-          backgroundImage: 'radial-gradient(circle, #cbd5e1 0.5px, transparent 0.5px)',
+          backgroundImage: canvasMode === 'light'
+            ? 'radial-gradient(circle, #6366f1 0.8px, transparent 0.8px)'
+            : 'radial-gradient(circle, #3b82f6 0.8px, transparent 0.8px)',
           backgroundSize: '24px 24px',
         }} />
 
       {/* Header bar */}
-      <div className="relative z-10 flex items-center gap-3 px-6 py-4 shrink-0">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200/50 shadow-sm">
+      <div className={`relative z-10 flex items-center gap-3 px-6 py-4 shrink-0 border-b ${
+        canvasMode === 'light'
+          ? 'border-slate-200 bg-white/60'
+          : 'border-slate-800/40 bg-slate-900/25'
+      } backdrop-blur-sm`}>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center border shadow-md ${
+          canvasMode === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+        }`}>
           {agentMeta?.Icon ? (
             <agentMeta.Icon className="w-4 h-4" style={{ color: agentMeta.color }} />
           ) : (
-            <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+            <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
           )}
         </div>
         <div>
-          <p className="text-sm font-semibold text-slate-700">
+          <p className={`text-sm font-semibold ${canvasMode === 'light' ? 'text-slate-800' : 'text-slate-200'}`}>
             {getTaskDisplayName(canvasTask)} · {getAgentEngineName(canvasEngine)}
           </p>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
-            <span className="text-[11px] text-slate-400">{phaseText}</span>
+            <Loader2 className="w-3 h-3 animate-spin text-indigo-500" />
+            <span className={`text-[11px] ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>{phaseText}</span>
           </div>
         </div>
       </div>
 
       {/* Content area */}
-      <div className="relative z-10 flex-1 min-h-0 flex flex-col px-6 pb-6 gap-4 overflow-hidden">
+      <div className="relative z-10 flex-1 min-h-0 flex flex-col px-6 py-6 gap-4 overflow-hidden">
         {/* Design concept — full text */}
         {designConcept && (
-          <div className="rounded-xl bg-white/80 border border-slate-200/80 shadow-sm overflow-auto shrink-0 sd-slide-up"
-            style={{ maxHeight: showCode ? '30%' : '60%' }}>
-            <div className="px-4 py-3">
-              <p className="text-[10px] font-semibold text-blue-500 mb-1.5 flex items-center gap-1">
-                <span>💡</span> 设计思路
+          <div className={`rounded-xl border shadow-lg overflow-auto shrink-0 sd-slide-up backdrop-blur-sm ${
+            canvasMode === 'light' ? 'bg-white/85 border-slate-200 text-slate-800' : 'bg-slate-900/60 border-slate-850 text-slate-300'
+          }`}
+            style={{ maxHeight: showCode ? '35%' : '70%' }}>
+            <div className="px-5 py-4">
+              <p className="text-[10px] font-bold text-amber-500 mb-2 flex items-center gap-1">
+                <span>💡</span> AI 设计思路
               </p>
-              <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{designConcept}</p>
+              <p className={`text-xs leading-relaxed whitespace-pre-wrap ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>{designConcept}</p>
             </div>
           </div>
         )}
 
         {/* Streaming code viewer */}
-        {showCode ? (
-          <div className="flex-1 min-h-0 rounded-xl overflow-hidden border border-slate-200/80 shadow-sm sd-slide-up flex flex-col"
-            style={{ background: '#1e293b' }}>
+        {showCode && (
+          <div className={`flex-1 min-h-0 rounded-xl overflow-hidden border shadow-xl sd-slide-up flex flex-col ${
+            canvasMode === 'light' ? 'border-slate-200 bg-white/80' : 'border-slate-800 bg-slate-900/40'
+          } backdrop-blur-xs`}>
             {/* Code header */}
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-700/50 shrink-0">
+            <div className={`flex items-center gap-2 px-4 py-2.5 border-b shrink-0 ${
+              canvasMode === 'light' ? 'border-slate-200 bg-slate-50/80' : 'border-slate-800 bg-slate-950/60'
+            }`}>
               <div className="flex gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400/60" />
-                <span className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500/40" />
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500/40" />
+                <span className="w-2.5 h-2.5 rounded-full bg-green-500/40" />
               </div>
-              <span className="text-[10px] text-slate-500 font-mono ml-2">code output</span>
+              <span className="text-[10px] text-slate-400 font-mono ml-2">code stream</span>
               <div className="ml-auto flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[10px] text-emerald-400/70">writing</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+                <span className="text-[10px] text-indigo-500 font-medium">writing DSL</span>
               </div>
             </div>
             {/* Code content */}
             <pre ref={codeRef}
-              className="flex-1 min-h-0 overflow-auto px-4 py-3 text-[11px] leading-relaxed font-mono text-slate-300 whitespace-pre-wrap break-all"
+              className={`flex-1 min-h-0 overflow-auto px-5 py-4 text-[11px] leading-relaxed font-mono whitespace-pre-wrap break-all ${
+                canvasMode === 'light' ? 'bg-slate-50/80 text-slate-800' : 'bg-slate-950/80 text-slate-300'
+              }`}
               style={{ scrollBehavior: 'smooth' }}>
               {streamingCode}
-              <span className="inline-block w-2 h-4 bg-blue-400/80 animate-pulse ml-0.5" style={{ verticalAlign: 'text-bottom' }} />
+              <span className="inline-block w-2 h-4 bg-indigo-500/80 animate-pulse ml-0.5" style={{ verticalAlign: 'text-bottom' }} />
             </pre>
-          </div>
-        ) : !designConcept && (
-          /* Skeleton fallback when no content yet */
-          <div className="flex-1 flex flex-col items-center justify-center">
-            <div className="flex items-center gap-4 opacity-40 mb-3">
-              {[80, 120, 100].map((w, i) => (
-                <div key={i}
-                  className="rounded-lg bg-gradient-to-r from-slate-200 to-slate-100"
-                  style={{
-                    width: w,
-                    height: 48,
-                    animation: `pulse 1.5s ease-in-out ${i * 0.3}s infinite`,
-                  }} />
-              ))}
-            </div>
-            <div className="flex items-center gap-3 opacity-30">
-              {[60, 80].map((w, i) => (
-                <div key={i}
-                  className="rounded-lg bg-gradient-to-r from-slate-200 to-slate-100"
-                  style={{
-                    width: w,
-                    height: 36,
-                    animation: `pulse 1.5s ease-in-out ${(i + 3) * 0.3}s infinite`,
-                  }} />
-              ))}
-            </div>
           </div>
         )}
       </div>

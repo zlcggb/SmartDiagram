@@ -20,10 +20,10 @@ Generate premium, enterprise-grade flowcharts as React Flow JSON.
 - **Logical Precision**: Use decision nodes for ALL branching logic. Each decision MUST have clear, mutually exclusive outcomes.
 
 ## MANDATORY ENRICHMENT
-Expand thin prompts into professional enterprise processes:
+Expand thin prompts into professional, complete enterprise processes:
 - "下单流程" → Inventory Lock, Payment Processing, Label Generation, Carrier Handshake, Notification
 - "用户注册" → Input Validation, Email Verification, Profile Creation, Welcome Email, Analytics Event
-- Add technical annotations: "Encryption Enabled", "Est. Latency: <50ms", "Retry Policy: 3x"
+- **Constraint**: Do NOT append hardcoded or simulated technical annotations (e.g., "Est. Latency: <50ms", "Retry Policy: 3x", "Encryption Enabled") to node labels unless specifically requested by the user. Keep labels clean, focused, and professional.
 
 ## OUTPUT FORMAT
 1. <design_concept> — Your design reasoning
@@ -33,7 +33,7 @@ Expand thin prompts into professional enterprise processes:
 - `start`: Flow entry point (green: #d1fae5 / #047857)
 - `end`: Terminal states (red: #fee2e2 / #dc2626)
 - `process`: Standard action step (blue: #dbeafe / #1e40af)
-- `decision`: Logic fork / diamond (orange: #fff7ed / #c2410c)
+- `decision`: Logic fork / diamond (orange: #fff7ed / #c2410c, keep node orientation flat, do NOT apply CSS rotate or transform to ensure horizontal text legibility)
 
 Each node: { "id": "1", "type": "default", "position": {"x":0,"y":0}, "data": {"label":"Step"}, "style": {...} }
 Each edge: { "id": "e1-2", "source": "1", "target": "2", "animated": false, "label": "...", "style": {"stroke": "#1e40af"} }
@@ -44,25 +44,12 @@ Each edge: { "id": "e1-2", "source": "1", "target": "2", "animated": false, "lab
 
 """ + get_domain_patterns() + """
 
-## LAYOUT STRATEGY (CRITICAL)
-Choose the best layout based on complexity. NEVER just stack all nodes in a single vertical column.
-
-### For sequential processes (5-8 steps): Use Left-to-Right (LR)
-- Arrange nodes horizontally: position x increases by 300px, y stays constant
-- Group related steps at the same y level
-
-### For processes with branches/decisions: Use multi-column layout
-- Main flow goes top-down, branches spread horizontally
-- Decision nodes split into 2-3 columns
-- Example: decision at x=300,y=200, "Yes" at x=100,y=400, "No" at x=500,y=400
-
-### For complex processes (>8 steps): Use grid/zigzag layout
-- Arrange in rows of 3-4 nodes, then wrap to next row
-- Row 1: x=0→300→600, Row 2: x=600→300→0 (zigzag), Row 3: x=0→300→600
+## LAYOUT STRATEGY
+Do NOT calculate exact coordinates for nodes. Always set "position": {"x": 0, "y": 0} for all nodes. The client-side Dagre hierarchical layout engine will automatically arrange nodes into beautiful, paper-grade top-down flowcharts.
 
 ## STYLE RULES
-- Minimum spacing: 200px vertical, 300px horizontal
 - Style nodes with: background color, borderRadius: 12, padding: 16, fontSize: 14, border, minWidth: 160
+- Do NOT output any "transform" or "rotate" properties inside the node style. All nodes must remain flat (0 degrees) to ensure text legibility.
 - Use meaningful labels with active verbs
 - Keep existing node IDs stable when editing
 

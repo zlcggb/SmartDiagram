@@ -136,16 +136,20 @@ const fitWithPadding = (me: any) => {
 // ─── Component ───
 
 export default function MindmapCanvas() {
-  const { canvasCode, isStreaming, setCanvasCode, setMindmapInstance } = useChatStore();
+  const { canvasCode, streamingCode, isStreaming, setCanvasCode, setMindmapInstance, setSelectedNode, canvasMode } = useChatStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const mindInstance = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
   const isSyncingRef = useRef(false);
+  const lastCanvasMode = useRef(canvasMode);
 
   // Clean up mindmap instance ref in store on unmount
   useEffect(() => {
-    return () => { setMindmapInstance(null); };
-  }, [setMindmapInstance]);
+    return () => {
+      setMindmapInstance(null);
+      setSelectedNode(null);
+    };
+  }, [setMindmapInstance, setSelectedNode]);
 
   /** Sync mind-elixir tree back to Markdown canvasCode when user edits */
   const syncToCanvasCode = useCallback(() => {
@@ -159,18 +163,41 @@ export default function MindmapCanvas() {
     }
   }, [setCanvasCode]);
 
+  // Determine active markdown code: use streamingCode during generation, canvasCode when done
+  const codeToRender = (isStreaming && streamingCode) ? streamingCode : canvasCode;
+
   // Render / re-render when code changes
   useEffect(() => {
-    if (isStreaming || !canvasCode || !containerRef.current) return;
+    if (!codeToRender || !containerRef.current) return;
     if (isSyncingRef.current) return;
     setError(null);
 
+    // 如果背景模式切换了，强制清空并重建 MindElixir 实例以加载正确的主题
+    if (lastCanvasMode.current !== canvasMode) {
+      if (mindInstance.current) {
+        if (containerRef.current) {
+          containerRef.current.innerHTML = '';
+        }
+        mindInstance.current = null;
+        setMindmapInstance(null);
+      }
+      lastCanvasMode.current = canvasMode;
+    }
+
     try {
       // Clean code
-      let code = canvasCode.trim();
+      let code = codeToRender.trim();
       if (code.startsWith('```')) {
-        code = code.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
+        // Strip opening backticks and language label (e.g. ```markdown)
+        code = code.replace(/^```\w*\n?/, '');
+        // Strip trailing backticks if present
+        if (code.endsWith('```')) {
+          code = code.slice(0, -3).trim();
+        } else {
+          code = code.trim();
+        }
       }
+      
       // Fix double-escaped newlines from LLM output
       if (code.includes('\\n') && !code.includes('\n')) {
         code = code.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
@@ -182,6 +209,10 @@ export default function MindmapCanvas() {
       // Parse Markdown → markmap tree → mind-elixir format
       const transformer = new Transformer();
       const { root } = transformer.transform(code);
+      
+      // If root is completely empty, skip rendering
+      if (!root || (!root.content && (!root.children || root.children.length === 0))) return;
+
       const data = { nodeData: convertToMindElixir(root) };
 
       if (!mindInstance.current) {
@@ -193,6 +224,7 @@ export default function MindmapCanvas() {
           editable: true,
           contextMenu: true,
           toolBar: true,
+          theme: canvasMode === 'light' ? undefined : ((MindElixir as any).dark || undefined),
         });
         me.init(data);
         mindInstance.current = me;
@@ -201,6 +233,20 @@ export default function MindmapCanvas() {
         // Listen for edit events to sync back
         me.bus.addListener('operation', () => {
           syncToCanvasCode();
+        });
+
+        // Listen for node selection to invoke precise optimization
+        (me.bus as any).addListener('select-node', (node: any) => {
+          if (node && node.topic) {
+            setSelectedNode({
+              id: node.id,
+              text: node.topic,
+              type: 'mindmap',
+            });
+          }
+        });
+        (me.bus as any).addListener('unselect-node', () => {
+          setSelectedNode(null);
         });
 
         // Fit after initial layout
@@ -214,33 +260,58 @@ export default function MindmapCanvas() {
           syncToCanvasCode();
         });
 
-        fitWithPadding(mindInstance.current);
+        // Re-register node selection listeners
+        mindInstance.current.bus.addListener('select-node', (node: any) => {
+          if (node && node.topic) {
+            setSelectedNode({
+              id: node.id,
+              text: node.topic,
+              type: 'mindmap',
+            });
+          }
+        });
+        mindInstance.current.bus.addListener('unselect-node', () => {
+          setSelectedNode(null);
+        });
+
+        // Do not auto-scale viewport during active streaming to prevent visual jittering/shaking
+        if (!isStreaming) {
+          fitWithPadding(mindInstance.current);
+        }
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[MindmapCanvas] Render error:', e);
-      setError(msg);
+      // Only set UI error state if NOT streaming to prevent interrupting the stream due to temporary parsing states
+      if (!isStreaming) {
+        setError(msg);
+      }
     }
-  }, [isStreaming, canvasCode, syncToCanvasCode, setMindmapInstance]);
+  }, [isStreaming, codeToRender, syncToCanvasCode, setMindmapInstance, canvasMode]);
 
-  // Final fit when streaming ends
+  // Final fit and center adjustment when streaming concludes
   useEffect(() => {
     if (!isStreaming && mindInstance.current && canvasCode) {
-      setTimeout(() => fitWithPadding(mindInstance.current), 100);
+      const timer = setTimeout(() => {
+        if (mindInstance.current) {
+          fitWithPadding(mindInstance.current);
+        }
+      }, 150);
+      return () => clearTimeout(timer);
     }
   }, [isStreaming, canvasCode]);
 
   return (
-    <div className="w-full h-full relative bg-white">
+    <div className={`w-full h-full relative transition-colors duration-300 ${canvasMode === 'light' ? 'bg-white' : 'bg-slate-950'}`}>
       {error ? (
         <div className="flex flex-col items-center justify-center h-full p-4 text-center">
-          <div className="p-3 bg-red-50 rounded-full mb-3">
-            <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="p-3 bg-red-950/20 rounded-full mb-3 border border-red-900/30">
+            <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p className="text-sm font-semibold text-slate-800">MindMap 渲染失败</p>
-          <p className="text-xs text-slate-500 mt-1 max-w-xs">{error}</p>
+          <p className="text-sm font-semibold text-slate-200">MindMap 渲染失败</p>
+          <p className="text-xs text-slate-400 mt-1 max-w-xs">{error}</p>
         </div>
       ) : (
         <div ref={containerRef} className="w-full h-full" />

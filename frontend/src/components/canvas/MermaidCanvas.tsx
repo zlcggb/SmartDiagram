@@ -18,13 +18,41 @@ const THEMES = [
 
 type ThemeId = (typeof THEMES)[number]['id'];
 
+// 自动对齐/平衡 Mermaid 流式生成中尚未闭合的 opt/alt/loop 等块，避免中间渲染语法报错
+function balanceSequenceEndBlocks(code: string): string {
+  if (!code.includes('sequenceDiagram') && !code.includes('flowchart') && !code.includes('graph')) {
+    return code;
+  }
+  const lines = code.split('\n');
+  let openBlocks = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^(opt|alt|loop|par|critical|rect|subgraph)(\s|$)/.test(trimmed)) {
+      openBlocks++;
+    } else if (trimmed === 'end') {
+      openBlocks--;
+    }
+  }
+  if (openBlocks > 0) {
+    let balanced = code;
+    if (!balanced.endsWith('\n')) {
+      balanced += '\n';
+    }
+    for (let i = 0; i < openBlocks; i++) {
+      balanced += 'end\n';
+    }
+    return balanced;
+  }
+  return code;
+}
+
 export default function MermaidCanvas() {
-  const { canvasCode, isStreaming, setCanvasCode } = useChatStore();
+  const { canvasCode, streamingCode, isStreaming, setCanvasCode, canvasMode, setCanvasMode } = useChatStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const svgWrapperRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasRendered, setHasRendered] = useState(false);
-  const [theme, setTheme] = useState<ThemeId>('default');
+  const [theme, setTheme] = useState<ThemeId>('dark');
   const [showEditor, setShowEditor] = useState(false);
   const [editorCode, setEditorCode] = useState('');
 
@@ -58,27 +86,65 @@ export default function MermaidCanvas() {
     });
   }, [theme]);
 
+  // Determine active mermaid code: use streamingCode during generation, canvasCode when done
+  const codeToRender = (isStreaming && streamingCode) ? streamingCode : canvasCode;
+
   // Render mermaid
   useEffect(() => {
-    if (!canvasCode || isStreaming) return;
+    if (!codeToRender) return;
     if (!containerRef.current) return;
 
-    setError(null);
+    let tempDiv: HTMLDivElement | null = null;
+
     const render = async () => {
       try {
-        let code = canvasCode.trim();
-        if (code.startsWith('```')) {
-          code = code.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
+        let code = codeToRender.trim();
+
+        // Handle streaming code: slice out incomplete trailing line to minimize syntax errors
+        if (isStreaming) {
+          const lines = code.split('\n');
+          // If the last line is likely incomplete (doesn't end with newline in stream), discard it for parsing
+          if (!codeToRender.endsWith('\n') && lines.length > 1) {
+            code = lines.slice(0, -1).join('\n').trim();
+          }
+          // 自动补全残缺的闭合块（如 opt/alt/loop 缺少 end），防止流式解析语法错
+          code = balanceSequenceEndBlocks(code);
         }
+
+        if (code.startsWith('```')) {
+          code = code.replace(/^```\w*\n?/, '');
+          if (code.endsWith('```')) {
+            code = code.slice(0, -3).trim();
+          } else {
+            code = code.trim();
+          }
+        }
+        
         if (code.startsWith('[') || code.startsWith('{')) return;
+        
+        // Skip rendering if there are too few lines to form a valid diagram
+        if (code.split('\n').length < 2) return;
+
+        // 创建临时 DOM 节点限制 Mermaid 的渲染行为，防止其在全局 body 产生残留炸弹报错
+        tempDiv = document.createElement('div');
+        tempDiv.id = `mermaid-temp-holder-${Date.now()}`;
+        tempDiv.style.display = 'none';
+        document.body.appendChild(tempDiv);
 
         const id = `mermaid-${Date.now()}`;
-        const { svg } = await mermaid.render(id, code);
+        const { svg } = await mermaid.render(id, code, tempDiv);
+        
         if (containerRef.current) {
           containerRef.current.innerHTML = svg;
-          setHasRendered(true);
-          setScale(1);
-          setTranslate({ x: 0, y: 0 });
+          setError(null); // Clear errors on success
+          
+          // Only reset pan & zoom if this is the first rendering pass or final render
+          if (!hasRendered || !isStreaming) {
+            setHasRendered(true);
+            setScale(1);
+            setTranslate({ x: 0, y: 0 });
+          }
+          
           const svgEl = containerRef.current.querySelector('svg');
           if (svgEl) {
             svgEl.style.maxWidth = 'none';
@@ -86,12 +152,23 @@ export default function MermaidCanvas() {
           }
         }
       } catch (e: any) {
-        console.error('[MermaidCanvas] Render error:', e);
-        setError(e.message || 'Mermaid render failed');
+        console.warn('[MermaidCanvas] Intermediate parse/render error (ignored during streaming):', e);
+        // Only trigger UI error state if NOT streaming to ensure fluid visual transitions
+        if (!isStreaming) {
+          setError(e.message || 'Mermaid render failed');
+        }
+      } finally {
+        // 销毁临时挂载节点
+        if (tempDiv && document.body.contains(tempDiv)) {
+          document.body.removeChild(tempDiv);
+        }
+        // 双重保障：强制清除 Mermaid 偶尔在 body 遗留的 dmermaid 临时容器，杜绝红炸弹在全局堆积
+        const rogueDivs = document.querySelectorAll('div[id^="dmermaid"]');
+        rogueDivs.forEach(div => div.remove());
       }
     };
     render();
-  }, [isStreaming, canvasCode, theme]);
+  }, [isStreaming, codeToRender, theme, hasRendered]);
 
   // Reset when canvas is cleared
   useEffect(() => {
@@ -160,7 +237,7 @@ export default function MermaidCanvas() {
   }, []);
 
   return (
-    <div className="w-full h-full relative bg-white overflow-hidden flex">
+    <div className="w-full h-full relative bg-slate-950 overflow-hidden flex animate-fade-in">
       {/* Left: Code Editor Panel (toggleable) */}
       {showEditor && (
         <div
@@ -169,8 +246,8 @@ export default function MermaidCanvas() {
             minWidth: '300px',
             display: 'flex',
             flexDirection: 'column',
-            borderRight: '1px solid #e5e7eb',
-            background: '#1e1e2e',
+            borderRight: '1px solid #1e293b',
+            background: '#0f172a',
           }}
         >
           {/* Editor header */}
@@ -180,11 +257,11 @@ export default function MermaidCanvas() {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '8px 12px',
-              borderBottom: '1px solid #313244',
-              background: '#181825',
+              borderBottom: '1px solid #1e293b',
+              background: '#0b0f19',
             }}
           >
-            <span style={{ color: '#cdd6f4', fontSize: '12px', fontWeight: 600 }}>
+            <span style={{ color: '#e2e8f0', fontSize: '12px', fontWeight: 600 }}>
               📝 Mermaid 代码编辑器
             </span>
             <button
@@ -192,8 +269,8 @@ export default function MermaidCanvas() {
               style={{
                 fontSize: '11px',
                 padding: '4px 12px',
-                background: '#a6e3a1',
-                color: '#1e1e2e',
+                background: '#10b981',
+                color: '#fff',
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer',
@@ -215,8 +292,8 @@ export default function MermaidCanvas() {
               fontFamily: '"Fira Code", "Cascadia Code", "JetBrains Mono", monospace',
               fontSize: '13px',
               lineHeight: '1.6',
-              background: '#1e1e2e',
-              color: '#cdd6f4',
+              background: '#090d16',
+              color: '#e2e8f0',
               border: 'none',
               outline: 'none',
               resize: 'none',
@@ -227,45 +304,54 @@ export default function MermaidCanvas() {
       )}
 
       {/* Right: Diagram area */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      <div
+        style={{
+          flex: 1,
+          position: 'relative',
+          overflow: 'hidden',
+          background: canvasMode === 'dark' ? '#090d16' : '#ffffff',
+          transition: 'background 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
         {error ? (
           <div className="w-full h-full flex items-center justify-center p-8">
-            <div className="text-red-500 text-sm bg-red-50 p-4 rounded-lg border border-red-200 max-w-lg">
-              <p className="font-medium mb-1">渲染失败</p>
-              <pre className="text-xs whitespace-pre-wrap">{error}</pre>
+            <div className="text-red-400 text-sm bg-red-950/20 p-4 rounded-lg border border-red-900/30 max-w-lg shadow-lg">
+              <p className="font-semibold mb-1 text-slate-200">渲染失败</p>
+              <pre className="text-xs whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">{error}</pre>
               {canvasCode && (
                 <details className="mt-2">
-                  <summary className="text-xs text-red-400 cursor-pointer">查看原始代码</summary>
-                  <pre className="text-xs whitespace-pre-wrap mt-1 text-red-300 max-h-40 overflow-auto">{canvasCode}</pre>
+                  <summary className="text-xs text-red-400/80 cursor-pointer hover:text-red-400">查看原始代码</summary>
+                  <pre className="text-xs whitespace-pre-wrap mt-1 text-red-300/80 max-h-40 overflow-auto bg-red-950/30 p-2 rounded">{canvasCode}</pre>
                 </details>
               )}
               <button
                 onClick={() => setShowEditor(true)}
                 style={{
-                  marginTop: '8px',
-                  fontSize: '12px',
+                  marginTop: '10px',
+                  fontSize: '11px',
                   padding: '4px 12px',
-                  background: '#fee2e2',
-                  color: '#dc2626',
-                  border: '1px solid #fca5a5',
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
                   borderRadius: '4px',
                   cursor: 'pointer',
+                  fontWeight: 500,
                 }}
               >
                 打开编辑器修复
               </button>
             </div>
           </div>
-        ) : isStreaming ? (
+        ) : isStreaming && !hasRendered ? (
           <div className="w-full h-full flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-gray-400">
-              <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-              <span>正在生成 Mermaid 图表...</span>
+            <div className="flex flex-col items-center gap-3 text-slate-500">
+              <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs">正在渲染 Mermaid 图表...</span>
             </div>
           </div>
-        ) : !canvasCode ? (
+        ) : !canvasCode && !streamingCode ? (
           <div className="w-full h-full flex items-center justify-center">
-            <p className="text-gray-400">Mermaid diagram will appear here...</p>
+            <p className="text-xs text-slate-500">等待 AI 输入代码以绘制图表...</p>
           </div>
         ) : null}
 
@@ -274,7 +360,7 @@ export default function MermaidCanvas() {
           ref={svgWrapperRef}
           className="absolute inset-0 overflow-hidden"
           style={{
-            display: (canvasCode && !isStreaming && !error) ? 'block' : 'none',
+            display: (codeToRender && !error) ? 'block' : 'none',
             cursor: 'grab',
           }}
           onMouseDown={handleMouseDown}
@@ -303,11 +389,11 @@ export default function MermaidCanvas() {
               display: 'flex',
               gap: '6px',
               alignItems: 'center',
-              background: 'rgba(255,255,255,0.92)',
+              background: 'rgba(15, 23, 42, 0.85)',
               backdropFilter: 'blur(8px)',
               borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              border: '1px solid #e5e7eb',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              border: '1px solid rgba(255,255,255,0.08)',
               padding: '4px',
             }}
           >
@@ -356,6 +442,32 @@ export default function MermaidCanvas() {
                 {t.icon}
               </button>
             ))}
+
+            <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.15)' }} />
+
+            {/* Canvas background toggle: Dark / Light */}
+            <button
+              onClick={() => setCanvasMode(canvasMode === 'dark' ? 'light' : 'dark')}
+              title={canvasMode === 'dark' ? '切换为明亮画布背景' : '切换为黑暗画布背景'}
+              style={{
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '14px',
+                background: 'transparent',
+                color: '#94a3b8',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#f8fafc')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
+            >
+              {canvasMode === 'dark' ? '☀️' : '🌙'}
+            </button>
           </div>
         )}
 

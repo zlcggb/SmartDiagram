@@ -17,7 +17,7 @@ import {
   Send, Loader2, Trash2, Settings,
   ChevronDown, ChevronUp,
   Sparkles, Copy, Check,
-  Plus, X, ImageIcon,
+  Plus, X, ImageIcon, SlidersHorizontal,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -74,17 +74,18 @@ function CopyButton({ text }: { text: string }) {
 }
 
 /* ── Markdown renderer for assistant messages ── */
-function AssistantContent({ content }: { content: string }) {
+function AssistantContent({ content, canvasMode }: { content: string; canvasMode: 'dark' | 'light' }) {
   return (
-    <div className="prose prose-sm prose-invert max-w-none text-slate-200
-                    prose-p:my-1 prose-p:leading-relaxed prose-p:text-[13px]
-                    prose-headings:text-slate-100 prose-headings:font-semibold
-                    prose-code:text-blue-300 prose-code:bg-slate-700/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono
-                    prose-pre:bg-slate-800 prose-pre:border prose-pre:border-slate-700/50 prose-pre:rounded-lg
-                    prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
-                    prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-li:text-[13px]
-                    prose-strong:text-slate-100
-                    prose-table:text-xs">
+    <div className={`prose prose-sm max-w-none text-[13px] leading-relaxed
+                    ${canvasMode === 'light' 
+                      ? 'prose-slate text-slate-800 prose-headings:text-slate-900 prose-strong:text-slate-900 prose-code:text-indigo-600 prose-code:bg-slate-100 prose-pre:bg-slate-50 prose-pre:border-slate-200' 
+                      : 'prose-invert text-slate-200 prose-headings:text-slate-100 prose-strong:text-slate-100 prose-code:text-blue-300 prose-code:bg-slate-700/50 prose-pre:bg-slate-800 prose-pre:border-slate-700/50'
+                    }
+                    prose-p:my-1 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono
+                    prose-pre:border prose-pre:rounded-lg
+                    prose-a:text-blue-500 hover:prose-a:underline
+                    prose-ul:my-1 prose-ol:my-1 prose-li:my-0
+                    prose-table:text-xs`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]}>
         {content}
       </ReactMarkdown>
@@ -107,12 +108,15 @@ export default function ChatPanel() {
     inputImages, addInputImage, removeInputImage, clearInputImages,
     setCanvasPhase,
     setStreamingCode,
+    detailLevel, setDetailLevel,
+    canvasMode,
   } = useChatStore();
 
   const [input, setInput] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<DiagramAgentMeta | null>(null);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
+  const [showLengthPicker, setShowLengthPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -166,8 +170,10 @@ export default function ChatPanel() {
   }, [input]);
 
   /* ── Send message ── */
-  const sendMessage = useCallback(async () => {
-    let text = input.trim();
+  const sendMessage = useCallback(async (directText?: string) => {
+    // 确保 directText 确实为字符串类型，防范 React 事件对象被当作参数误传入
+    const isDirectString = typeof directText === 'string';
+    let text = (isDirectString ? directText : input).trim();
     const imagesToSend = [...inputImages];
     if ((!text && imagesToSend.length === 0) || isStreaming) return;
 
@@ -177,7 +183,9 @@ export default function ChatPanel() {
     }
 
     addMessage({ id: `u_${Date.now()}`, role: 'user', content: text, images: imagesToSend.length > 0 ? imagesToSend : undefined, timestamp: Date.now() });
-    setInput('');
+    if (!isDirectString) {
+      setInput('');
+    }
     clearInputImages();
     setSelectedAgent(null);
     addMessage({ id: `a_${Date.now()}`, role: 'assistant', content: '', timestamp: Date.now() });
@@ -214,6 +222,7 @@ export default function ChatPanel() {
           current_task: canvasTask || '',
           current_engine: canvasEngine || '',
           model_config: modelConfig,
+          detailLevel,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -340,6 +349,18 @@ export default function ChatPanel() {
     }
   }, [input, isStreaming, modelConfig, messages, canvasCode, canvasTask, canvasEngine, selectedAgent, addPendingElement, clearPendingElements, inputImages]);
 
+  // Listen for external direct message events (e.g. from canvas node AI optimize overlay)
+  useEffect(() => {
+    const handleSendDirect = (e: Event) => {
+      const { text } = (e as CustomEvent).detail;
+      if (text) {
+        sendMessage(text);
+      }
+    };
+    window.addEventListener('send-ai-message', handleSendDirect);
+    return () => window.removeEventListener('send-ai-message', handleSendDirect);
+  }, [sendMessage]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -364,26 +385,32 @@ export default function ChatPanel() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-dark-900">
+    <div className={`h-full flex flex-col transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50 text-slate-800' : 'bg-dark-900 text-slate-200'}`}>
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-700/50">
+      <div className={`flex items-center justify-between px-5 py-3.5 border-b transition-colors duration-300 ${
+        canvasMode === 'light' ? 'border-slate-200 bg-white/60' : 'border-slate-700/50 bg-dark-900/60'
+      }`}>
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-indigo-500/20">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h1 className="text-[13px] font-semibold tracking-tight text-slate-100">SmartDiagram</h1>
-            <p className="text-[10px] text-slate-500">AI Visualization</p>
+            <h1 className={`text-[13px] font-semibold tracking-tight ${canvasMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>SmartDiagram</h1>
+            <p className={`text-[10px] ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>AI Visualization</p>
           </div>
         </div>
         <div className="flex items-center gap-0.5">
           <button onClick={() => setSettingsOpen(true)}
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors">
+            className={`p-2 rounded-lg transition-colors ${
+              canvasMode === 'light' ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-200' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+            }`}>
             <Settings className="w-4 h-4" />
           </button>
           <button onClick={clearMessages}
-            className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+            className={`p-2 rounded-lg transition-colors ${
+              canvasMode === 'light' ? 'text-slate-500 hover:text-red-600 hover:bg-red-500/10' : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'
+            }`}>
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
@@ -393,12 +420,14 @@ export default function ChatPanel() {
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-3">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center sd-fade-in">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5 bg-slate-800 border border-slate-700/50">
-              <Sparkles className="w-7 h-7 text-blue-400/60" />
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-5 border ${
+              canvasMode === 'light' ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-800 border-slate-700/50'
+            }`}>
+              <Sparkles className="w-7 h-7 text-blue-500/70" />
             </div>
-            <p className="text-sm font-medium text-slate-400 mb-1">描述你想要的图表</p>
-            <p className="text-xs text-slate-600 mb-6">
-              点击 <code className="px-1.5 py-0.5 rounded bg-slate-800 text-blue-400 text-[10px] font-mono">+</code> 上传图片，按任务选择图类型，或直接用 <code className="px-1.5 py-0.5 rounded bg-slate-800 text-blue-400 text-[10px] font-mono">@</code> 指定底层引擎
+            <p className={`text-sm font-medium mb-1 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>描述你想要的图表</p>
+            <p className={`text-xs mb-6 ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-600'}`}>
+              点击 <code className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${canvasMode === 'light' ? 'bg-slate-200 text-indigo-700' : 'bg-slate-800 text-blue-400'}`}>+</code> 上传图片，按任务选择图类型，或直接用 <code className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${canvasMode === 'light' ? 'bg-slate-200 text-indigo-700' : 'bg-slate-800 text-blue-400'}`}>@</code> 指定底层引擎
             </p>
             <div className="flex flex-col gap-2 w-full max-w-[280px]">
               {[
@@ -412,7 +441,11 @@ export default function ChatPanel() {
                     setInput(ex.text);
                     textareaRef.current?.focus();
                   }}
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-all duration-200 bg-slate-800/80 border border-slate-700/50 hover:border-blue-500/30 hover:bg-slate-800 sd-slide-up"
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-all duration-200 border shadow-xs ${
+                    canvasMode === 'light' 
+                      ? 'bg-white border-slate-250 hover:bg-slate-100' 
+                      : 'bg-slate-800/80 border-slate-700/50 hover:border-blue-500/30 hover:bg-slate-800'
+                  } sd-slide-up`}
                   style={{ animationDelay: `${i * 80}ms` }}
                 >
                   <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
@@ -420,7 +453,7 @@ export default function ChatPanel() {
                     <ex.agent.Icon style={{ width: 10, height: 10 }} />
                     {ex.agent.label}
                   </span>
-                  <span className="text-xs text-slate-400">{ex.text}</span>
+                  <span className={`text-xs ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{ex.text}</span>
                 </button>
               ))}
             </div>
@@ -431,7 +464,9 @@ export default function ChatPanel() {
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} sd-slide-up`}>
               <div className={`group relative max-w-[90%] rounded-2xl px-4 py-3 text-[13px] leading-relaxed ${msg.role === 'user'
                 ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20'
-                : 'bg-slate-800 border border-slate-700/50 text-slate-200'
+                : canvasMode === 'light' 
+                  ? 'bg-white border border-slate-200 text-slate-800 shadow-sm'
+                  : 'bg-slate-800 border border-slate-700/50 text-slate-200'
                 }`}>
                 {/* Agent pill */}
                 {msg.role === 'assistant' && (msg.taskType || msg.engineType) && (
@@ -500,7 +535,7 @@ export default function ChatPanel() {
                     <span className="text-xs text-slate-400">{msg.content}</span>
                   </div>
                 ) : msg.role === 'assistant' && msg.content ? (
-                  <AssistantContent content={msg.content} />
+                  <AssistantContent content={msg.content} canvasMode={canvasMode} />
                 ) : (
                   <p className="whitespace-pre-wrap">{msg.content}</p>
                 )}
@@ -521,11 +556,11 @@ export default function ChatPanel() {
       {/* ── ChatGPT-Style Input Area ── */}
       <div className="px-3 pb-3 pt-1">
         <div style={{
-          background: '#1e293b',
-          border: '1px solid rgba(148,163,184,0.2)',
+          background: canvasMode === 'light' ? '#ffffff' : '#1e293b',
+          border: canvasMode === 'light' ? '1px solid #cbd5e1' : '1px solid rgba(148,163,184,0.2)',
           borderRadius: '16px',
           overflow: 'visible',
-          transition: 'border-color 0.2s',
+          transition: 'all 0.2s',
         }}>
           {/* Hidden file input */}
           <input
@@ -586,7 +621,7 @@ export default function ChatPanel() {
                 width: '100%',
                 background: 'transparent',
                 fontSize: '13px',
-                color: '#e2e8f0',
+                color: canvasMode === 'light' ? '#0f172a' : '#e2e8f0',
                 outline: 'none',
                 resize: 'none',
                 maxHeight: '140px',
@@ -618,7 +653,7 @@ export default function ChatPanel() {
                   transition: 'all 0.15s',
                   color: inputImages.length > 0 ? '#60a5fa' : '#94a3b8',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#334155'; e.currentTarget.style.color = '#e2e8f0'; }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = canvasMode === 'light' ? '#e2e8f0' : '#334155'; e.currentTarget.style.color = canvasMode === 'light' ? '#1e293b' : '#e2e8f0'; }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = inputImages.length > 0 ? 'rgba(59,130,246,0.1)' : 'transparent';
                   e.currentTarget.style.color = inputImages.length > 0 ? '#60a5fa' : '#94a3b8';
@@ -648,7 +683,7 @@ export default function ChatPanel() {
                     transition: 'all 0.15s',
                     whiteSpace: 'nowrap',
                   }}
-                  onMouseEnter={(e) => { if (!selectedAgent) e.currentTarget.style.background = '#334155'; }}
+                  onMouseEnter={(e) => { if (!selectedAgent) e.currentTarget.style.background = canvasMode === 'light' ? '#e2e8f0' : '#334155'; }}
                   onMouseLeave={(e) => { if (!selectedAgent) e.currentTarget.style.background = 'transparent'; }}
                 >
                   {selectedAgent ? (
@@ -689,11 +724,11 @@ export default function ChatPanel() {
                       left: 0,
                       marginBottom: '6px',
                       zIndex: 50,
-                      background: '#1e293b',
-                      border: '1px solid rgba(148,163,184,0.2)',
+                      background: canvasMode === 'light' ? '#ffffff' : '#1e293b',
+                      border: canvasMode === 'light' ? '1px solid #cbd5e1' : '1px solid rgba(148,163,184,0.2)',
                       borderRadius: '12px',
                       padding: '4px',
-                      boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+                      boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
                       minWidth: '180px',
                     }}
                   >
@@ -703,12 +738,12 @@ export default function ChatPanel() {
                       style={{
                         width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
                         padding: '8px 10px', borderRadius: '8px',
-                        background: !selectedAgent ? '#334155' : 'transparent',
+                        background: !selectedAgent ? (canvasMode === 'light' ? '#f1f5f9' : '#334155') : 'transparent',
                         border: 'none', cursor: 'pointer', fontSize: '12px',
-                        color: '#e2e8f0', fontWeight: !selectedAgent ? 600 : 400,
+                        color: canvasMode === 'light' ? '#334155' : '#e2e8f0', fontWeight: !selectedAgent ? 600 : 400,
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = '#334155')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = !selectedAgent ? '#334155' : 'transparent')}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = canvasMode === 'light' ? '#f1f5f9' : '#334155')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = !selectedAgent ? (canvasMode === 'light' ? '#f1f5f9' : '#334155') : 'transparent')}
                     >
                       <Sparkles style={{ width: 14, height: 14, color: '#60a5fa' }} />
                       <span>AI 自动选择</span>
@@ -728,17 +763,107 @@ export default function ChatPanel() {
                         style={{
                           width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
                           padding: '8px 10px', borderRadius: '8px',
-                          background: selectedAgent?.id === a.id ? '#334155' : 'transparent',
+                          background: selectedAgent?.id === a.id ? (canvasMode === 'light' ? '#f1f5f9' : '#334155') : 'transparent',
                           border: 'none', cursor: 'pointer', fontSize: '12px',
-                          color: '#e2e8f0', fontWeight: selectedAgent?.id === a.id ? 600 : 400,
+                          color: canvasMode === 'light' ? '#334155' : '#e2e8f0', fontWeight: selectedAgent?.id === a.id ? 600 : 400,
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = '#334155')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = selectedAgent?.id === a.id ? '#334155' : 'transparent')}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = canvasMode === 'light' ? '#f1f5f9' : '#334155')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = selectedAgent?.id === a.id ? (canvasMode === 'light' ? '#f1f5f9' : '#334155') : 'transparent')}
                       >
                         <a.Icon style={{ width: 14, height: 14, color: a.color }} />
                         <span>{a.label}</span>
                         <span style={{ fontSize: '10px', color: '#64748b', marginLeft: '2px' }}>{a.engineLabel}</span>
                         {selectedAgent?.id === a.id && <Check style={{ width: 12, height: 12, color: a.color, marginLeft: 'auto' }} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Length dropdown chip */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowLengthPicker(!showLengthPicker)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    background: 'transparent',
+                    border: '1px solid rgba(148,163,184,0.2)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = canvasMode === 'light' ? '#e2e8f0' : '#334155'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <SlidersHorizontal style={{ width: 12, height: 12, opacity: 0.8 }} />
+                  <span>
+                    {detailLevel === 'short' ? '短 (精简)' : detailLevel === 'long' ? '长 (详细)' : '中 (标准)'}
+                  </span>
+                  <ChevronDown style={{ width: 12, height: 12, opacity: 0.6 }} />
+                </button>
+
+                {/* Length dropdown list */}
+                {showLengthPicker && (
+                  <div
+                    ref={(el) => {
+                      if (!el) return;
+                      const handler = (e: MouseEvent) => {
+                        if (!el.contains(e.target as Node)) setShowLengthPicker(false);
+                      };
+                      document.addEventListener('mousedown', handler);
+                      const obs = new MutationObserver(() => {
+                        if (!document.contains(el)) {
+                          document.removeEventListener('mousedown', handler);
+                          obs.disconnect();
+                        }
+                      });
+                      obs.observe(document.body, { childList: true, subtree: true });
+                    }}
+                    style={{
+                      position: 'absolute',
+                      bottom: '100%',
+                      left: 0,
+                      marginBottom: '6px',
+                      zIndex: 50,
+                      background: canvasMode === 'light' ? '#ffffff' : '#1e293b',
+                      border: canvasMode === 'light' ? '1px solid #cbd5e1' : '1px solid rgba(148,163,184,0.2)',
+                      borderRadius: '12px',
+                      padding: '4px',
+                      boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+                      minWidth: '130px',
+                    }}
+                  >
+                    {[
+                      { value: 'short', label: '短 (精简)', desc: '核心主干步骤' },
+                      { value: 'medium', label: '中 (标准)', desc: '标准分支逻辑' },
+                      { value: 'long', label: '长 (详细)', desc: '展开各种异常与边缘情况' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => {
+                          setDetailLevel(opt.value as any);
+                          setShowLengthPicker(false);
+                        }}
+                        style={{
+                          width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                          padding: '6px 10px', borderRadius: '8px',
+                          background: detailLevel === opt.value ? (canvasMode === 'light' ? '#f1f5f9' : '#334155') : 'transparent',
+                          border: 'none', cursor: 'pointer', fontSize: '12px',
+                          color: canvasMode === 'light' ? '#334155' : '#e2e8f0', textAlign: 'left',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = canvasMode === 'light' ? '#f1f5f9' : '#334155')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = detailLevel === opt.value ? (canvasMode === 'light' ? '#f1f5f9' : '#334155') : 'transparent')}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                          <span style={{ fontWeight: detailLevel === opt.value ? 600 : 400 }}>{opt.label}</span>
+                          {detailLevel === opt.value && <Check style={{ width: 12, height: 12, color: '#60a5fa', marginLeft: 'auto' }} />}
+                        </div>
+                        <span style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>{opt.desc}</span>
                       </button>
                     ))}
                   </div>
@@ -767,7 +892,7 @@ export default function ChatPanel() {
 
             {/* Right: Send button */}
             <button
-              onClick={sendMessage}
+              onClick={() => sendMessage()}
               disabled={(!input.trim() && inputImages.length === 0) || isStreaming}
               style={{
                 width: '32px', height: '32px',
@@ -791,7 +916,7 @@ export default function ChatPanel() {
             </button>
           </div>
         </div>
-        <div style={{ textAlign: 'right', padding: '4px 8px 0', fontSize: '10px', color: '#475569' }}>
+        <div style={{ textAlign: 'right', padding: '4px 8px 0', fontSize: '10px', color: canvasMode === 'light' ? '#64748b' : '#475569' }}>
           Enter 发送 · Shift+Enter 换行
         </div>
       </div>

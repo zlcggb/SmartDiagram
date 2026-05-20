@@ -265,6 +265,15 @@ def _build_messages(body: dict) -> list:
     # Append current user message
     user_message = body.get("message", "").strip()
 
+    # Apply diagram length / detail level controls
+    detail_level = body.get("detailLevel") or body.get("detail_level")
+    if detail_level == "short":
+        user_message += "\n\n[System Instruction: Please make the generated diagram highly concise. LIMIT the output to only the core 4 to 6 essential nodes/steps, skipping any detailed validation steps, error handling, or minor branch details.]"
+    elif detail_level == "long":
+        user_message += "\n\n[System Instruction: Please make the generated diagram highly detailed and comprehensive. EXPAND fully on edge cases, error handling steps, validation logic, timeouts, and all potential scenarios, aiming for 15+ nodes/steps to cover everything.]"
+    elif detail_level == "medium":
+        user_message += "\n\n[System Instruction: Please make the generated diagram standard in detail, containing around 8 to 12 nodes/steps. Focus on primary flows and main decisions.]"
+
     # If there's existing canvas code and the user wants to edit,
     # inject it so the Agent knows the current state.
     current_code = body.get("current_code", "")

@@ -78,6 +78,10 @@ Parentheses `()` are safe in sequenceDiagram messages without quotes:
 A->>B: signIn(email, password)
 ```
 
+## ⚠️ CRITICAL — sequenceDiagram End keyword layout
+Always write "end" keywords on their own separate lines. NEVER combine multiple "end" keywords on the same line (e.g. "end end" or "... end end"), as this is invalid syntax and crashes the compiler.
+Every "end" must be followed by a newline.
+
 ## ⚠️ CRITICAL — Semicolons in Text
 Mermaid treats semicolons `;` as line breaks. If your text contains a semicolon, it will BREAK the diagram.
 **Always escape semicolons as `#59;`** in message text and Note text.

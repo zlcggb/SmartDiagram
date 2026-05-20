@@ -14,7 +14,7 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { modelConfig, setModelConfig } = useChatStore();
+  const { modelConfig, setModelConfig, canvasMode } = useChatStore();
 
   const [apiKey, setApiKey] = useState(modelConfig?.api_key || '');
   const [baseUrl, setBaseUrl] = useState(modelConfig?.base_url || '');
@@ -64,16 +64,22 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl w-full max-w-md mx-4 sd-fade-in">
+      <div className={`relative border rounded-2xl shadow-2xl w-full max-w-md mx-4 sd-fade-in transition-colors duration-300 ${
+        canvasMode === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-700/50'
+      }`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/50">
-          <h2 className="text-base font-semibold text-slate-100">模型配置</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${
+          canvasMode === 'light' ? 'border-slate-200 bg-slate-50/50 rounded-t-2xl' : 'border-slate-700/50'
+        }`}>
+          <h2 className={`text-base font-semibold ${canvasMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>模型配置</h2>
+          <button onClick={onClose} className={`p-1.5 rounded-lg transition-colors ${
+            canvasMode === 'light' ? 'text-slate-400 hover:text-slate-750 hover:bg-slate-200' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -82,49 +88,61 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         <div className="px-6 py-5 space-y-4">
           {/* API Key */}
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">API Key</label>
+            <label className={`block text-xs font-medium mb-1.5 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>API Key</label>
             <input
               type="password"
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
               placeholder="sk-..."
-              className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700/50 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500/50 transition-colors"
+              className={`w-full px-3 py-2.5 rounded-lg border text-sm outline-none focus:border-blue-500/50 transition-colors ${
+                canvasMode === 'light' 
+                  ? 'bg-slate-50 border-slate-250 text-slate-805 placeholder:text-slate-400' 
+                  : 'bg-slate-800 border-slate-700/50 text-slate-200 placeholder:text-slate-600'
+              }`}
             />
           </div>
 
           {/* Base URL */}
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Base URL</label>
+            <label className={`block text-xs font-medium mb-1.5 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>Base URL</label>
             <input
               type="text"
               value={baseUrl}
               onChange={e => setBaseUrl(e.target.value)}
               placeholder="https://api.openai.com/v1"
-              className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700/50 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500/50 transition-colors"
+              className={`w-full px-3 py-2.5 rounded-lg border text-sm outline-none focus:border-blue-500/50 transition-colors ${
+                canvasMode === 'light' 
+                  ? 'bg-slate-50 border-slate-250 text-slate-805 placeholder:text-slate-400' 
+                  : 'bg-slate-800 border-slate-700/50 text-slate-200 placeholder:text-slate-600'
+              }`}
             />
           </div>
 
           {/* Model ID */}
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Model ID</label>
+            <label className={`block text-xs font-medium mb-1.5 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>Model ID</label>
             <input
               type="text"
               value={modelId}
               onChange={e => setModelId(e.target.value)}
               placeholder="gpt-4o"
-              className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700/50 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-blue-500/50 transition-colors"
+              className={`w-full px-3 py-2.5 rounded-lg border text-sm outline-none focus:border-blue-500/50 transition-colors ${
+                canvasMode === 'light' 
+                  ? 'bg-slate-50 border-slate-250 text-slate-805 placeholder:text-slate-400' 
+                  : 'bg-slate-800 border-slate-700/50 text-slate-200 placeholder:text-slate-600'
+              }`}
             />
           </div>
 
           {/* Test result */}
           {testStatus === 'success' && (
-            <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 text-xs text-emerald-600 bg-emerald-500/10 rounded-lg px-3 py-2">
               <CheckCircle className="w-3.5 h-3.5" />
               连接成功
             </div>
           )}
           {testStatus === 'error' && (
-            <div className="flex items-start gap-2 text-xs text-red-400 bg-red-500/10 rounded-lg px-3 py-2">
+            <div className="flex items-start gap-2 text-xs text-red-500 bg-red-500/10 rounded-lg px-3 py-2">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
               <span>{testError}</span>
             </div>
@@ -132,11 +150,17 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-700/50">
+        <div className={`flex items-center justify-between px-6 py-4 border-t ${
+          canvasMode === 'light' ? 'border-slate-200 bg-slate-50/50 rounded-b-2xl' : 'border-slate-700/50'
+        }`}>
           <button
             onClick={handleTest}
             disabled={!apiKey.trim() || testStatus === 'testing'}
-            className="px-4 py-2 rounded-lg text-xs font-medium text-slate-300 bg-slate-800 border border-slate-700/50 hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+              canvasMode === 'light'
+                ? 'text-slate-600 bg-slate-100 border border-slate-250 hover:bg-slate-200'
+                : 'text-slate-300 bg-slate-800 border border-slate-700/50 hover:bg-slate-700'
+            }`}
           >
             {testStatus === 'testing'
               ? <span className="flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" />测试中...</span>
@@ -144,12 +168,14 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             }
           </button>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors">
+            <button onClick={onClose} className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
+              canvasMode === 'light' ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'
+            }`}>
               取消
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 shadow-lg shadow-blue-500/20 transition-all"
+              className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 shadow-lg shadow-indigo-500/20 transition-all"
             >
               保存
             </button>

@@ -7,6 +7,12 @@ import type { DiagramEngineType, DiagramTaskType } from '../types/diagram';
 
 export type CanvasPhase = 'idle' | 'routing' | 'designing' | 'generating' | 'done';
 
+export interface SelectedNodeInfo {
+  id: string;
+  text: string;
+  type: 'mindmap' | 'flow';
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -31,6 +37,10 @@ interface ChatStore {
   addMessage: (msg: Message) => void;
   updateLastAssistantMessage: (updates: Partial<Message>) => void;
   clearMessages: () => void;
+
+  // Selected canvas node for precise editing
+  selectedNode: SelectedNodeInfo | null;
+  setSelectedNode: (v: SelectedNodeInfo | null) => void;
 
   // Streaming state
   isStreaming: boolean;
@@ -82,6 +92,14 @@ interface ChatStore {
   addInputImage: (dataUrl: string) => void;
   removeInputImage: (index: number) => void;
   clearInputImages: () => void;
+
+  // Generating length control ('short' | 'medium' | 'long')
+  detailLevel: 'short' | 'medium' | 'long';
+  setDetailLevel: (v: 'short' | 'medium' | 'long') => void;
+
+  // Canvas background mode ('dark' | 'light')
+  canvasMode: 'dark' | 'light';
+  setCanvasMode: (v: 'dark' | 'light') => void;
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -99,6 +117,9 @@ export const useChatStore = create<ChatStore>((set) => ({
       return { messages: msgs };
     }),
   clearMessages: () => set({ messages: [] }),
+
+  selectedNode: null,
+  setSelectedNode: (v) => set({ selectedNode: v }),
 
   isStreaming: false,
   setIsStreaming: (v) => set({ isStreaming: v }),
@@ -144,4 +165,10 @@ export const useChatStore = create<ChatStore>((set) => ({
     return { inputImages: imgs };
   }),
   clearInputImages: () => set({ inputImages: [] }),
+
+  detailLevel: 'medium',
+  setDetailLevel: (v) => set({ detailLevel: v }),
+
+  canvasMode: 'dark',
+  setCanvasMode: (v) => set({ canvasMode: v }),
 }));

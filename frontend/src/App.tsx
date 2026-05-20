@@ -6,8 +6,10 @@
 import { useState, useCallback, useRef } from 'react';
 import ChatPanel from './components/chat/ChatPanel';
 import CanvasPanel from './components/layout/CanvasPanel';
+import { useChatStore } from './store/chatStore';
 
 export default function App() {
+  const { canvasMode } = useChatStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const [chatWidth, setChatWidth] = useState(420);
   const isDragging = useRef(false);
@@ -34,14 +36,25 @@ export default function App() {
   }, []);
 
   return (
-    <div ref={containerRef} className="h-screen w-screen overflow-hidden flex bg-white">
+    <div 
+      ref={containerRef} 
+      className={`h-screen w-screen overflow-hidden flex transition-colors duration-300 ${
+        canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'
+      }`}
+    >
       {/* Canvas (hero, left, flex-1) */}
       <div className="flex-1 h-full min-w-0">
         <CanvasPanel />
       </div>
 
       {/* Separator */}
-      <div onMouseDown={handleMouseDown} className="sd-separator">
+      <div 
+        onMouseDown={handleMouseDown} 
+        className="sd-separator"
+        style={{
+          background: canvasMode === 'light' ? '#e2e8f0' : '#1e293b',
+        }}
+      >
         <div className="sd-separator-dot" />
       </div>
 

@@ -14,6 +14,7 @@
     "@excalidraw/excalidraw": "^0.18.0",
     "@maxgraph/core": "^0.22.0",
     "clsx": "^2.1.1",
+    "dagre": "^0.8.5",
     "echarts": "^6.0.0",
     "html-to-image": "^1.11.11",
     "lucide-react": "^0.577.0",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@tailwindcss/postcss": "^4.2.1",
+    "@types/dagre": "^0.7.54",
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

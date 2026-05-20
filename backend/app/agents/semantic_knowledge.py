@@ -58,7 +58,7 @@ Map domain concepts to node styles for richer, more meaningful diagrams:
 | Memory | borderRadius: 8, border: dashed | `#fef3c7` / `#b45309` | Dashed = ephemeral |
 | Tool / Function | borderRadius: 4 | `#ecfeff` / `#0e7490` | Utility |
 | Database / Store | borderRadius: 16 (rounded) | `#f3e8ff` / `#7c3aed` | Persistent |
-| Decision | diamond shape via CSS (rotate 45deg) or label "◆ ..." | `#fff7ed` / `#c2410c` | Fork |
+| Decision | flat card with border and label prefix "◆ ..." | `#fff7ed` / `#c2410c` | Logic Fork. Keep node flat (do NOT use rotate or transform) to ensure text legibility |
 | Start | pill (borderRadius: 50) | `#d1fae5` / `#047857` | Entry |
 | End | pill (borderRadius: 50) | `#fee2e2` / `#dc2626` | Terminal |
 """
