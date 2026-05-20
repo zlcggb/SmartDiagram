@@ -208,7 +208,7 @@ export default function MindmapCanvas() {
     if (!mapContainer) return;
 
     // Retrieve all node DOMs inside MindElixir
-    const topics = mapContainer.querySelectorAll('tpc, .topic, [node-id]') as NodeListOf<HTMLElement>;
+    const topics = mapContainer.querySelectorAll('me-tpc, [data-nodeid]') as NodeListOf<HTMLElement>;
     if (!topics.length) return;
 
     const scale = mindInstance.current.scaleVal || 1;
@@ -219,7 +219,8 @@ export default function MindmapCanvas() {
     const mapRect = mapContainer.getBoundingClientRect();
 
     topics.forEach((el) => {
-      const id = el.getAttribute('node-id') || el.id || '';
+      const dataNodeId = el.getAttribute('data-nodeid') || '';
+      const id = dataNodeId.startsWith('me') ? dataNodeId.slice(2) : dataNodeId;
       const elRect = el.getBoundingClientRect();
 
       // De-scaled coordinates relative to map-container
