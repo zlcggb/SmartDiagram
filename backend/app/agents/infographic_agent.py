@@ -6,7 +6,7 @@ Supports both new creation and incremental editing.
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from app.state.state import AgentState
-from app.core.llm import create_llm_for_agent
+from app.core.llm import create_llm_for_agent, extract_text_content
 from app.data.template_syntax import (
     TEMPLATES,
     COMMON_SYNTAX_RULES,
@@ -123,7 +123,7 @@ async def infographic_agent_node(state: AgentState) -> dict:
             HumanMessage(content=user_text),
         ])
 
-        selected_template = selection_response.content.strip().lower()
+        selected_template = extract_text_content(selection_response.content).strip().lower()
         # Validate template exists
         all_templates = []
         for templates in TEMPLATES.values():
@@ -158,4 +158,4 @@ async def infographic_agent_node(state: AgentState) -> dict:
         [SystemMessage(content=code_prompt)] + messages
     )
 
-    return {"messages": [AIMessage(content=response.content)]}
+    return {"messages": [AIMessage(content=extract_text_content(response.content))]}

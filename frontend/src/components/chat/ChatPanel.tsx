@@ -15,13 +15,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, Loader2, Trash2, Settings,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, ChevronRight,
   Sparkles, Copy, Check,
   Plus, X, ImageIcon, SlidersHorizontal,
+  Sun, Moon,
+  Brain, CheckCircle2,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useChatStore } from '../../store/chatStore';
+import { useChatStore, type ThinkingStep } from '../../store/chatStore';
 import SettingsModal from '../settings/SettingsModal';
 import {
   DIAGRAM_AGENTS,
@@ -36,19 +38,41 @@ const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '';
 
 /* ── Design Concept Collapsible ── */
 function DesignConceptCard({ text }: { text: string }) {
+  const { canvasMode } = useChatStore();
   const [open, setOpen] = useState(false);
   const isLong = text.length > 100;
+  const isLight = canvasMode === 'light';
+
   return (
-    <div className="mt-2 rounded-lg border border-amber-500/10 bg-amber-500/5 overflow-hidden">
+    <div className={`mt-2 rounded-xl border transition-all duration-300 overflow-hidden ${
+      isLight 
+        ? 'border-amber-200 bg-amber-50/70 shadow-sm' 
+        : 'border-amber-500/10 bg-amber-500/5'
+    }`}>
       <button onClick={() => isLong && setOpen(!open)}
-        className="w-full flex items-start gap-2 px-3 py-2 text-left">
+        className={`w-full flex items-start gap-2 px-3.5 py-2.5 text-left transition-colors cursor-pointer ${
+          isLight ? 'hover:bg-amber-100/30' : 'hover:bg-amber-500/5'
+        }`}>
         <span className="text-[10px] mt-0.5">💡</span>
-        <span className={`text-[11px] leading-relaxed flex-1 text-amber-300/70 ${!open && isLong ? 'line-clamp-2' : ''}`}>
-          {text}
-        </span>
+        <div className={`text-[11px] leading-relaxed flex-1 transition-colors ${
+          isLight 
+            ? 'text-amber-900 font-medium' 
+            : 'text-amber-300/80'
+        } ${!open && isLong ? 'line-clamp-2' : ''}`}>
+          <div className={`prose prose-xs max-w-none
+            ${isLight
+              ? 'prose-slate prose-headings:text-amber-900 prose-strong:text-amber-900 prose-code:text-amber-800 prose-code:bg-amber-100'
+              : 'prose-invert prose-headings:text-amber-200 prose-strong:text-amber-200 prose-code:text-amber-200 prose-code:bg-amber-900/30'
+            }
+            prose-p:my-0.5 prose-p:text-[11px] prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0
+            prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-[10px] prose-code:font-mono
+            [&>*:first-child]:mt-0 [&>*:last-child]:mb-0`}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+          </div>
+        </div>
         {isLong && (open
-          ? <ChevronUp className="w-3 h-3 mt-1 shrink-0 text-amber-400/40" />
-          : <ChevronDown className="w-3 h-3 mt-1 shrink-0 text-amber-400/40" />
+          ? <ChevronUp className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${isLight ? 'text-amber-700' : 'text-amber-500/40'}`} />
+          : <ChevronDown className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${isLight ? 'text-amber-700' : 'text-amber-500/40'}`} />
         )}
       </button>
     </div>
@@ -93,6 +117,20 @@ function AssistantContent({ content, canvasMode }: { content: string; canvasMode
   );
 }
 
+/* ── Live Timer — ticks every 100ms while streaming ── */
+function LiveTimer({ startTime }: { startTime: number | null }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!startTime) { setElapsed(0); return; }
+    setElapsed(Date.now() - startTime);
+    const timer = setInterval(() => setElapsed(Date.now() - startTime), 100);
+    return () => clearInterval(timer);
+  }, [startTime]);
+  if (!startTime) return null;
+  const secs = (elapsed / 1000).toFixed(1);
+  return <span className="text-[10px] text-slate-400 tabular-nums font-mono">{secs}s</span>;
+}
+
 
 
 
@@ -101,6 +139,7 @@ export default function ChatPanel() {
   const {
     messages, addMessage, updateLastAssistantMessage, clearMessages,
     isStreaming, setIsStreaming,
+    streamStartTime, setStreamStartTime,
     setCurrentTask, setCurrentEngine, setCanvasCode, setCanvasTask, setCanvasEngine,
     canvasCode, canvasTask, canvasEngine,
     setDesignConcept, modelConfig,
@@ -109,7 +148,7 @@ export default function ChatPanel() {
     setCanvasPhase,
     setStreamingCode,
     detailLevel, setDetailLevel,
-    canvasMode,
+    canvasMode, setCanvasMode,
   } = useChatStore();
 
   const [input, setInput] = useState('');
@@ -118,6 +157,7 @@ export default function ChatPanel() {
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [showLengthPicker, setShowLengthPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -188,15 +228,26 @@ export default function ChatPanel() {
     }
     clearInputImages();
     setSelectedAgent(null);
-    addMessage({ id: `a_${Date.now()}`, role: 'assistant', content: '', timestamp: Date.now() });
+    addMessage({ id: `a_${Date.now()}`, role: 'assistant', content: '', steps: [], timestamp: Date.now() });
     setIsStreaming(true);
+    setStreamStartTime(Date.now());
     setDesignConcept('');
     clearPendingElements();
     setCanvasPhase('routing');
     setStreamingCode('');
 
-    let codeBuffer = '', designBuffer = '';
+    let currentSteps: ThinkingStep[] = [];
+
+    // Abort previous active request if any
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    activeAbortControllerRef.current = controller;
+
+    let codeBuffer = '', designBuffer = '', textBuffer = '';
     let elementCount = 0;
+    const startTime = Date.now();
     // Throttled streaming code: accumulate locally, flush to state every 200ms
     let localCodeBuffer = '';
     let codeFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -224,6 +275,7 @@ export default function ChatPanel() {
           model_config: modelConfig,
           detailLevel,
         }),
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -238,6 +290,34 @@ export default function ChatPanel() {
         try {
           const data = JSON.parse(line.slice(6));
           switch (data.type) {
+            case 'status': {
+              const { step_id, content, action } = data;
+              if (action === 'start') {
+                currentSteps = currentSteps.map(s => 
+                  s.status === 'running' 
+                    ? { ...s, status: 'completed', duration: (Date.now() - s.startTime) / 1000 } 
+                    : s
+                );
+                currentSteps = currentSteps.filter(s => s.id !== step_id);
+                currentSteps.push({
+                  id: step_id,
+                  label: content || '',
+                  startTime: Date.now(),
+                  status: 'running'
+                });
+              } else if (action === 'end') {
+                currentSteps = currentSteps.map(s => 
+                  s.id === step_id && s.status === 'running'
+                    ? { ...s, status: 'completed', duration: (Date.now() - s.startTime) / 1000 }
+                    : s
+                );
+              }
+              updateLastAssistantMessage({ 
+                statusText: content || undefined, 
+                steps: [...currentSteps] 
+              });
+              break;
+            }
             case 'route': {
               const taskType = (data.task || getTaskByEngine(data.engine as DiagramEngineType)) as DiagramTaskType | null;
               const engineType = data.engine as DiagramEngineType;
@@ -301,6 +381,11 @@ export default function ChatPanel() {
               break;
             case 'code_end': {
               if (codeFlushTimer) { clearTimeout(codeFlushTimer); codeFlushTimer = null; }
+              currentSteps = currentSteps.map(s => 
+                s.id === 'generating' && s.status === 'running'
+                  ? { ...s, status: 'completed', duration: (Date.now() - s.startTime) / 1000 }
+                  : s
+              );
               const pending = useChatStore.getState().pendingElements;
               const finalCode = codeBuffer || (pending.length > 0 ? JSON.stringify(pending) : '');
               if (finalCode) {
@@ -311,9 +396,14 @@ export default function ChatPanel() {
               }
               setCanvasPhase('done');
               setStreamingCode('');
-              updateLastAssistantMessage({ code: finalCode || '[]', content: '✅ 图表已生成完毕' });
+              const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+              updateLastAssistantMessage({ code: finalCode || '[]', content: `✅ 图表已生成完毕 · ${elapsed}s` });
               break;
             }
+            case 'text':
+              textBuffer += (data.content || '');
+              updateLastAssistantMessage({ content: textBuffer });
+              break;
             case 'error':
               updateLastAssistantMessage({ content: `❌ ${data.message}` });
               break;
@@ -342,10 +432,26 @@ export default function ChatPanel() {
         processSSELine(sseBuffer.trim());
       }
     } catch (e: unknown) {
+      // Ignore AbortError as it is triggered intentionally
+      if (e instanceof Error && e.name === 'AbortError') {
+        return;
+      }
       const errMsg = e instanceof Error ? e.message : String(e);
       updateLastAssistantMessage({ content: `❌ 连接失败: ${errMsg}` });
     } finally {
       setIsStreaming(false);
+      setStreamStartTime(null);
+      if (activeAbortControllerRef.current === controller) {
+        activeAbortControllerRef.current = null;
+      }
+      if (currentSteps.length > 0) {
+        currentSteps = currentSteps.map(s => 
+          s.status === 'running' 
+            ? { ...s, status: 'completed', duration: (Date.now() - s.startTime) / 1000 } 
+            : s
+        );
+        updateLastAssistantMessage({ steps: [...currentSteps] });
+      }
     }
   }, [input, isStreaming, modelConfig, messages, canvasCode, canvasTask, canvasEngine, selectedAgent, addPendingElement, clearPendingElements, inputImages]);
 
@@ -360,6 +466,15 @@ export default function ChatPanel() {
     window.addEventListener('send-ai-message', handleSendDirect);
     return () => window.removeEventListener('send-ai-message', handleSendDirect);
   }, [sendMessage]);
+
+  // Cleanup connections on unmount
+  useEffect(() => {
+    return () => {
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -401,6 +516,13 @@ export default function ChatPanel() {
           </div>
         </div>
         <div className="flex items-center gap-0.5">
+          <button onClick={() => setCanvasMode(canvasMode === 'light' ? 'dark' : 'light')}
+            title={canvasMode === 'light' ? '切换为暗色模式' : '切换为亮色模式'}
+            className={`p-2 rounded-lg transition-colors cursor-pointer ${
+              canvasMode === 'light' ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-200' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+            }`}>
+            {canvasMode === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+          </button>
           <button onClick={() => setSettingsOpen(true)}
             className={`p-2 rounded-lg transition-colors ${
               canvasMode === 'light' ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-200' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
@@ -429,11 +551,15 @@ export default function ChatPanel() {
             <p className={`text-xs mb-6 ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-600'}`}>
               点击 <code className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${canvasMode === 'light' ? 'bg-slate-200 text-indigo-700' : 'bg-slate-800 text-blue-400'}`}>+</code> 上传图片，按任务选择图类型，或直接用 <code className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${canvasMode === 'light' ? 'bg-slate-200 text-indigo-700' : 'bg-slate-800 text-blue-400'}`}>@</code> 指定底层引擎
             </p>
-            <div className="flex flex-col gap-2 w-full max-w-[280px]">
+            <div className="flex flex-col gap-2 w-full max-w-[320px]">
               {[
-                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'charts')!, text: '做一个 2024 年营收与利润双轴图' },
-                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'flow')!, text: '画一个 AI Agent 审批工作流' },
-                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'mermaid')!, text: '生成用户登录时序图' },
+                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'charts')!, text: '2026 Q1 各产品线营收对比图' },
+                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'flow')!, text: 'AI Agent 多轮审批工作流' },
+                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'drawio')!, text: '微服务电商系统架构图' },
+                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'mermaid')!, text: 'OAuth 2.0 授权时序图' },
+                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'mindmap')!, text: '2026 年 AI 技术栈全景图' },
+                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'excalidraw')!, text: '前后端分离部署示意图' },
+                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'infographic')!, text: '团队 OKR 季度看板' },
               ].map((ex, i) => (
                 <button key={i}
                   onClick={() => {
@@ -446,9 +572,9 @@ export default function ChatPanel() {
                       ? 'bg-white border-slate-250 hover:bg-slate-100' 
                       : 'bg-slate-800/80 border-slate-700/50 hover:border-blue-500/30 hover:bg-slate-800'
                   } sd-slide-up`}
-                  style={{ animationDelay: `${i * 80}ms` }}
+                  style={{ animationDelay: `${i * 60}ms` }}
                 >
-                  <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
+                  <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md shrink-0"
                     style={{ background: `${ex.agent.color}15`, color: ex.agent.color }}>
                     <ex.agent.Icon style={{ width: 10, height: 10 }} />
                     {ex.agent.label}
@@ -498,6 +624,14 @@ export default function ChatPanel() {
                   </div>
                 )}
 
+                {/* Thinking steps */}
+                {msg.role === 'assistant' && msg.steps && msg.steps.length > 0 && (
+                  <ThinkingProcess 
+                    steps={msg.steps} 
+                    isStreaming={isStreaming && msg.id === messages[messages.length - 1]?.id} 
+                  />
+                )}
+
                 {/* Design concept */}
                 {msg.role === 'assistant' && msg.designConcept && (
                   <DesignConceptCard text={msg.designConcept} />
@@ -506,7 +640,9 @@ export default function ChatPanel() {
                 {/* Content */}
                 {msg.role === 'assistant' && msg.code ? (
                   <button
-                    className="text-xs mt-1.5 flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+                    className={`text-xs mt-1.5 flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      canvasMode === 'light' ? 'text-emerald-600 hover:text-emerald-700' : 'text-emerald-400 hover:text-emerald-300'
+                    }`}
                     onClick={() => {
                       clearPendingElements();
                       setCanvasCode(msg.code!);
@@ -515,24 +651,28 @@ export default function ChatPanel() {
                     }}
                     title="点击在画布中查看此图表"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className={`w-1.5 h-1.5 rounded-full ${canvasMode === 'light' ? 'bg-emerald-600' : 'bg-emerald-400'}`} />
                     图表已生成到画布
                   </button>
                 ) : msg.role === 'assistant' && !msg.content && isStreaming ? (
-                  <div className="flex items-center gap-2 py-0.5">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                    <span className="text-xs text-slate-500">思考中</span>
-                    <span className="flex gap-[3px]">
-                      {[0, 1, 2].map(i => (
-                        <span key={i} className="w-1 h-1 rounded-full bg-blue-400"
-                          style={{ animation: `sd-pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />
-                      ))}
-                    </span>
-                  </div>
+                  msg.steps && msg.steps.length > 0 ? null : (
+                    <div className="flex items-center gap-2 py-0.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                      <span className="text-xs text-slate-500">{msg.statusText || '思考中'}</span>
+                      <span className="flex gap-[3px]">
+                        {[0, 1, 2].map(i => (
+                          <span key={i} className="w-1 h-1 rounded-full bg-blue-400"
+                            style={{ animation: `sd-pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+                        ))}
+                      </span>
+                      <LiveTimer startTime={streamStartTime} />
+                    </div>
+                  )
                 ) : msg.role === 'assistant' && msg.content && isStreaming && msg.id === messages[messages.length - 1]?.id ? (
                   <div className="flex items-center gap-2 py-0.5">
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                    <span className="text-xs text-slate-400">{msg.content}</span>
+                    <span className="text-xs text-slate-400 flex-1">{msg.content}</span>
+                    <LiveTimer startTime={streamStartTime} />
                   </div>
                 ) : msg.role === 'assistant' && msg.content ? (
                   <AssistantContent content={msg.content} canvasMode={canvasMode} />
@@ -729,7 +869,7 @@ export default function ChatPanel() {
                       borderRadius: '12px',
                       padding: '4px',
                       boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
-                      minWidth: '180px',
+                      minWidth: '240px',
                     }}
                   >
                     {/* "AI Auto" option */}
@@ -766,6 +906,7 @@ export default function ChatPanel() {
                           background: selectedAgent?.id === a.id ? (canvasMode === 'light' ? '#f1f5f9' : '#334155') : 'transparent',
                           border: 'none', cursor: 'pointer', fontSize: '12px',
                           color: canvasMode === 'light' ? '#334155' : '#e2e8f0', fontWeight: selectedAgent?.id === a.id ? 600 : 400,
+                          whiteSpace: 'nowrap',
                         }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = canvasMode === 'light' ? '#f1f5f9' : '#334155')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = selectedAgent?.id === a.id ? (canvasMode === 'light' ? '#f1f5f9' : '#334155') : 'transparent')}
@@ -923,6 +1064,127 @@ export default function ChatPanel() {
 
       {/* Settings Modal */}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </div>
+  );
+}
+
+/* ── Collapsible Thinking Steps Timeline ── */
+interface ThinkingProcessProps {
+  steps: ThinkingStep[];
+  isStreaming: boolean;
+}
+
+function ThinkingProcess({ steps, isStreaming }: ThinkingProcessProps) {
+  const { canvasMode } = useChatStore();
+  const [collapsed, setCollapsed] = useState(!isStreaming);
+
+  // 用组件内部 tick 在 isStreaming 为真时进行 100ms 的递增渲染，保证思考秒数实时变化
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (isStreaming) {
+      const timer = setInterval(() => {
+        setTick(t => t + 1);
+      }, 100);
+      return () => clearInterval(timer);
+    }
+  }, [isStreaming]);
+
+  // 计算当前总共思考的秒数
+  const totalDuration = steps.reduce((acc, step) => {
+    if (step.duration !== undefined) {
+      return acc + step.duration;
+    }
+    if (step.status === 'running') {
+      return acc + (Date.now() - step.startTime) / 1000;
+    }
+    return acc;
+  }, 0);
+
+  const isCompleted = steps.every(s => s.status === 'completed') && !isStreaming;
+
+  // 当生成完毕且 steps 都为 completed 时，收起折叠
+  useEffect(() => {
+    if (isCompleted) {
+      setCollapsed(true);
+    } else {
+      setCollapsed(false);
+    }
+  }, [isCompleted]);
+
+  return (
+    <div className={`border rounded-lg overflow-hidden mb-3 transition-all ${
+      canvasMode === 'light' 
+        ? 'border-slate-200/60 bg-slate-50/50' 
+        : 'border-slate-800/80 bg-slate-900/30'
+    }`}>
+      {/* Collapsible Trigger Header */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className={`w-full px-3 py-1.5 flex items-center justify-between text-xs font-medium cursor-pointer transition-colors ${
+          canvasMode === 'light'
+            ? 'bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-700'
+            : 'bg-slate-900/40 hover:bg-slate-900/80 text-slate-400 hover:text-slate-300'
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          {isCompleted ? (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+          ) : (
+            <Brain className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+          )}
+          <span>{isCompleted ? '已完成深度思考' : '正在进行深度思考'}</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+            canvasMode === 'light' ? 'bg-slate-200/60 text-slate-600' : 'bg-slate-800 text-slate-400'
+          }`}>
+            {totalDuration.toFixed(1)}s
+          </span>
+        </div>
+        {collapsed ? <ChevronRight className="w-3.5 h-3.5 opacity-60" /> : <ChevronDown className="w-3.5 h-3.5 opacity-60" />}
+      </button>
+
+      {/* Expanded Step Timeline */}
+      {!collapsed && (
+        <div className={`px-4 py-3 border-t text-[12px] ${
+          canvasMode === 'light' 
+            ? 'bg-white border-slate-100 text-slate-600' 
+            : 'bg-slate-950/60 border-slate-800/60 text-slate-300'
+        }`}>
+          <div className={`relative pl-4 border-l flex flex-col gap-2.5 ${
+            canvasMode === 'light' ? 'border-slate-100' : 'border-slate-800/60'
+          }`}>
+            {steps.map((step) => {
+              const isRunning = step.status === 'running';
+              const stepDuration = step.duration !== undefined 
+                ? step.duration 
+                : isRunning ? (Date.now() - step.startTime) / 1000 : 0;
+              return (
+                <div key={step.id} className="relative flex items-center justify-between">
+                  {/* Timeline dot */}
+                  <span className={`absolute -left-[21px] top-1/2 -translate-y-1/2 flex items-center justify-center p-[2px] ${
+                    canvasMode === 'light' ? 'bg-white' : 'bg-slate-900'
+                  }`}>
+                    {isRunning ? (
+                      <Loader2 className="w-2.5 h-2.5 text-blue-500 animate-spin" />
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    )}
+                  </span>
+
+                  {/* Step Name */}
+                  <span className={isRunning ? 'text-blue-500 font-medium' : 'opacity-80'}>
+                    {step.label}
+                  </span>
+
+                  {/* Step Duration */}
+                  <span className="text-[10px] opacity-60 font-mono">
+                    {isRunning ? `${stepDuration.toFixed(1)}s` : `${stepDuration.toFixed(2)}s`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

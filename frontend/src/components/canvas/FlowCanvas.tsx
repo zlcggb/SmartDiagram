@@ -494,17 +494,21 @@ export default function FlowCanvas() {
 
   if (error) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-slate-950 p-8">
-        <div className="text-red-400 text-sm bg-red-950/20 p-4 rounded-xl border border-red-900/30 max-w-md shadow-lg">
-          <p className="font-semibold mb-1 text-slate-200">Flow 渲染失败</p>
-          <pre className="text-xs whitespace-pre-wrap text-red-400">{error}</pre>
+      <div className={`w-full h-full flex items-center justify-center p-8 transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
+        <div className={`text-sm p-4 rounded-xl border max-w-md shadow-lg ${
+          canvasMode === 'light'
+            ? 'text-red-600 bg-red-50 border-red-200'
+            : 'text-red-400 bg-red-950/20 border-red-900/30'
+        }`}>
+          <p className={`font-semibold mb-1 ${canvasMode === 'light' ? 'text-red-700' : 'text-slate-200'}`}>Flow 渲染失败</p>
+          <pre className="text-xs whitespace-pre-wrap">{error}</pre>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`w-full h-full transition-colors duration-300 ${canvasMode === 'light' ? 'bg-white' : 'bg-slate-950'}`}>
+    <div className={`w-full h-full transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

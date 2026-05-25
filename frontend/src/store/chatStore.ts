@@ -13,6 +13,14 @@ export interface SelectedNodeInfo {
   type: 'mindmap' | 'flow';
 }
 
+export interface ThinkingStep {
+  id: string;
+  label: string;
+  startTime: number;
+  duration?: number;
+  status: 'running' | 'completed';
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -22,6 +30,8 @@ export interface Message {
   designConcept?: string;
   code?: string;
   images?: string[];
+  statusText?: string;
+  steps?: ThinkingStep[];
   timestamp: number;
 }
 
@@ -45,6 +55,8 @@ interface ChatStore {
   // Streaming state
   isStreaming: boolean;
   setIsStreaming: (v: boolean) => void;
+  streamStartTime: number | null;
+  setStreamStartTime: (v: number | null) => void;
   currentTask: DiagramTaskType | null;
   setCurrentTask: (v: DiagramTaskType | null) => void;
   currentEngine: DiagramEngineType | null;
@@ -123,6 +135,8 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   isStreaming: false,
   setIsStreaming: (v) => set({ isStreaming: v }),
+  streamStartTime: null,
+  setStreamStartTime: (v) => set({ streamStartTime: v }),
   currentTask: null,
   setCurrentTask: (v) => set({ currentTask: v }),
   currentEngine: null,
@@ -169,6 +183,6 @@ export const useChatStore = create<ChatStore>((set) => ({
   detailLevel: 'medium',
   setDetailLevel: (v) => set({ detailLevel: v }),
 
-  canvasMode: 'dark',
+  canvasMode: 'light',
   setCanvasMode: (v) => set({ canvasMode: v }),
 }));

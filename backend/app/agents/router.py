@@ -6,8 +6,9 @@ Supports explicit @agent tags, canvas context continuation, and LLM-based intent
 from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.state.state import AgentState
-from app.core.llm import create_llm_for_agent
+from app.core.llm import create_llm_for_agent, extract_text_content
 from app.agents.catalog import ENGINE_TO_TASK, TASK_TO_ENGINE, get_task_for_engine
+from app.core.logger import logger
 import re
 
 # Engine capability descriptions for the router prompt
@@ -131,25 +132,19 @@ def detect_task_from_keywords(text: str, current_task: str = "") -> str | None:
     return best_task
 
 
-async def router_node(state: AgentState) -> dict:
-    """Analyze user input and determine target agent.
+import time as _time
 
-    Priority:
-      1. Explicit @tag in the message → override everything
-      2. current_engine/current_task from canvas context → continue editing (unless user asks for something different)
-      3. LLM-based intent classification → fallback
-    """
+async def router_node(state: AgentState) -> dict:
+    """Analyze user input and determine target agent."""
+    _t0 = _time.time()
     messages = state["messages"]
     last_message = messages[-1]
 
-    # 1. Check for explicit @agent tags — always highest priority
-    # Handle both string content and multimodal content (list with text + image_url)
     text_content = ""
     if isinstance(last_message, HumanMessage):
         if isinstance(last_message.content, str):
             text_content = last_message.content
         elif isinstance(last_message.content, list):
-            # Extract text from multimodal content blocks
             text_content = " ".join(
                 part.get("text", "") for part in last_message.content
                 if isinstance(part, dict) and part.get("type") == "text"
@@ -157,19 +152,14 @@ async def router_node(state: AgentState) -> dict:
 
     if text_content:
         content_lower = text_content.lower().strip()
-        # Sort by tag length descending so longer tags match first
-        # (e.g. @drawio before @draw, @flowchart before @flow)
         for tag, agent_name in sorted(EXPLICIT_MAPPINGS.items(), key=lambda x: len(x[0]), reverse=True):
             if tag in content_lower:
-                # Clean the tag from the message text
                 cleaned = re.sub(
                     rf"{re.escape(tag)}\s*", "", text_content, flags=re.IGNORECASE
                 ).strip()
-                # Also clean any <existing_code> block if switching agent
                 cleaned = re.sub(r"<existing_code>[\s\S]*?</existing_code>", "", cleaned).strip()
                 if not cleaned:
                     cleaned = f"Generate a default {agent_name} diagram."
-                # Update message content preserving multimodal format
                 if isinstance(last_message.content, list):
                     for part in last_message.content:
                         if isinstance(part, dict) and part.get("type") == "text":
@@ -177,10 +167,9 @@ async def router_node(state: AgentState) -> dict:
                             break
                 else:
                     last_message.content = cleaned
+                logger.info(f"⏱️ Router (@tag shortcut) took {_time.time()-_t0:.1f}s → {agent_name}")
                 return {"intent": agent_name}
 
-    # 2. If there's an active canvas agent and user has existing code,
-    #    this is likely an edit request — continue with the same agent.
     current_task = state.get("current_task", "")
     current_engine = state.get("current_engine", "")
     current_code = state.get("current_code", "")
@@ -189,11 +178,16 @@ async def router_node(state: AgentState) -> dict:
 
     if keyword_task and keyword_task != current_task:
         engine_type = TASK_TO_ENGINE.get(keyword_task, "general")
+        logger.info(f"⏱️ Router (keyword match) took {_time.time()-_t0:.1f}s → {engine_type}")
         return {"task_type": keyword_task, "engine_type": engine_type, "intent": engine_type}
 
-    if current_engine and current_code and current_engine in ENGINE_DESCRIPTIONS:
-        # If the clean text is short (likely an edit command), use current agent
-        if len(clean_text) < 100 and not keyword_task:
+    # If there is history (multi-turn conversation) and a current active engine,
+    # default to continuing with the current engine unless a keyword strongly matches another agent.
+    # This short-circuits the LLM router call to save 3-10 seconds.
+    if current_engine and current_engine in ENGINE_DESCRIPTIONS:
+        is_multi_turn = len(messages) > 1 or current_code
+        if is_multi_turn and (not keyword_task or keyword_task == current_task):
+            logger.info(f"⏱️ Router (multi-turn continuation) took {_time.time()-_t0:.1f}s → {current_engine}")
             return {
                 "task_type": current_task or get_task_for_engine(current_engine),
                 "engine_type": current_engine,
@@ -202,6 +196,7 @@ async def router_node(state: AgentState) -> dict:
 
     if keyword_task:
         engine_type = TASK_TO_ENGINE.get(keyword_task, "general")
+        logger.info(f"⏱️ Router (keyword fallback) took {_time.time()-_t0:.1f}s → {engine_type}")
         return {"task_type": keyword_task, "engine_type": engine_type, "intent": engine_type}
 
     # 3. LLM-based intent classification
@@ -220,24 +215,26 @@ Available agents:
 Respond with ONLY one keyword: 'excalidraw', 'mermaid', 'flow', 'mindmap', 'charts', 'drawio', 'infographic', or 'general'.
 """
 
+    logger.info(f"⏱️ Router: keyword match failed, calling LLM for classification...")
     llm = create_llm_for_agent(state, "router")
-    # Only send the clean user text (without <existing_code>) for classification
     classify_text = clean_text
 
     response = await llm.ainvoke([
         SystemMessage(content=system_prompt),
         HumanMessage(content=classify_text),
     ])
-    intent = response.content.strip().lower()
+    intent = extract_text_content(response.content).strip().lower()
 
     for engine_key in ENGINE_DESCRIPTIONS:
         if engine_key in intent:
+            logger.info(f"⏱️ Router (LLM classification) took {_time.time()-_t0:.1f}s → {engine_key}")
             return {
                 "task_type": ENGINE_TO_TASK.get(engine_key, "general"),
                 "engine_type": engine_key,
                 "intent": engine_key,
             }
 
+    logger.info(f"⏱️ Router (LLM fallback) took {_time.time()-_t0:.1f}s → general")
     return {"task_type": "general", "engine_type": "general", "intent": "general"}
 
 

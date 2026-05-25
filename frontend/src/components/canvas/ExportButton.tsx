@@ -217,16 +217,78 @@ export default function ExportButton() {
   };
 
   const exportMindmap = async (format: ExportFormat) => {
-    // Use mind-elixir official export API (v5.x+)
-    if (!mindmapInstance) throw new Error('Mindmap 实例未就绪');
+    if (!mindmapInstance) {
+      throw new Error('Mindmap 实例未就绪，请稍后重试');
+    }
 
-    if (format === 'svg') {
-      const blob = await mindmapInstance.exportSvg();
-      downloadBlob(blob, `Mindmap_${timestamp()}.svg`);
-    } else {
-      const blob = await mindmapInstance.exportPng();
-      if (!blob) throw new Error('PNG 导出失败');
-      downloadBlob(blob, `Mindmap_${timestamp()}.png`);
+    // 1. Temporarily restore scale to 1.0 to ensure correct sizing and prevent clipping
+    // (mind-elixir calculates export size based on current DOM clientWidth/clientHeight)
+    const savedScale = mindmapInstance.scaleVal || 1;
+    try {
+      if (typeof mindmapInstance.scale === 'function') {
+        mindmapInstance.scale(1.0);
+      }
+    } catch (e) {
+      console.warn('[Export] Failed to reset scale:', e);
+    }
+
+    // Wait a brief tick for DOM layout update
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    try {
+      if (format === 'svg') {
+        // Method 1 (Preferred for SVG): Native exportSvg with proper layout
+        if (typeof mindmapInstance.exportSvg === 'function') {
+          const blob = mindmapInstance.exportSvg();
+          if (blob) {
+            downloadBlob(blob, `Mindmap_${timestamp()}.svg`);
+            return;
+          }
+        }
+
+        // Fallback for SVG: @zumer/snapdom
+        const container = document.querySelector('.map-container') || mindmapInstance.nodes;
+        if (container) {
+          const { snapdom } = await import('@zumer/snapdom');
+          const result = await snapdom(container);
+          const svgStr = await result.toSvg();
+          downloadText(svgStr, `Mindmap_${timestamp()}.svg`, 'image/svg+xml');
+          return;
+        }
+      } else {
+        // Method 1 (Preferred for PNG): @zumer/snapdom with high resolution (scale: 3)
+        const container = document.querySelector('.map-container') || mindmapInstance.nodes;
+        if (container) {
+          const { snapdom } = await import('@zumer/snapdom');
+          // Use scale: 3 for ultra-crisp high-res png output
+          const result = await snapdom(container, { scale: 3 });
+          await result.download({ format: 'png', filename: `Mindmap_${timestamp()}` });
+          return;
+        }
+
+        // Fallback for PNG: Native exportPng
+        if (typeof mindmapInstance.exportPng === 'function') {
+          const blob = await mindmapInstance.exportPng();
+          if (blob) {
+            downloadBlob(blob, `Mindmap_${timestamp()}.png`);
+            return;
+          }
+        }
+      }
+
+      throw new Error('未找到可用的导出方法');
+    } catch (error) {
+      console.error('[Export] Mindmap export failed:', error);
+      throw error;
+    } finally {
+      // 2. Always restore the user's original zoom scale
+      try {
+        if (typeof mindmapInstance.scale === 'function') {
+          mindmapInstance.scale(savedScale);
+        }
+      } catch (e) {
+        console.warn('[Export] Failed to restore scale:', e);
+      }
     }
   };
 

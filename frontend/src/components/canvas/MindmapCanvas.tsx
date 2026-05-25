@@ -175,13 +175,13 @@ export default function MindmapCanvas() {
   const isDraggingRef = useRef(false);
   const startDragRef = useRef({ x: 0, y: 0, frameX: 0, frameY: 0 });
 
-  // Clean up mindmap instance ref in store on unmount
+  // Clean up selection on unmount (don't clear mindmapInstance —
+  // React StrictMode double-mount would wipe a valid instance)
   useEffect(() => {
     return () => {
-      setMindmapInstance(null);
       setSelectedNode(null);
     };
-  }, [setMindmapInstance, setSelectedNode]);
+  }, [setSelectedNode]);
 
   /** Sync mind-elixir tree back to Markdown canvasCode when user edits */
   const syncToCanvasCode = useCallback(() => {
@@ -583,7 +583,7 @@ export default function MindmapCanvas() {
   };
 
   return (
-    <div className={`w-full h-full relative transition-colors duration-300 ${canvasMode === 'light' ? 'bg-white' : 'bg-slate-950'}`}>
+    <div className={`w-full h-full relative transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
       {error ? (
         <div className="flex flex-col items-center justify-center h-full p-4 text-center">
           <div className="p-3 bg-red-950/20 rounded-full mb-3 border border-red-900/30">

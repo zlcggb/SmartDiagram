@@ -38,7 +38,7 @@ export default function App() {
   return (
     <div 
       ref={containerRef} 
-      className={`h-screen w-screen overflow-hidden flex transition-colors duration-300 ${
+      className={`h-screen w-screen overflow-hidden flex transition-colors duration-300 ${canvasMode} ${
         canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'
       }`}
     >

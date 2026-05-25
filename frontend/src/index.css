@@ -162,3 +162,18 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Apple-like Adaptive Placeholder Styles for Light/Dark Modes ── */
+textarea::placeholder {
+  transition: color 0.3s ease;
+}
+
+.light textarea::placeholder {
+  color: #64748b !important; /* Secondary text style (Slate 500), has excellent 4.5+:1 contrast ratio on white/light gray background */
+  opacity: 0.9 !important;
+}
+
+.dark textarea::placeholder {
+  color: #94a3b8 !important; /* Secondary text style (Slate 400), perfectly visible on slate/dark background */
+  opacity: 0.65 !important;
+}

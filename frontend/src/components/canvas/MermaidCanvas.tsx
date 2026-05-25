@@ -52,7 +52,7 @@ export default function MermaidCanvas() {
   const svgWrapperRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasRendered, setHasRendered] = useState(false);
-  const [theme, setTheme] = useState<ThemeId>('dark');
+  const [theme, setTheme] = useState<ThemeId>('default');
   const [showEditor, setShowEditor] = useState(false);
   const [editorCode, setEditorCode] = useState('');
 
@@ -85,6 +85,11 @@ export default function MermaidCanvas() {
       sequence: { actorMargin: 50, messageMargin: 40 },
     });
   }, [theme]);
+
+  // Auto-switch Mermaid theme when canvasMode changes
+  useEffect(() => {
+    setTheme(canvasMode === 'dark' ? 'dark' : 'default');
+  }, [canvasMode]);
 
   // Determine active mermaid code: use streamingCode during generation, canvasCode when done
   const codeToRender = (isStreaming && streamingCode) ? streamingCode : canvasCode;
@@ -237,7 +242,7 @@ export default function MermaidCanvas() {
   }, []);
 
   return (
-    <div className="w-full h-full relative bg-slate-950 overflow-hidden flex animate-fade-in">
+    <div className={`w-full h-full relative overflow-hidden flex animate-fade-in transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
       {/* Left: Code Editor Panel (toggleable) */}
       {showEditor && (
         <div
@@ -246,8 +251,8 @@ export default function MermaidCanvas() {
             minWidth: '300px',
             display: 'flex',
             flexDirection: 'column',
-            borderRight: '1px solid #1e293b',
-            background: '#0f172a',
+            borderRight: canvasMode === 'light' ? '1px solid #e2e8f0' : '1px solid #1e293b',
+            background: canvasMode === 'light' ? '#f8fafc' : '#0f172a',
           }}
         >
           {/* Editor header */}
@@ -257,11 +262,11 @@ export default function MermaidCanvas() {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '8px 12px',
-              borderBottom: '1px solid #1e293b',
-              background: '#0b0f19',
+              borderBottom: canvasMode === 'light' ? '1px solid #e2e8f0' : '1px solid #1e293b',
+              background: canvasMode === 'light' ? '#f1f5f9' : '#0b0f19',
             }}
           >
-            <span style={{ color: '#e2e8f0', fontSize: '12px', fontWeight: 600 }}>
+            <span style={{ color: canvasMode === 'light' ? '#1e293b' : '#e2e8f0', fontSize: '12px', fontWeight: 600 }}>
               📝 Mermaid 代码编辑器
             </span>
             <button
@@ -292,8 +297,8 @@ export default function MermaidCanvas() {
               fontFamily: '"Fira Code", "Cascadia Code", "JetBrains Mono", monospace',
               fontSize: '13px',
               lineHeight: '1.6',
-              background: '#090d16',
-              color: '#e2e8f0',
+              background: canvasMode === 'light' ? '#f8fafc' : '#090d16',
+              color: canvasMode === 'light' ? '#1e293b' : '#e2e8f0',
               border: 'none',
               outline: 'none',
               resize: 'none',
@@ -309,7 +314,7 @@ export default function MermaidCanvas() {
           flex: 1,
           position: 'relative',
           overflow: 'hidden',
-          background: canvasMode === 'dark' ? '#090d16' : '#ffffff',
+          background: canvasMode === 'dark' ? '#090d16' : '#f8fafc',
           transition: 'background 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
@@ -389,11 +394,11 @@ export default function MermaidCanvas() {
               display: 'flex',
               gap: '6px',
               alignItems: 'center',
-              background: 'rgba(15, 23, 42, 0.85)',
+              background: canvasMode === 'light' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(15, 23, 42, 0.85)',
               backdropFilter: 'blur(8px)',
               borderRadius: '8px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: canvasMode === 'light' ? '0 4px 12px rgba(0,0,0,0.08)' : '0 4px 12px rgba(0,0,0,0.3)',
+              border: canvasMode === 'light' ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(255,255,255,0.08)',
               padding: '4px',
             }}
           >

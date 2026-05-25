@@ -1,11 +1,14 @@
-"""
-Charts Agent — generates ECharts option configuration JSON.
-Supports both new creation and incremental editing via <existing_code>.
-"""
+import os
+import sys
+import time
+from dotenv import load_dotenv
+from langchain_core.messages import SystemMessage, HumanMessage
 
-from langchain_core.messages import SystemMessage, AIMessage
-from app.state.state import AgentState
-from app.core.llm import create_llm_for_agent, extract_text_content
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.core.llm import create_llm
+
+load_dotenv()
 
 SYSTEM_PROMPT = """You are a World-Class Data Visualization Engineer and ECharts Specialist for SmartDiagram.
 Generate professional, insightful, and aesthetically state-of-the-art ECharts configurations.
@@ -44,10 +47,20 @@ When editing:
 Respond in the same language as the user's input.
 """
 
+user_input = "2026 Q1 MIP、COB、SMD各产品线营收对比图"
 
-async def charts_agent_node(state: AgentState) -> dict:
-    llm = create_llm_for_agent(state, "charts")
-    response = await llm.ainvoke(
-        [SystemMessage(content=SYSTEM_PROMPT)] + list(state["messages"])
-    )
-    return {"messages": [AIMessage(content=extract_text_content(response.content))]}
+llm = create_llm()
+print("Starting invoke with real prompt...")
+t0 = time.time()
+try:
+    res = llm.invoke([
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=user_input)
+    ])
+    print(f"Call completed in {time.time() - t0:.2f}s")
+    print(f"Response length: {len(res.content)}")
+    print("--- CONTENT ---")
+    print(res.content[:500])
+    print("...")
+except Exception as e:
+    print(f"Failed: {e}")

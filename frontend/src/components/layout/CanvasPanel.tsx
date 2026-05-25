@@ -7,6 +7,8 @@
 import { Suspense, lazy, useRef, useEffect, useState } from 'react';
 import { useChatStore } from '../../store/chatStore';
 import { PenTool, Loader2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ReactFlowProvider } from 'reactflow';
 import ExportButton from '../canvas/ExportButton';
 import {
@@ -24,10 +26,25 @@ const ChartsCanvas = lazy(() => import('../canvas/ChartsCanvas'));
 const DrawioCanvas = lazy(() => import('../canvas/DrawioCanvas'));
 const InfographicCanvas = lazy(() => import('../canvas/InfographicCanvas'));
 
+/* ── Live Timer for Canvas ── */
+function CanvasLiveTimer() {
+  const { streamStartTime } = useChatStore();
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!streamStartTime) { setElapsed(0); return; }
+    setElapsed(Date.now() - streamStartTime);
+    const timer = setInterval(() => setElapsed(Date.now() - streamStartTime), 100);
+    return () => clearInterval(timer);
+  }, [streamStartTime]);
+  if (!streamStartTime) return null;
+  const secs = (elapsed / 1000).toFixed(1);
+  return <span className="text-[10px] text-indigo-400 tabular-nums font-mono ml-1">{secs}s</span>;
+}
+
 function CanvasLoader() {
   const { canvasMode } = useChatStore();
   return (
-    <div className={`w-full h-full flex items-center justify-center transition-colors duration-300 ${canvasMode === 'light' ? 'bg-white' : 'bg-slate-950'}`}>
+    <div className={`w-full h-full flex items-center justify-center transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
       <div className="flex flex-col items-center gap-3 sd-fade-in">
         <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
         <span className={`text-xs ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>加载渲染引擎...</span>
@@ -154,7 +171,7 @@ function CanvasPanelInner() {
   };
 
   return (
-    <div className={`w-full h-full flex flex-col overflow-hidden transition-colors duration-300 ${canvasMode === 'light' ? 'bg-white' : 'bg-slate-950'}`}>
+    <div className={`w-full h-full flex flex-col overflow-hidden transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
       {/* Top toolbar */}
       {canvasEngine && (
         <div className={`flex items-center justify-between px-4 py-2 border-b shrink-0 relative overflow-visible ${
@@ -222,9 +239,16 @@ function CanvasPanelInner() {
                         </button>
                       </div>
                     </div>
-                    <p className={`text-[11px] leading-relaxed max-h-28 overflow-y-auto pr-1 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>
-                      {designConcept}
-                    </p>
+                    <div className={`text-xs leading-relaxed max-h-28 overflow-y-auto pr-1 prose prose-xs max-w-none
+                      ${canvasMode === 'light'
+                        ? 'prose-slate text-slate-600 prose-strong:text-slate-800 prose-code:text-indigo-600 prose-code:bg-slate-100'
+                        : 'prose-invert text-slate-300 prose-strong:text-slate-100 prose-code:text-blue-300 prose-code:bg-slate-700/50'
+                      }
+                      prose-p:my-0.5 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0
+                      prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-[10px] prose-code:font-mono
+                      [&>*:first-child]:mt-0 [&>*:last-child]:mb-0`}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{designConcept}</ReactMarkdown>
+                    </div>
                   </div>
                 ) : (
                   <button 
@@ -405,6 +429,7 @@ function GeneratingView({
           <div className="flex items-center gap-1.5 mt-0.5">
             <Loader2 className="w-3 h-3 animate-spin text-indigo-500" />
             <span className={`text-[11px] ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>{phaseText}</span>
+            <CanvasLiveTimer />
           </div>
         </div>
       </div>
@@ -421,7 +446,16 @@ function GeneratingView({
               <p className="text-[10px] font-bold text-amber-500 mb-2 flex items-center gap-1">
                 <span>💡</span> AI 设计思路
               </p>
-              <p className={`text-xs leading-relaxed whitespace-pre-wrap ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>{designConcept}</p>
+              <div className={`text-xs leading-relaxed prose prose-xs max-w-none
+                ${canvasMode === 'light'
+                  ? 'prose-slate text-slate-600 prose-strong:text-slate-800 prose-code:text-indigo-600 prose-code:bg-slate-100'
+                  : 'prose-invert text-slate-300 prose-strong:text-slate-100 prose-code:text-blue-300 prose-code:bg-slate-700/50'
+                }
+                prose-p:my-0.5 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0
+                prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-[10px] prose-code:font-mono
+                [&>*:first-child]:mt-0 [&>*:last-child]:mb-0`}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{designConcept}</ReactMarkdown>
+              </div>
             </div>
           </div>
         )}

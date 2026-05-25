@@ -5,7 +5,7 @@ Supports both new creation and incremental editing.
 
 from langchain_core.messages import SystemMessage, AIMessage
 from app.state.state import AgentState
-from app.core.llm import create_llm_for_agent
+from app.core.llm import create_llm_for_agent, extract_text_content
 from app.agents.semantic_knowledge import (
     get_shape_vocabulary,
     get_arrow_semantics,
@@ -168,4 +168,4 @@ async def mermaid_agent_node(state: AgentState) -> dict:
     response = await llm.ainvoke(
         [SystemMessage(content=SYSTEM_PROMPT)] + list(state["messages"])
     )
-    return {"messages": [AIMessage(content=response.content)]}
+    return {"messages": [AIMessage(content=extract_text_content(response.content))]}

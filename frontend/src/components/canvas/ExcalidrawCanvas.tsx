@@ -293,7 +293,7 @@ export default function ExcalidrawCanvas() {
 
   if (loading) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-white">
+      <div className="w-full h-full flex items-center justify-center bg-slate-50">
         <div className="text-gray-400 flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
           <span>加载画布引擎...</span>

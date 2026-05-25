@@ -12,6 +12,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from app.agents.orchestrator import graph
 from app.agents.catalog import get_task_for_engine
 from app.agents.drawio_agent import sanitize_drawio_xml
+from app.core.llm import extract_text_content
 from app.core.logger import logger
 
 router = APIRouter()
@@ -19,8 +20,8 @@ router = APIRouter()
 
 class StreamingTagParser:
     """
-    Parse XML-style <design_concept> and <code> tags from streaming LLM output.
-    Emits SSE events as content is received.
+    Parse XML-style <design_concept>, <code> tags, or markdown code blocks (```json / ```)
+    from streaming LLM output. Emits SSE events as content is received.
 
     For <code> blocks, performs incremental JSON object extraction
     for real-time rendering of diagram elements.
@@ -30,6 +31,10 @@ class StreamingTagParser:
         self.buffer = ""
         self.in_design = False
         self.in_code = False
+        self.code_delimiters = ["<code>", "```json", "```xml", "```mermaid", "```"]
+        self.code_end_delimiters = ["</code>", "```"]
+        # Raw XML mode for Draw.io (mxfile is part of code content, not a wrapper)
+        self._is_raw_xml = False
         # Incremental JSON extraction state
         self._code_buffer = ""
         self._raw_code = ""  # Full raw code text for canvasCode
@@ -113,16 +118,42 @@ class StreamingTagParser:
             if not self.in_design and not self.in_code:
                 # Look for opening tags
                 design_match = self.buffer.find("<design_concept>")
-                code_match = self.buffer.find("<code>")
+                
+                # Find first occurring code delimiter
+                code_match = -1
+                matched_delim = ""
+                for delim in self.code_delimiters:
+                    pos = self.buffer.find(delim)
+                    if pos != -1:
+                        if code_match == -1 or pos < code_match:
+                            code_match = pos
+                            matched_delim = delim
 
-                if design_match != -1:
+                # Also check for raw mxfile XML (Draw.io outputs <mxfile...> directly)
+                mxfile_match = self.buffer.find("<mxfile")
+
+                if design_match != -1 and (code_match == -1 or design_match < code_match) and (mxfile_match == -1 or design_match < mxfile_match):
                     self.buffer = self.buffer[design_match + len("<design_concept>"):]
                     self.in_design = True
                     events.append({"type": "design_start"})
                     continue
-                elif code_match != -1:
-                    self.buffer = self.buffer[code_match + len("<code>"):]
+                elif mxfile_match != -1 and (code_match == -1 or mxfile_match < code_match):
+                    # Raw XML mode: <mxfile is part of the code content, not stripped
                     self.in_code = True
+                    self._is_raw_xml = True
+                    self._code_buffer = ""
+                    self._raw_code = self.buffer[mxfile_match:mxfile_match + len("<mxfile")]
+                    self.buffer = self.buffer[mxfile_match + len("<mxfile"):]
+                    self._brace_depth = 0
+                    self._in_string = False
+                    self._escape_next = False
+                    self._obj_start = -1
+                    events.append({"type": "code_start"})
+                    continue
+                elif code_match != -1:
+                    self.buffer = self.buffer[code_match + len(matched_delim):]
+                    self.in_code = True
+                    self._is_raw_xml = False
                     # Reset code extraction state
                     self._code_buffer = ""
                     self._raw_code = ""
@@ -133,17 +164,34 @@ class StreamingTagParser:
                     events.append({"type": "code_start"})
                     continue
                 else:
+                    # No tags found — emit plain text incrementally
+                    # Keep a safety margin in case a tag is being streamed in
+                    safe_len = max(0, len(self.buffer) - 30)
+                    if safe_len > 0:
+                        events.append({"type": "text", "content": self.buffer[:safe_len]})
+                        self.buffer = self.buffer[safe_len:]
                     break
 
             elif self.in_design:
                 end_idx = self.buffer.find("</design_concept>")
-                code_idx = self.buffer.find("<code>")
+                
+                # Find first occurring code delimiter
+                code_idx = -1
+                for delim in self.code_delimiters:
+                    pos = self.buffer.find(delim)
+                    if pos != -1:
+                        if code_idx == -1 or pos < code_idx:
+                            code_idx = pos
 
-                # If <code> appears before </design_concept> (or design never closes),
-                # auto-close design and switch to code parsing
+                # Also check for raw mxfile in design (LLM might skip </design_concept>)
+                mxfile_idx = self.buffer.find("<mxfile")
+                if mxfile_idx != -1 and (code_idx == -1 or mxfile_idx < code_idx):
+                    code_idx = mxfile_idx
+
+                # If code starts before design ends (or design never closes)
                 if code_idx != -1 and (end_idx == -1 or code_idx < end_idx):
                     content = self.buffer[:code_idx]
-                    self.buffer = self.buffer[code_idx:]  # Leave <code> in buffer for next iteration
+                    self.buffer = self.buffer[code_idx:]  # Leave code delimiter in buffer
                     self.in_design = False
                     if content.strip():
                         events.append({"type": "design", "content": content.strip()})
@@ -165,37 +213,69 @@ class StreamingTagParser:
                     break
 
             elif self.in_code:
-                end_idx = self.buffer.find("</code>")
-                if end_idx != -1:
-                    remaining = self.buffer[:end_idx]
-                    self._code_buffer += remaining
-                    self._raw_code += remaining
-
-                    # Extract remaining JSON objects
-                    element_events = self._extract_objects()
-                    events.extend(element_events)
-
-                    # Send full raw code for canvasCode store
-                    events.append({"type": "code_complete", "content": self._raw_code.strip()})
-                    events.append({"type": "code_end"})
-                    self.buffer = self.buffer[end_idx + len("</code>"):]
-                    self.in_code = False
-                    continue
+                if self._is_raw_xml:
+                    # Raw XML mode: look for </mxfile> as end (include it in content)
+                    end_idx = self.buffer.find("</mxfile>")
+                    if end_idx != -1:
+                        # Include </mxfile> in the code content
+                        remaining = self.buffer[:end_idx + len("</mxfile>")]
+                        self._raw_code += remaining
+                        self.buffer = self.buffer[end_idx + len("</mxfile>"):]
+                        events.append({"type": "code_complete", "content": self._raw_code.strip()})
+                        events.append({"type": "code_end"})
+                        self.in_code = False
+                        self._is_raw_xml = False
+                        continue
+                    else:
+                        # Stream incrementally, keep margin for </mxfile>
+                        safe_len = max(0, len(self.buffer) - 15)
+                        if safe_len > 0:
+                            new_content = self.buffer[:safe_len]
+                            self._raw_code += new_content
+                            events.append({"type": "code", "content": new_content})
+                            self.buffer = self.buffer[safe_len:]
+                        break
                 else:
-                    # Push buffer content to code buffer, keep a safety margin for </code>
-                    safe_len = max(0, len(self.buffer) - 10)
-                    if safe_len > 0:
-                        new_content = self.buffer[:safe_len]
-                        self._code_buffer += new_content
-                        self._raw_code += new_content
+                    # Standard code mode: look for </code> or ```
+                    end_idx = -1
+                    matched_end_delim = ""
+                    for delim in self.code_end_delimiters:
+                        pos = self.buffer.find(delim)
+                        if pos != -1:
+                            if end_idx == -1 or pos < end_idx:
+                                end_idx = pos
+                                matched_end_delim = delim
 
-                        # Extract complete JSON objects
+                    if end_idx != -1:
+                        remaining = self.buffer[:end_idx]
+                        self._code_buffer += remaining
+                        self._raw_code += remaining
+
+                        # Extract remaining JSON objects
                         element_events = self._extract_objects()
                         events.extend(element_events)
-                        events.append({"type": "code", "content": new_content})
 
-                        self.buffer = self.buffer[safe_len:]
-                    break
+                        # Send full raw code for canvasCode store
+                        events.append({"type": "code_complete", "content": self._raw_code.strip()})
+                        events.append({"type": "code_end"})
+                        self.buffer = self.buffer[end_idx + len(matched_end_delim):]
+                        self.in_code = False
+                        continue
+                    else:
+                        # Push buffer content to code buffer, keep a safety margin for delimiters
+                        safe_len = max(0, len(self.buffer) - 10)
+                        if safe_len > 0:
+                            new_content = self.buffer[:safe_len]
+                            self._code_buffer += new_content
+                            self._raw_code += new_content
+
+                            # Extract complete JSON objects
+                            element_events = self._extract_objects()
+                            events.extend(element_events)
+                            events.append({"type": "code", "content": new_content})
+
+                            self.buffer = self.buffer[safe_len:]
+                        break
 
         return events
 
@@ -205,18 +285,47 @@ class StreamingTagParser:
         remaining = self.buffer.strip()
 
         if self.in_design:
-            # Check if there's a <code> block hidden in the remaining design content
-            code_idx = remaining.find("<code>")
+            # Check if there's code hidden in the remaining design content
+            code_idx = -1
+            matched_delim = ""
+            for delim in self.code_delimiters:
+                pos = remaining.find(delim)
+                if pos != -1:
+                    if code_idx == -1 or pos < code_idx:
+                        code_idx = pos
+                        matched_delim = delim
+
+            # Also check for raw mxfile
+            mxfile_idx = remaining.find("<mxfile")
+            if mxfile_idx != -1 and (code_idx == -1 or mxfile_idx < code_idx):
+                code_idx = mxfile_idx
+                matched_delim = "<mxfile"
+
             if code_idx != -1:
                 design_part = remaining[:code_idx].strip()
                 if design_part:
                     events.append({"type": "design", "content": design_part})
                 events.append({"type": "design_end"})
+                
                 # Extract code content
-                code_content = remaining[code_idx + len("<code>"):]
-                code_end_idx = code_content.find("</code>")
-                if code_end_idx != -1:
-                    code_content = code_content[:code_end_idx]
+                if matched_delim == "<mxfile":
+                    # Raw XML: include <mxfile in content, end at </mxfile>
+                    code_content = remaining[code_idx:]
+                    mxfile_end = code_content.find("</mxfile>")
+                    if mxfile_end != -1:
+                        code_content = code_content[:mxfile_end + len("</mxfile>")]
+                else:
+                    code_content = remaining[code_idx + len(matched_delim):]
+                    # Look for end delimiters
+                    code_end_idx = -1
+                    for delim in self.code_end_delimiters:
+                        pos = code_content.find(delim)
+                        if pos != -1:
+                            if code_end_idx == -1 or pos < code_end_idx:
+                                code_end_idx = pos
+                    if code_end_idx != -1:
+                        code_content = code_content[:code_end_idx]
+
                 events.append({"type": "code_start"})
                 events.append({"type": "code_complete", "content": code_content.strip()})
                 events.append({"type": "code_end"})
@@ -224,18 +333,51 @@ class StreamingTagParser:
                 events.append({"type": "design", "content": remaining})
                 events.append({"type": "design_end"})
         elif self.in_code:
-            if remaining:
-                self._code_buffer += remaining
+            if self._is_raw_xml:
+                # Include any remaining content (might include </mxfile>)
+                if "</mxfile>" in remaining:
+                    end_idx = remaining.find("</mxfile>")
+                    remaining = remaining[:end_idx + len("</mxfile>")]
                 self._raw_code += remaining
-            # Final extraction attempt
-            element_events = self._extract_objects()
-            events.extend(element_events)
-            if self._raw_code.strip():
-                events.append({"type": "code_complete", "content": self._raw_code.strip()})
-            events.append({"type": "code_end"})
+                if self._raw_code.strip():
+                    events.append({"type": "code_complete", "content": self._raw_code.strip()})
+                events.append({"type": "code_end"})
+            else:
+                # Strip any trailing code end delimiters from remaining
+                for delim in self.code_end_delimiters:
+                    if remaining.endswith(delim):
+                        remaining = remaining[:-len(delim)].strip()
+                
+                if remaining:
+                    self._code_buffer += remaining
+                    self._raw_code += remaining
+                # Final extraction attempt
+                element_events = self._extract_objects()
+                events.extend(element_events)
+                if self._raw_code.strip():
+                    events.append({"type": "code_complete", "content": self._raw_code.strip()})
+                events.append({"type": "code_end"})
+        elif remaining:
+            # Check for raw mxfile in plain text (no design_concept wrapper)
+            mxfile_idx = remaining.find("<mxfile")
+            if mxfile_idx != -1:
+                pre_text = remaining[:mxfile_idx].strip()
+                if pre_text:
+                    events.append({"type": "text", "content": pre_text})
+                code_content = remaining[mxfile_idx:]
+                mxfile_end = code_content.find("</mxfile>")
+                if mxfile_end != -1:
+                    code_content = code_content[:mxfile_end + len("</mxfile>")]
+                events.append({"type": "code_start"})
+                events.append({"type": "code_complete", "content": code_content.strip()})
+                events.append({"type": "code_end"})
+            else:
+                # Plain text without any XML tags (e.g. general agent conversation)
+                events.append({"type": "text", "content": remaining})
 
         self.buffer = ""
         return events
+
 
 
 def _build_messages(body: dict) -> list:
@@ -314,6 +456,8 @@ async def chat_stream(request: Request):
         parser = StreamingTagParser()
         current_engine_name = ""  # Track which engine is active
         current_task_name = ""    # Track which task is active
+        llm_ended = False        # Track if LLM step has ended
+        in_router = False        # Track if currently executing the router chain
 
         # Build multi-turn message sequence
         messages = _build_messages(body)
@@ -335,34 +479,65 @@ async def chat_stream(request: Request):
         try:
             async for event in graph.astream_events(input_state, version="v2"):
                 kind = event.get("event")
+                name = event.get("name", "")
 
                 if kind == "on_chat_model_stream":
                     chunk = event.get("data", {}).get("chunk")
                     if chunk and hasattr(chunk, "content") and chunk.content:
-                        parsed_events = parser.feed(chunk.content)
-                        for pe in parsed_events:
-                            # Sanitize drawio XML before emitting code_complete
-                            if pe.get("type") == "code_complete" and current_engine_name == "drawio":
-                                pe["content"] = sanitize_drawio_xml(pe["content"])
-                            yield f"data: {json.dumps(pe, ensure_ascii=False)}\n\n"
+                        text = extract_text_content(chunk.content)
+                        if text:
+                            if not llm_ended:
+                                llm_ended = True
+                                yield f"data: {json.dumps({'type': 'status', 'step_id': 'llm', 'action': 'end'}, ensure_ascii=False)}\n\n"
+                            parsed_events = parser.feed(text)
+                            for pe in parsed_events:
+                                if pe.get("type") == "code_start":
+                                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'generating', 'content': '生成与绘制图表', 'action': 'start'}, ensure_ascii=False)}\n\n"
+                                elif pe.get("type") == "code_complete":
+                                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'generating', 'action': 'end'}, ensure_ascii=False)}\n\n"
+                                    if current_engine_name == "drawio":
+                                        pe["content"] = sanitize_drawio_xml(pe["content"])
+                                yield f"data: {json.dumps(pe, ensure_ascii=False)}\n\n"
 
-                elif kind == "on_chain_end" and event.get("name") == "router":
+                elif kind == "on_chain_end" and name == "router":
+                    in_router = False
                     output = event.get("data", {}).get("output", {})
                     if isinstance(output, dict):
                         current_task_name = output.get("task_type", "") or current_task_name
                         current_engine_name = output.get("engine_type", "") or current_engine_name
                         if current_task_name or current_engine_name:
                             yield f"data: {json.dumps({'type': 'route', 'task': current_task_name, 'engine': current_engine_name}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'router', 'action': 'end'}, ensure_ascii=False)}\n\n"
 
                 elif kind == "on_chain_start":
-                    name = event.get("name", "")
-                    if name.endswith("_agent"):
+                    if name == "router":
+                        in_router = True
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'router', 'content': '分析修改意图', 'action': 'start'}, ensure_ascii=False)}\n\n"
+                    elif name.endswith("_agent"):
                         current_engine_name = name.replace("_agent", "")
                         if not current_task_name:
                             current_task_name = get_task_for_engine(current_engine_name)
                         yield f"data: {json.dumps({'type': 'agent', 'name': current_engine_name, 'task': current_task_name}, ensure_ascii=False)}\n\n"
+                        
+                        engine_zh = {
+                            "excalidraw": "手绘白板",
+                            "mermaid": "标准图表",
+                            "flow": "React Flow 工作流",
+                            "mindmap": "思维导图",
+                            "charts": "ECharts 数据图表",
+                            "drawio": "Draw.io 架构图",
+                            "infographic": "可视化信息图"
+                        }.get(current_engine_name, "图表")
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'agent', 'content': f'调配 {engine_zh} 专家', 'action': 'start'}, ensure_ascii=False)}\n\n"
+
+                elif kind == "on_chat_model_start":
+                    if not in_router:
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'agent', 'action': 'end'}, ensure_ascii=False)}\n\n"
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'llm', 'content': '构思方案与设计', 'action': 'start'}, ensure_ascii=False)}\n\n"
 
             for pe in parser.flush():
+                if pe.get("type") == "code_complete":
+                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'generating', 'action': 'end'}, ensure_ascii=False)}\n\n"
                 yield f"data: {json.dumps(pe, ensure_ascii=False)}\n\n"
 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"

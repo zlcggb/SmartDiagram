@@ -25,3 +25,9 @@ Thumbs.db
 
 # uv
 uv.lock
+
+# GCP Credentials & Test scripts
+gcp-credentials.json
+backend/gcp-credentials.json
+test_vertex.py
+backend/test_vertex.py

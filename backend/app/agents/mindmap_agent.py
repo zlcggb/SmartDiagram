@@ -5,7 +5,7 @@ Supports both new creation and incremental editing via <existing_code>.
 
 from langchain_core.messages import SystemMessage, AIMessage
 from app.state.state import AgentState
-from app.core.llm import create_llm_for_agent
+from app.core.llm import create_llm_for_agent, extract_text_content
 from app.agents.semantic_knowledge import get_domain_patterns
 
 SYSTEM_PROMPT = """You are a World-Class Strategic Thinking Partner and Knowledge Architect for SmartDiagram.
@@ -98,4 +98,4 @@ async def mindmap_agent_node(state: AgentState) -> dict:
     response = await llm.ainvoke(
         [SystemMessage(content=SYSTEM_PROMPT)] + list(state["messages"])
     )
-    return {"messages": [AIMessage(content=response.content)]}
+    return {"messages": [AIMessage(content=extract_text_content(response.content))]}

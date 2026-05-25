@@ -152,7 +152,7 @@ export default function DrawioCanvas() {
   // Error state
   if (loadError) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-white p-8">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 p-8">
         <div className="p-4 bg-red-50 rounded-full mb-4">
           <AlertCircle className="w-8 h-8 text-red-500" />
         </div>
@@ -169,10 +169,10 @@ export default function DrawioCanvas() {
   }
 
   return (
-    <div className="w-full h-full relative bg-white overflow-hidden">
+    <div className="w-full h-full relative bg-slate-50 overflow-hidden">
       {/* Loading overlay */}
       {isLoading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-white/90">
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-slate-50/90">
           <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-3" />
           <p className="text-sm text-slate-500">正在加载 Draw.io 编辑器...</p>
         </div>
