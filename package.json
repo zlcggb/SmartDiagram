@@ -9,7 +9,17 @@
         "dev:frontend": "cd frontend && npm run dev",
         "install:all": "cd frontend && npm install",
         "build": "cd frontend && npm run build",
-        "docker": "docker-compose up --build -d",
-        "docker:down": "docker-compose down"
+        "db:up": "docker compose up -d db redis",
+        "db:down": "docker compose stop db redis",
+        "smoke:enterprise": "cd backend && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/smoke_enterprise_flow.py --require-db",
+        "smoke:knowledge": "cd backend && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/smoke_knowledge_permissions.py --require-db",
+        "smoke:runtime": "cd backend && uv run python scripts/smoke_runtime_guards.py",
+        "smoke:office": "cd backend && uv run python scripts/smoke_office_artifacts.py",
+        "smoke:budget": "cd backend && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/smoke_tenant_budget.py --require-db",
+        "smoke:ops": "cd backend && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/smoke_ops_metrics.py --require-db",
+        "worker:once": "cd backend && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/run_enterprise_workers.py",
+        "worker": "cd backend && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/run_enterprise_workers.py --loop",
+        "docker": "docker compose up --build -d",
+        "docker:down": "docker compose down"
     }
 }

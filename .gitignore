@@ -8,6 +8,7 @@ __pycache__/
 # Build output
 dist/
 build/
+backend/storage/
 
 # Environment
 .env
@@ -31,3 +32,4 @@ gcp-credentials.json
 backend/gcp-credentials.json
 test_vertex.py
 backend/test_vertex.py
+/test/

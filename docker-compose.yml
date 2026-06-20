@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: smartdiagram-db
     restart: always
     environment:
@@ -14,6 +12,24 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: smartdiagram-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: smartdiagram-qdrant
+    restart: always
+    profiles:
+      - qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
   backend:
     build:
       context: ./backend
@@ -22,8 +38,34 @@ services:
     restart: always
     depends_on:
       - db
+      - redis
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/smartdiagram
+      - REDIS_URL=redis://redis:6379/0
+      - RUNTIME_RATE_LIMIT_BACKEND=${RUNTIME_RATE_LIMIT_BACKEND:-memory}
+      - RUNTIME_RATE_LIMIT_REDIS_FAIL_OPEN=${RUNTIME_RATE_LIMIT_REDIS_FAIL_OPEN:-false}
+      - WORKER_STALE_JOB_TIMEOUT_SECONDS=${WORKER_STALE_JOB_TIMEOUT_SECONDS:-1800}
+      - WORKER_STALE_JOB_ACTION=${WORKER_STALE_JOB_ACTION:-requeue}
+      - OBJECT_STORAGE_BACKEND=${OBJECT_STORAGE_BACKEND:-local}
+      - OBJECT_STORAGE_LOCAL_ROOT=${OBJECT_STORAGE_LOCAL_ROOT:-}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
+      - S3_BUCKET=${S3_BUCKET:-}
+      - S3_REGION=${S3_REGION:-auto}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+      - S3_PUBLIC_BASE_URL=${S3_PUBLIC_BASE_URL:-}
+      - EXPORT_CONFIRMATION_REQUIRED_FORMATS=${EXPORT_CONFIRMATION_REQUIRED_FORMATS:-pdf,pptx}
+      - KNOWLEDGE_INGESTION_REDIS_QUEUE=${KNOWLEDGE_INGESTION_REDIS_QUEUE:-smartdiagram:knowledge:ingestion}
+      - KNOWLEDGE_VECTOR_BACKEND=${KNOWLEDGE_VECTOR_BACKEND:-local_db}
+      - KNOWLEDGE_VECTOR_DIMENSIONS=${KNOWLEDGE_VECTOR_DIMENSIONS:-384}
+      - KNOWLEDGE_VECTOR_FALLBACK_TO_LOCAL=${KNOWLEDGE_VECTOR_FALLBACK_TO_LOCAL:-true}
+      - QDRANT_URL=${QDRANT_URL:-}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-smartdiagram_knowledge}
+      - QDRANT_TIMEOUT_SECONDS=${QDRANT_TIMEOUT_SECONDS:-30}
+      - KNOWLEDGE_SECURITY_POLICY_MODE=${KNOWLEDGE_SECURITY_POLICY_MODE:-rule}
+      - KNOWLEDGE_SECURITY_BLOCK_SEVERITY=${KNOWLEDGE_SECURITY_BLOCK_SEVERITY:-high}
+      - KNOWLEDGE_SECURITY_TRUSTED_TERMS=${KNOWLEDGE_SECURITY_TRUSTED_TERMS:-模板,示例,培训,规范,政策,流程,quote process}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
       - MODEL_ID=${MODEL_ID:-gpt-4o}
@@ -31,6 +73,43 @@ services:
       - LANGCHAIN_TRACING_V2=false
     ports:
       - "8000:8000"
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartdiagram-worker
+    restart: always
+    profiles:
+      - worker
+    depends_on:
+      - db
+      - redis
+    command: ["python", "scripts/run_enterprise_workers.py", "--loop"]
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/smartdiagram
+      - REDIS_URL=redis://redis:6379/0
+      - WORKER_STALE_JOB_TIMEOUT_SECONDS=${WORKER_STALE_JOB_TIMEOUT_SECONDS:-1800}
+      - WORKER_STALE_JOB_ACTION=${WORKER_STALE_JOB_ACTION:-requeue}
+      - OBJECT_STORAGE_BACKEND=${OBJECT_STORAGE_BACKEND:-local}
+      - OBJECT_STORAGE_LOCAL_ROOT=${OBJECT_STORAGE_LOCAL_ROOT:-}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
+      - S3_BUCKET=${S3_BUCKET:-}
+      - S3_REGION=${S3_REGION:-auto}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+      - S3_PUBLIC_BASE_URL=${S3_PUBLIC_BASE_URL:-}
+      - KNOWLEDGE_INGESTION_REDIS_QUEUE=${KNOWLEDGE_INGESTION_REDIS_QUEUE:-smartdiagram:knowledge:ingestion}
+      - KNOWLEDGE_VECTOR_BACKEND=${KNOWLEDGE_VECTOR_BACKEND:-local_db}
+      - KNOWLEDGE_VECTOR_DIMENSIONS=${KNOWLEDGE_VECTOR_DIMENSIONS:-384}
+      - KNOWLEDGE_VECTOR_FALLBACK_TO_LOCAL=${KNOWLEDGE_VECTOR_FALLBACK_TO_LOCAL:-true}
+      - QDRANT_URL=${QDRANT_URL:-}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-smartdiagram_knowledge}
+      - QDRANT_TIMEOUT_SECONDS=${QDRANT_TIMEOUT_SECONDS:-30}
+      - KNOWLEDGE_SECURITY_POLICY_MODE=${KNOWLEDGE_SECURITY_POLICY_MODE:-rule}
+      - KNOWLEDGE_SECURITY_BLOCK_SEVERITY=${KNOWLEDGE_SECURITY_BLOCK_SEVERITY:-high}
+      - KNOWLEDGE_SECURITY_TRUSTED_TERMS=${KNOWLEDGE_SECURITY_TRUSTED_TERMS:-模板,示例,培训,规范,政策,流程,quote process}
 
   frontend:
     build:
@@ -45,3 +124,4 @@ services:
 
 volumes:
   pgdata:
+  qdrantdata:
