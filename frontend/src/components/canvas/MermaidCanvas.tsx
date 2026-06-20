@@ -8,12 +8,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { useChatStore } from '../../store/chatStore';
+import { useT } from '../../i18n';
 
 const THEMES = [
-  { id: 'default', label: '默认', icon: '🎨' },
-  { id: 'forest', label: '森林', icon: '🌲' },
-  { id: 'dark', label: '暗色', icon: '🌙' },
-  { id: 'neutral', label: '简约', icon: '◻️' },
+  { id: 'default', labelKey: 'mermaid.theme.default', icon: '🎨' },
+  { id: 'forest', labelKey: 'mermaid.theme.forest', icon: '🌲' },
+  { id: 'dark', labelKey: 'mermaid.theme.dark', icon: '🌙' },
+  { id: 'neutral', labelKey: 'mermaid.theme.neutral', icon: '◻️' },
 ] as const;
 
 type ThemeId = (typeof THEMES)[number]['id'];
@@ -48,6 +49,7 @@ function balanceSequenceEndBlocks(code: string): string {
 
 export default function MermaidCanvas() {
   const { canvasCode, streamingCode, isStreaming, setCanvasCode, canvasMode, setCanvasMode } = useChatStore();
+  const { t } = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const svgWrapperRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -267,7 +269,7 @@ export default function MermaidCanvas() {
             }}
           >
             <span style={{ color: canvasMode === 'light' ? '#1e293b' : '#e2e8f0', fontSize: '12px', fontWeight: 600 }}>
-              📝 Mermaid 代码编辑器
+              {t('mermaid.editorTitle')}
             </span>
             <button
               onClick={handleApplyEdit}
@@ -282,7 +284,7 @@ export default function MermaidCanvas() {
                 fontWeight: 600,
               }}
             >
-              ▶ 渲染 (⌘↵)
+              {t('mermaid.renderAction')}
             </button>
           </div>
           {/* Editor textarea */}
@@ -321,11 +323,11 @@ export default function MermaidCanvas() {
         {error ? (
           <div className="w-full h-full flex items-center justify-center p-8">
             <div className="text-red-400 text-sm bg-red-950/20 p-4 rounded-lg border border-red-900/30 max-w-lg shadow-lg">
-              <p className="font-semibold mb-1 text-slate-200">渲染失败</p>
+              <p className="font-semibold mb-1 text-slate-200">{t('mermaid.renderFailed')}</p>
               <pre className="text-xs whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">{error}</pre>
               {canvasCode && (
                 <details className="mt-2">
-                  <summary className="text-xs text-red-400/80 cursor-pointer hover:text-red-400">查看原始代码</summary>
+                  <summary className="text-xs text-red-400/80 cursor-pointer hover:text-red-400">{t('mermaid.viewSource')}</summary>
                   <pre className="text-xs whitespace-pre-wrap mt-1 text-red-300/80 max-h-40 overflow-auto bg-red-950/30 p-2 rounded">{canvasCode}</pre>
                 </details>
               )}
@@ -343,7 +345,7 @@ export default function MermaidCanvas() {
                   fontWeight: 500,
                 }}
               >
-                打开编辑器修复
+                {t('mermaid.openEditorFix')}
               </button>
             </div>
           </div>
@@ -351,12 +353,12 @@ export default function MermaidCanvas() {
           <div className="w-full h-full flex items-center justify-center">
             <div className="flex flex-col items-center gap-3 text-slate-500">
               <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs">正在渲染 Mermaid 图表...</span>
+              <span className="text-xs">{t('mermaid.rendering')}</span>
             </div>
           </div>
         ) : !canvasCode && !streamingCode ? (
           <div className="w-full h-full flex items-center justify-center">
-            <p className="text-xs text-slate-500">等待 AI 输入代码以绘制图表...</p>
+            <p className="text-xs text-slate-500">{t('mermaid.waitingForCode')}</p>
           </div>
         ) : null}
 
@@ -405,7 +407,7 @@ export default function MermaidCanvas() {
             {/* Editor toggle */}
             <button
               onClick={() => setShowEditor(!showEditor)}
-              title={showEditor ? '关闭编辑器' : '打开代码编辑器'}
+              title={showEditor ? t('mermaid.closeEditor') : t('mermaid.openEditor')}
               style={{
                 width: '32px',
                 height: '32px',
@@ -426,11 +428,11 @@ export default function MermaidCanvas() {
             <div style={{ width: '1px', height: '20px', background: '#e5e7eb' }} />
 
             {/* Theme buttons */}
-            {THEMES.map((t) => (
+            {THEMES.map((themeOption) => (
               <button
-                key={t.id}
-                onClick={() => setTheme(t.id)}
-                title={t.label}
+                key={themeOption.id}
+                onClick={() => setTheme(themeOption.id)}
+                title={t(themeOption.labelKey)}
                 style={{
                   width: '32px',
                   height: '32px',
@@ -438,13 +440,13 @@ export default function MermaidCanvas() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderRadius: '6px',
-                  border: theme === t.id ? '2px solid #3b82f6' : '1px solid transparent',
+                  border: theme === themeOption.id ? '2px solid #3b82f6' : '1px solid transparent',
                   cursor: 'pointer',
                   fontSize: '14px',
-                  background: theme === t.id ? '#eff6ff' : 'transparent',
+                  background: theme === themeOption.id ? '#eff6ff' : 'transparent',
                 }}
               >
-                {t.icon}
+                {themeOption.icon}
               </button>
             ))}
 
@@ -453,7 +455,7 @@ export default function MermaidCanvas() {
             {/* Canvas background toggle: Dark / Light */}
             <button
               onClick={() => setCanvasMode(canvasMode === 'dark' ? 'light' : 'dark')}
-              title={canvasMode === 'dark' ? '切换为明亮画布背景' : '切换为黑暗画布背景'}
+              title={canvasMode === 'dark' ? t('mermaid.switchToLightCanvas') : t('mermaid.switchToDarkCanvas')}
               style={{
                 width: '32px',
                 height: '32px',
@@ -482,18 +484,18 @@ export default function MermaidCanvas() {
             <button
               onClick={() => setScale((s) => Math.min(s * 1.2, 5))}
               className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 text-lg font-bold"
-              title="放大"
+              title={t('common.zoomIn')}
             >+</button>
             <button
               onClick={() => setScale((s) => Math.max(s * 0.8, 0.1))}
               className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 text-lg font-bold"
-              title="缩小"
+              title={t('common.zoomOut')}
             >−</button>
             <div className="w-px h-5 bg-gray-200" />
             <button
               onClick={handleFitView}
               className="px-2 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500 text-xs"
-              title="适应视图"
+              title={t('common.fitView')}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />

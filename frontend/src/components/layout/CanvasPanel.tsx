@@ -17,6 +17,7 @@ import {
   getAgentEngineName,
   getAgentMeta,
 } from '../../config/diagramAgents';
+import { useT } from '../../i18n';
 
 const ExcalidrawCanvas = lazy(() => import('../canvas/ExcalidrawCanvas'));
 const MermaidCanvas = lazy(() => import('../canvas/MermaidCanvas'));
@@ -25,6 +26,7 @@ const MindmapCanvas = lazy(() => import('../canvas/MindmapCanvas'));
 const ChartsCanvas = lazy(() => import('../canvas/ChartsCanvas'));
 const DrawioCanvas = lazy(() => import('../canvas/DrawioCanvas'));
 const InfographicCanvas = lazy(() => import('../canvas/InfographicCanvas'));
+const ArtifactCanvas = lazy(() => import('../canvas/ArtifactCanvas'));
 
 /* ── Live Timer for Canvas ── */
 function CanvasLiveTimer() {
@@ -43,11 +45,12 @@ function CanvasLiveTimer() {
 
 function CanvasLoader() {
   const { canvasMode } = useChatStore();
+  const { t } = useT();
   return (
     <div className={`w-full h-full flex items-center justify-center transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
       <div className="flex flex-col items-center gap-3 sd-fade-in">
         <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
-        <span className={`text-xs ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>加载渲染引擎...</span>
+        <span className={`text-xs ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>{t('canvas.loadingEngine')}</span>
       </div>
     </div>
   );
@@ -55,6 +58,7 @@ function CanvasLoader() {
 
 function EmptyCanvas() {
   const { canvasMode } = useChatStore();
+  const { t } = useT();
   return (
     <div className={`w-full h-full flex flex-col items-center justify-center relative overflow-hidden transition-colors duration-300 ${
       canvasMode === 'light'
@@ -86,7 +90,7 @@ function EmptyCanvas() {
           SmartDiagram Pro
         </h1>
         <p className={`text-sm max-w-sm text-center leading-relaxed mb-10 font-normal px-4 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
-          在右侧描述您的绘图任务，AI 将自动分析、构思设计并逐步渲染出精美的图表。
+          {t('canvas.emptyDescription')}
         </p>
         <div className="flex items-center gap-2.5 flex-wrap justify-center max-w-lg px-4">
           {DIAGRAM_AGENTS.map((agent, i) => (
@@ -111,6 +115,7 @@ function EmptyCanvas() {
 
 function CanvasPanelInner() {
   const { canvasTask, canvasEngine, canvasCode, isStreaming, canvasPhase, designConcept, streamingCode, pendingElements, canvasMode } = useChatStore();
+  const { t } = useT();
   const [conceptOpen, setConceptOpen] = useState(true);
 
   // No engine selected → welcome screen
@@ -124,9 +129,9 @@ function CanvasPanelInner() {
   // Phase-based status text
   const phaseText = (() => {
     switch (canvasPhase) {
-      case 'routing': return '正在识别最佳引擎...';
-      case 'designing': return '正在构思设计方案...';
-      case 'generating': return '正在生成图表代码...';
+      case 'routing': return t('canvas.routing');
+      case 'designing': return t('canvas.designing');
+      case 'generating': return t('canvas.generating');
       default: return '';
     }
   })();
@@ -159,11 +164,14 @@ function CanvasPanelInner() {
         return <Suspense fallback={<CanvasLoader />}><DrawioCanvas /></Suspense>;
       case 'infographic':
         return <Suspense fallback={<CanvasLoader />}><InfographicCanvas /></Suspense>;
+      case 'html_email':
+      case 'web_report_html':
+        return <Suspense fallback={<CanvasLoader />}><ArtifactCanvas /></Suspense>;
       default:
         return (
           <div className={`w-full h-full flex items-center justify-center p-10 transition-colors duration-300 ${canvasMode === 'light' ? 'bg-white text-slate-800 border border-slate-200' : 'bg-slate-950 text-slate-300'}`}>
             <div className={`max-w-xl text-sm whitespace-pre-wrap leading-relaxed ${canvasMode === 'light' ? 'text-slate-700' : 'text-slate-400'}`}>
-              {canvasCode || '暂无可渲染内容'}
+              {canvasCode || t('canvas.noRenderableContent')}
             </div>
           </div>
         );
@@ -220,13 +228,13 @@ function CanvasPanelInner() {
                   } backdrop-blur-md`}>
                     <div className={`flex items-center justify-between gap-4 mb-2 border-b pb-1.5 ${canvasMode === 'light' ? 'border-slate-100' : 'border-slate-800'}`}>
                       <p className="text-[10px] font-bold text-amber-500 flex items-center gap-1">
-                        <span>💡</span> AI 设计思路
+                        <span>💡</span> {t('canvas.designThought')}
                       </p>
                       <div className="flex items-center gap-2">
                         {isStreaming && (
                           <span className="flex items-center gap-1 text-[9px] text-indigo-500 font-semibold">
                             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                            生成中
+                            {t('canvas.generatingShort')}
                           </span>
                         )}
                         <button 
@@ -235,7 +243,7 @@ function CanvasPanelInner() {
                             canvasMode === 'light' ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-100' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                           }`}
                         >
-                          收起
+                          {t('canvas.collapse')}
                         </button>
                       </div>
                     </div>
@@ -256,7 +264,7 @@ function CanvasPanelInner() {
                     className={`w-8 h-8 rounded-full border flex items-center justify-center shadow-lg hover:shadow-xl text-amber-500 cursor-pointer transition-all ${
                       canvasMode === 'light' ? 'border-slate-200 bg-white/95 hover:bg-slate-100 shadow-slate-200/50' : 'border-slate-800 bg-slate-900/90 hover:bg-slate-800'
                     }`}
-                    title="查看 AI 设计思路"
+                    title={t('canvas.showDesignThought')}
                   >
                     💡
                   </button>
@@ -273,6 +281,7 @@ function CanvasPanelInner() {
 /* ── Precise Node Optimization Overlay ── */
 function AINodeOptimizeOverlay() {
   const { selectedNode, setSelectedNode, canvasMode } = useChatStore();
+  const { t } = useT();
   const [inputVal, setInputVal] = useState('');
 
   // Auto-reset input when selected node changes
@@ -286,7 +295,12 @@ function AINodeOptimizeOverlay() {
 
   const handleSend = () => {
     if (!inputVal.trim()) return;
-    const prompt = `@${selectedNode.type === 'mindmap' ? 'mindmap' : 'flow'} 对节点「${selectedNode.text}」(ID: ${selectedNode.id}) 进行如下优化：${inputVal.trim()}`;
+    const prompt = t('canvas.nodeEditPrompt', {
+      agent: selectedNode.type === 'mindmap' ? 'mindmap' : 'flow',
+      text: selectedNode.text,
+      id: selectedNode.id,
+      instruction: inputVal.trim(),
+    });
     window.dispatchEvent(new CustomEvent('send-ai-message', { detail: { text: prompt } }));
     setInputVal('');
     setSelectedNode(null);
@@ -314,9 +328,9 @@ function AINodeOptimizeOverlay() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-indigo-500"></span>
             </span>
-            <span className={`text-[10px] font-semibold uppercase tracking-wider shrink-0 ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>AI 局部编辑</span>
+            <span className={`text-[10px] font-semibold uppercase tracking-wider shrink-0 ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>{t('canvas.localEdit')}</span>
             <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${badgeColor} truncate`}>
-              {selectedNode.type === 'mindmap' ? '脑图' : '流程图'}: {selectedNode.text}
+              {selectedNode.type === 'mindmap' ? t('canvas.mindmap') : t('canvas.flowchart')}: {selectedNode.text}
             </span>
           </div>
           <button
@@ -338,7 +352,7 @@ function AINodeOptimizeOverlay() {
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="描述你想如何修改或扩写这个节点..."
+            placeholder={t('canvas.nodeEditPlaceholder')}
             className={`flex-1 bg-transparent border-none outline-none text-xs py-1 ${
               canvasMode === 'light' ? 'text-slate-800 placeholder-slate-400' : 'text-slate-200 placeholder-slate-500'
             }`}
@@ -381,6 +395,7 @@ function GeneratingView({
   streamingCode: string;
 }) {
   const { canvasMode } = useChatStore();
+  const { t } = useT();
   const codeRef = useRef<HTMLPreElement>(null);
 
   // Auto-scroll code area to bottom
@@ -444,7 +459,7 @@ function GeneratingView({
             style={{ maxHeight: showCode ? '35%' : '70%' }}>
             <div className="px-5 py-4">
               <p className="text-[10px] font-bold text-amber-500 mb-2 flex items-center gap-1">
-                <span>💡</span> AI 设计思路
+                <span>💡</span> {t('canvas.designThought')}
               </p>
               <div className={`text-xs leading-relaxed prose prose-xs max-w-none
                 ${canvasMode === 'light'
@@ -474,10 +489,10 @@ function GeneratingView({
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500/40" />
                 <span className="w-2.5 h-2.5 rounded-full bg-green-500/40" />
               </div>
-              <span className="text-[10px] text-slate-400 font-mono ml-2">code stream</span>
+              <span className="text-[10px] text-slate-400 font-mono ml-2">{t('canvas.codeStream')}</span>
               <div className="ml-auto flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
-                <span className="text-[10px] text-indigo-500 font-medium">writing DSL</span>
+                <span className="text-[10px] text-indigo-500 font-medium">{t('canvas.writingDsl')}</span>
               </div>
             </div>
             {/* Code content */}

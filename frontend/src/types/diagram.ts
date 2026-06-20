@@ -6,6 +6,8 @@ export type DiagramEngineType =
   | 'charts'
   | 'drawio'
   | 'infographic'
+  | 'html_email'
+  | 'web_report_html'
   | 'general';
 
 export type DiagramTaskType =
@@ -16,4 +18,6 @@ export type DiagramTaskType =
   | 'data_chart'
   | 'architecture'
   | 'infographic'
+  | 'html_email'
+  | 'web_report_html'
   | 'general';

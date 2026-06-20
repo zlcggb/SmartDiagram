@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useChatStore } from '../../store/chatStore';
 import { AlertCircle, Download, Loader2 } from 'lucide-react';
+import { useT } from '../../i18n';
 
 // ─── XML Sanitizer ───
 
@@ -41,6 +42,7 @@ function cleanXml(code: string): string {
 
 export default function DrawioCanvas() {
   const { canvasCode, isStreaming } = useChatStore();
+  const { t } = useT();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -103,12 +105,12 @@ export default function DrawioCanvas() {
   useEffect(() => {
     loadTimeoutRef.current = setTimeout(() => {
       if (!iframeReady) {
-        setLoadError('draw.io 编辑器加载超时，请检查网络连接');
+        setLoadError(t('drawio.loadTimeout'));
         setIsLoading(false);
       }
     }, 30000);
     return () => { if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current); };
-  }, [iframeReady]);
+  }, [iframeReady, t]);
 
   // Load XML into iframe when ready
   useEffect(() => {
@@ -156,13 +158,13 @@ export default function DrawioCanvas() {
         <div className="p-4 bg-red-50 rounded-full mb-4">
           <AlertCircle className="w-8 h-8 text-red-500" />
         </div>
-        <p className="text-base font-semibold text-slate-800 mb-2">Draw.io 加载失败</p>
+        <p className="text-base font-semibold text-slate-800 mb-2">{t('drawio.loadFailed')}</p>
         <p className="text-sm text-slate-600 mb-4 max-w-md text-center">{loadError}</p>
         <button
           onClick={() => { setLoadError(null); setIsLoading(true); setIframeReady(false); }}
           className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600"
         >
-          重试
+          {t('common.retry')}
         </button>
       </div>
     );
@@ -174,7 +176,7 @@ export default function DrawioCanvas() {
       {isLoading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-slate-50/90">
           <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-3" />
-          <p className="text-sm text-slate-500">正在加载 Draw.io 编辑器...</p>
+          <p className="text-sm text-slate-500">{t('drawio.loading')}</p>
         </div>
       )}
 
@@ -182,7 +184,7 @@ export default function DrawioCanvas() {
       {isStreaming && !isLoading && (
         <div className="absolute top-3 left-3 z-50 flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs">
           <Loader2 className="w-3 h-3 animate-spin" />
-          正在生成...
+          {t('drawio.generating')}
         </div>
       )}
 
@@ -192,7 +194,7 @@ export default function DrawioCanvas() {
           <button
             onClick={handleDownload}
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] rounded-lg bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors text-slate-600 shadow-sm"
-            title="下载 .drawio 文件"
+            title={t('drawio.downloadFile')}
           >
             <Download className="w-3 h-3" /> .drawio
           </button>

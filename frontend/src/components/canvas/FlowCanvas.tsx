@@ -18,6 +18,8 @@ import type { Node, Edge, NodeProps } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useChatStore } from '../../store/chatStore';
 import dagre from 'dagre';
+import { NoticeDialog } from '../common/AppDialog';
+import { useT } from '../../i18n';
 
 const EXPORT_PADDING = 80;
 const EXPORT_SCALE = 2;
@@ -183,6 +185,7 @@ function getContrastColor(hexColor: string): string {
 // ─── Editable Node Component ───
 
 function EditableNode({ id, data, selected }: NodeProps) {
+  const { t } = useT();
   const [editing, setEditing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
@@ -269,7 +272,7 @@ function EditableNode({ id, data, selected }: NodeProps) {
       ref={nodeRef}
       style={nodeStyle}
       onDoubleClick={handleDoubleClick}
-      title="双击编辑文字"
+      title={t('flow.editNodeTitle')}
     >
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
@@ -297,9 +300,11 @@ function EditableNode({ id, data, selected }: NodeProps) {
 
 export default function FlowCanvas() {
   const { canvasCode, streamingCode, isStreaming, setCanvasCode, setSelectedNode, canvasMode } = useChatStore();
+  const { t } = useT();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
   const { getNodes, fitView } = useReactFlow();
 
   // ─── 自动跟踪并平滑缩放视图，确保流式长出的节点永远居中可见 ───
@@ -455,14 +460,20 @@ export default function FlowCanvas() {
       try {
         const { toPng, toSvg } = await import('html-to-image');
         const currentNodes = getNodes();
-        if (currentNodes.length === 0) { alert('没有可导出的节点'); return; }
+        if (currentNodes.length === 0) {
+          setNotice({ title: t('export.title'), message: t('flow.noExportableNodes') });
+          return;
+        }
 
         const nodesBounds = getNodesBounds(currentNodes);
         const imageWidth = Math.max(nodesBounds.width + EXPORT_PADDING * 2, 800);
         const imageHeight = Math.max(nodesBounds.height + EXPORT_PADDING * 2, 600);
         const viewport = getViewportForBounds(nodesBounds, imageWidth, imageHeight, 0.5, 2, 0.1);
         const viewportEl = document.querySelector('.react-flow__viewport') as HTMLElement;
-        if (!viewportEl) { alert('找不到 ReactFlow 视口'); return; }
+        if (!viewportEl) {
+          setNotice({ title: t('export.title'), message: t('flow.viewportMissing') });
+          return;
+        }
 
         const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
         const styleOpts = {
@@ -484,13 +495,16 @@ export default function FlowCanvas() {
         }
       } catch (err) {
         console.error('[FlowCanvas] Export failed:', err);
-        alert(`Flow 导出失败: ${(err as Error).message}`);
+        setNotice({
+          title: t('common.error'),
+          message: t('flow.exportFailed', { message: (err as Error).message }),
+        });
       }
     };
 
     window.addEventListener('flow-export', handleExport);
     return () => window.removeEventListener('flow-export', handleExport);
-  }, [getNodes]);
+  }, [getNodes, t]);
 
   if (error) {
     return (
@@ -500,7 +514,7 @@ export default function FlowCanvas() {
             ? 'text-red-600 bg-red-50 border-red-200'
             : 'text-red-400 bg-red-950/20 border-red-900/30'
         }`}>
-          <p className={`font-semibold mb-1 ${canvasMode === 'light' ? 'text-red-700' : 'text-slate-200'}`}>Flow 渲染失败</p>
+          <p className={`font-semibold mb-1 ${canvasMode === 'light' ? 'text-red-700' : 'text-slate-200'}`}>{t('flow.renderFailed')}</p>
           <pre className="text-xs whitespace-pre-wrap">{error}</pre>
         </div>
       </div>
@@ -508,51 +522,60 @@ export default function FlowCanvas() {
   }
 
   return (
-    <div className={`w-full h-full transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-        proOptions={{ hideAttribution: true }}
-        onNodeClick={(_event, node) => {
-          if (node && node.data && node.data.label) {
-            setSelectedNode({
-              id: node.id,
-              text: node.data.label,
-              type: 'flow',
-            });
-          }
-        }}
-        onPaneClick={() => {
-          setSelectedNode(null);
-        }}
-      >
-        <Background gap={20} color={canvasMode === 'light' ? '#cbd5e1' : '#1e293b'} size={1} />
-        <Controls
-          style={{
-            background: canvasMode === 'light' ? '#f8fafc' : '#0f172a',
-            border: canvasMode === 'light' ? '1px solid #cbd5e1' : '1px solid #1e293b',
-            color: canvasMode === 'light' ? '#334155' : '#f1f5f9',
+    <>
+      <div className={`w-full h-full transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.2 }}
+          proOptions={{ hideAttribution: true }}
+          onNodeClick={(_event, node) => {
+            if (node && node.data && node.data.label) {
+              setSelectedNode({
+                id: node.id,
+                text: node.data.label,
+                type: 'flow',
+              });
+            }
           }}
-        />
-        <MiniMap
-          nodeStrokeWidth={3}
-          pannable
-          zoomable
-          style={{
-            border: canvasMode === 'light' ? '1px solid #cbd5e1' : '1px solid #1e293b',
-            borderRadius: 8,
-            background: canvasMode === 'light' ? '#f8fafc' : '#0b0f19',
-            transition: 'all 0.3s ease',
+          onPaneClick={() => {
+            setSelectedNode(null);
           }}
-          nodeColor={canvasMode === 'light' ? '#3b82f6' : '#60a5fa'}
-          maskColor={canvasMode === 'light' ? 'rgba(241, 245, 249, 0.6)' : 'rgba(15, 23, 42, 0.6)'}
-        />
-      </ReactFlow>
-    </div>
+        >
+          <Background gap={20} color={canvasMode === 'light' ? '#cbd5e1' : '#1e293b'} size={1} />
+          <Controls
+            style={{
+              background: canvasMode === 'light' ? '#f8fafc' : '#0f172a',
+              border: canvasMode === 'light' ? '1px solid #cbd5e1' : '1px solid #1e293b',
+              color: canvasMode === 'light' ? '#334155' : '#f1f5f9',
+            }}
+          />
+          <MiniMap
+            nodeStrokeWidth={3}
+            pannable
+            zoomable
+            style={{
+              border: canvasMode === 'light' ? '1px solid #cbd5e1' : '1px solid #1e293b',
+              borderRadius: 8,
+              background: canvasMode === 'light' ? '#f8fafc' : '#0b0f19',
+              transition: 'all 0.3s ease',
+            }}
+            nodeColor={canvasMode === 'light' ? '#3b82f6' : '#60a5fa'}
+            maskColor={canvasMode === 'light' ? 'rgba(241, 245, 249, 0.6)' : 'rgba(15, 23, 42, 0.6)'}
+          />
+        </ReactFlow>
+      </div>
+      <NoticeDialog
+        open={Boolean(notice)}
+        title={notice?.title || t('common.error')}
+        message={notice?.message || ''}
+        closeLabel={t('common.close')}
+        onClose={() => setNotice(null)}
+      />
+    </>
   );
 }

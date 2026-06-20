@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useChatStore } from '../../store/chatStore';
 import * as AntVInfographic from '@antv/infographic';
 import { AlertCircle } from 'lucide-react';
+import { useT } from '../../i18n';
 
 const Infographic: any = (AntVInfographic as any).Infographic;
 
@@ -73,6 +74,7 @@ if ((AntVInfographic as any).registerResourceLoader) {
 
 export default function InfographicCanvas() {
   const { canvasCode, isStreaming, canvasMode } = useChatStore();
+  const { t } = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const svgWrapperRef = useRef<HTMLDivElement>(null);
   const infographicRef = useRef<any>(null);
@@ -251,7 +253,7 @@ export default function InfographicCanvas() {
         <div className="p-4 bg-red-50 rounded-full mb-4">
           <AlertCircle className="w-8 h-8 text-red-500" />
         </div>
-        <p className="text-base font-semibold text-slate-800 mb-2">Infographic Render Failed</p>
+        <p className="text-base font-semibold text-slate-800 mb-2">{t('infographic.renderFailed')}</p>
         <p className="text-sm text-slate-600 mb-4">{error}</p>
       </div>
     );
@@ -294,18 +296,18 @@ export default function InfographicCanvas() {
           <button
             onClick={() => setScale((s) => Math.min(s * 1.2, 5))}
             className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-lg font-bold transition-colors"
-            title="放大"
+            title={t('common.zoomIn')}
           >+</button>
           <button
             onClick={() => setScale((s) => Math.max(s * 0.8, 0.15))}
             className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-lg font-bold transition-colors"
-            title="缩小"
+            title={t('common.zoomOut')}
           >−</button>
           <div className="w-px h-5 bg-slate-200 dark:bg-slate-800" />
           <button
             onClick={handleFitView}
             className="px-2 h-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-xs transition-colors"
-            title="适应视图"
+            title={t('common.fitView')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
@@ -340,7 +342,7 @@ export default function InfographicCanvas() {
             ))}
           </div>
           <span className="text-[10px] text-slate-400 font-medium tracking-wider uppercase">
-            Page {activeBlockIndex + 1} of {blocks.length}
+            {t('infographic.pageIndicator', { current: activeBlockIndex + 1, total: blocks.length })}
           </span>
         </div>
       )}

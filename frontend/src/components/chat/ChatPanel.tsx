@@ -14,17 +14,43 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Send, Loader2, Trash2, Settings,
+  Send, Loader2, Settings, SquarePen,
   ChevronDown, ChevronUp, ChevronRight,
   Sparkles, Copy, Check,
   Plus, X, ImageIcon, SlidersHorizontal,
-  Sun, Moon,
   Brain, CheckCircle2,
+  Database,
+  Activity,
+  AlertCircle,
+  FileDiff,
+  GitBranch,
+  RotateCcw,
+  History,
+  Search,
+  RefreshCw,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useChatStore, type ThinkingStep } from '../../store/chatStore';
+import {
+  useChatStore,
+  type ConversationMemorySummary,
+  type ConsistencyAgentSummary,
+  type ConversationResumeNotice,
+  type DesignAgentSummary,
+  type ExportPlanSummary,
+  type HumanApprovalSummary,
+  type KnowledgeContextSummary,
+  type LongTermPreferencesSummary,
+  type Message,
+  type PlannerPlanSummary,
+  type RepairAgentSummary,
+  type ExecutionPlanStep,
+  type ThinkingStep,
+} from '../../store/chatStore';
 import SettingsModal from '../settings/SettingsModal';
+import { ConfirmDialog, NoticeDialog, TextInputDialog } from '../common/AppDialog';
+import { API_BASE, enterpriseBodyContext, enterpriseHeaders } from '../../config/enterpriseContext';
+import { useT } from '../../i18n';
 import {
   DIAGRAM_AGENTS,
   getAgentDisplayName,
@@ -34,7 +60,283 @@ import {
 } from '../../config/diagramAgents';
 import type { DiagramEngineType, DiagramTaskType } from '../../types/diagram';
 
-const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '';
+type VersionActionPayload = {
+  diagram_id: string;
+  diagram_version_id: string;
+  code?: string;
+  engine_type?: DiagramEngineType;
+  task_type?: DiagramTaskType;
+  design_concept?: string;
+  version_number?: number;
+};
+
+type VersionDiffPayload = {
+  diagram_id: string;
+  base_version: {
+    diagram_version_id: string;
+    version_number: number;
+    code_hash?: string;
+  };
+  target_version: {
+    diagram_version_id: string;
+    version_number: number;
+    code_hash?: string;
+  };
+  summary: {
+    changed: boolean;
+    engine_changed: boolean;
+    task_changed: boolean;
+    design_concept_changed: boolean;
+    line_delta: number;
+    char_delta: number;
+    added_line_count: number;
+    removed_line_count: number;
+    changed_blocks: number;
+    structured?: {
+      available?: boolean;
+      nodes?: {
+        added_ids?: string[];
+        removed_ids?: string[];
+        changed_ids?: string[];
+        label_changes?: { id: string; before: string; after: string }[];
+      };
+      edges?: {
+        added_ids?: string[];
+        removed_ids?: string[];
+        changed_ids?: string[];
+      };
+    };
+  };
+  preview?: {
+    added_lines?: string[];
+    removed_lines?: string[];
+  };
+  truncated?: boolean;
+};
+
+type HistoryAgentProcess = {
+  run_id?: string;
+  status?: string;
+  duration_ms?: number;
+  duration_seconds?: number;
+  step_count?: number;
+  assistant_content?: string;
+  token_usage?: {
+    estimated_total_tokens?: number;
+    stream_event_count?: number;
+  };
+  steps?: {
+    id?: string;
+    label?: string;
+    status?: string;
+    duration_ms?: number;
+    duration_seconds?: number;
+  }[];
+} | null;
+
+type DiagramHistoryItem = {
+  diagram_id: string;
+  title: string;
+  engine_type?: DiagramEngineType;
+  task_type?: DiagramTaskType;
+  current_version_id?: string;
+  updated_at?: string;
+  conversation?: {
+    summary?: string;
+  };
+  current_version?: {
+    diagram_version_id: string;
+    version_number?: number;
+    engine_type?: DiagramEngineType;
+    task_type?: DiagramTaskType;
+    design_concept?: string;
+    code?: string;
+    code_preview?: string;
+    code_hash?: string;
+    created_at?: string;
+    agent_process?: HistoryAgentProcess;
+  } | null;
+};
+
+type ConversationHistoryMessage = {
+  id: string;
+  role: string;
+  content?: string;
+  engine_type?: string;
+  task_type?: string;
+  diagram_version_id?: string;
+  created_at?: string;
+  agent_process?: HistoryAgentProcess;
+};
+
+type ConversationHistoryDiagram = {
+  diagram_id: string;
+  diagram_version_id: string;
+  version_number?: number;
+  title?: string;
+  engine_type?: DiagramEngineType;
+  task_type?: DiagramTaskType;
+  design_concept?: string;
+  code?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type ConversationHistoryItem = {
+  conversation_id: string;
+  title?: string;
+  status?: string;
+  summary?: string;
+  current_diagram_version_id?: string;
+  message_count?: number;
+  updated_at?: string;
+  context?: {
+    last_engine_type?: string;
+    last_task_type?: string;
+    short_term_memory?: {
+      turn_count?: number;
+      last_user_message?: string;
+      last_assistant_outcome?: string;
+    };
+  };
+  messages?: ConversationHistoryMessage[];
+  current_diagram?: ConversationHistoryDiagram | null;
+};
+
+type HistoryMode = 'diagrams' | 'conversations';
+type TranslateFn = (key: string, values?: Record<string, string | number>) => string;
+
+type BranchDialogState =
+  | { kind: 'history'; item: DiagramHistoryItem; initialValue: string }
+  | { kind: 'message'; message: Message; initialValue: string };
+
+const formatSeconds = (value: number | undefined) => {
+  const seconds = Number(value || 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0.0';
+  return seconds >= 10 ? seconds.toFixed(0) : seconds.toFixed(1);
+};
+
+const historyProcessToThinkingSteps = (process: HistoryAgentProcess | null | undefined): ThinkingStep[] => {
+  const steps = Array.isArray(process?.steps) ? process.steps : [];
+  const now = Date.now();
+  return steps
+    .map((step, index) => {
+      const durationSeconds = Number(step.duration_seconds ?? ((step.duration_ms || 0) / 1000));
+      const label = String(step.label || step.id || `Step ${index + 1}`).trim();
+      return {
+        id: String(step.id || `history_step_${index + 1}`),
+        label,
+        startTime: now,
+        duration: Number.isFinite(durationSeconds) ? Math.max(durationSeconds, 0) : 0,
+        status: step.status === 'running' ? 'running' : 'completed',
+      } satisfies ThinkingStep;
+    })
+    .filter((step) => step.label);
+};
+
+const titleCaseKey = (value: string) =>
+  value
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const translatedOptional = (t: TranslateFn, key: string, fallback: string) => {
+  const translated = t(key);
+  return translated === key ? fallback : translated;
+};
+
+const runtimeStepToPlanStep = (stepId: string, action?: string) => {
+  if (stepId === 'designer') return 'designer';
+  if (stepId === 'agent' || stepId === 'llm') return action === 'start' ? 'chart' : '';
+  if (stepId === 'generating') return 'chart';
+  return stepId;
+};
+
+const parseExecutionPlanSteps = (items: unknown[]): ExecutionPlanStep[] =>
+  items
+    .filter((item: unknown): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map((item: Record<string, unknown>) => ({
+      id: String(item.id || ''),
+      label: String(item.label || ''),
+      agent: String(item.agent || ''),
+      phase: String(item.phase || ''),
+      status: String(item.status || 'unknown'),
+      durationMs: Number(item.duration_ms || item.durationMs || 0),
+      metadata: typeof item.metadata === 'object' && item.metadata ? item.metadata as Record<string, unknown> : undefined,
+    }));
+
+const mergeExecutionPlanSteps = (
+  incoming: ExecutionPlanStep[],
+  current: ExecutionPlanStep[],
+) => {
+  const currentById = new Map(current.map((step) => [step.id, step]));
+  return incoming.map((step) => {
+    const existing = currentById.get(step.id);
+    if (!existing) return step;
+    if (step.status === 'pending' && existing.status !== 'pending') {
+      return {
+        ...step,
+        status: existing.status,
+        durationMs: existing.durationMs,
+        metadata: { ...(step.metadata || {}), ...(existing.metadata || {}) },
+      };
+    }
+    return {
+      ...step,
+      durationMs: step.durationMs || existing.durationMs,
+      metadata: { ...(existing.metadata || {}), ...(step.metadata || {}) },
+    };
+  });
+};
+
+const updateExecutionPlanStepStatus = (
+  steps: ExecutionPlanStep[],
+  rawStepId: string,
+  action: string | undefined,
+  nextStatus?: string,
+) => {
+  const stepId = runtimeStepToPlanStep(rawStepId, action);
+  if (!stepId) return steps;
+  const now = Date.now();
+  return steps.map((step) => {
+    if (step.id !== stepId) return step;
+    const metadata = { ...(step.metadata || {}) };
+    if (action === 'start') {
+      metadata.startedAtMs = now;
+      return { ...step, status: 'running', metadata };
+    }
+    const startedAtMs = Number(metadata.startedAtMs || 0);
+    const durationMs = startedAtMs > 0 ? now - startedAtMs : step.durationMs;
+    return {
+      ...step,
+      status: nextStatus || (action === 'end' ? 'succeeded' : step.status),
+      durationMs,
+      metadata,
+    };
+  });
+};
+
+const markExecutionPlanFailed = (steps: ExecutionPlanStep[], errorMessage: string) => {
+  if (steps.length === 0) return steps;
+  const hasRunning = steps.some((step) => step.status === 'running');
+  let failedAssigned = false;
+  return steps.map((step) => {
+    if (step.status === 'succeeded') return step;
+    if (step.status === 'running' || (!hasRunning && !failedAssigned && step.status === 'pending')) {
+      failedAssigned = true;
+      return {
+        ...step,
+        status: 'failed',
+        metadata: { ...(step.metadata || {}), error: errorMessage },
+      };
+    }
+    if (step.status === 'pending') {
+      return { ...step, status: 'skipped' };
+    }
+    return step;
+  });
+};
 
 /* ── Design Concept Collapsible ── */
 function DesignConceptCard({ text }: { text: string }) {
@@ -79,8 +381,879 @@ function DesignConceptCard({ text }: { text: string }) {
   );
 }
 
+function ExportPlanCard({ plan }: { plan: ExportPlanSummary }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const isLight = canvasMode === 'light';
+  const allowed = plan.allowedFormats
+    .map((item) => String(item.format || '').toUpperCase())
+    .filter(Boolean)
+    .slice(0, 5);
+
+  if (allowed.length === 0) return null;
+
+  return (
+    <div className={`mt-2 rounded-lg border px-3 py-2 ${
+      isLight ? 'border-violet-200 bg-violet-50/70 text-violet-900' : 'border-violet-500/10 bg-violet-500/5 text-violet-200'
+    }`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Activity className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate text-[11px] font-semibold">{t('agentCard.export')}</span>
+        </div>
+        <span className={`shrink-0 text-[10px] ${isLight ? 'text-violet-700' : 'text-violet-300/70'}`}>
+          {plan.preferredFormat ? String(plan.preferredFormat).toUpperCase() : plan.status}
+        </span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {allowed.map((format) => (
+          <span
+            key={format}
+            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+              isLight ? 'bg-white text-violet-700' : 'bg-violet-500/10 text-violet-200'
+            }`}
+          >
+            {format}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExecutionPlanCard({ steps }: { steps: ExecutionPlanStep[] }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const isLight = canvasMode === 'light';
+  const visibleSteps = steps
+    .filter((step) => step.id || step.label)
+    .slice(0, 5);
+  if (visibleSteps.length === 0) return null;
+
+  const totalMs = visibleSteps.reduce((sum, step) => sum + Number(step.durationMs || 0), 0);
+  const duration = totalMs > 0 ? formatSeconds(totalMs / 1000) : '';
+  const statusLabel = (status: string) => translatedOptional(t, `ops.status.${status}`, status || t('common.unknown'));
+  const stepLabel = (step: ExecutionPlanStep) => translatedOptional(
+    t,
+    `ops.step.${step.id}`,
+    step.label || titleCaseKey(step.phase || step.agent || step.id),
+  );
+
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 ${
+      isLight ? 'border-blue-200 bg-blue-50/70 text-blue-900' : 'border-blue-500/15 bg-blue-500/5 text-blue-200'
+    }`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Activity className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate text-[11px] font-semibold">{t('agentCard.execution')}</span>
+        </div>
+        <span className={`shrink-0 text-[10px] tabular-nums ${isLight ? 'text-blue-700' : 'text-blue-300/70'}`}>
+          {duration ? t('agentCard.executionSummary', { steps: steps.length, duration }) : t('agentCard.steps', { count: steps.length })}
+        </span>
+      </div>
+      <div className="mt-1.5 space-y-1">
+        {visibleSteps.map((step, index) => (
+          <div key={`${step.id || step.label}-${index}`} className="flex items-center justify-between gap-2 text-[10px]">
+            <span className="min-w-0 truncate">{stepLabel(step)}</span>
+            <span className={`shrink-0 ${isLight ? 'text-blue-700/70' : 'text-blue-200/60'}`}>
+              {statusLabel(step.status)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConversationMemoryCard({ memory }: { memory: ConversationMemorySummary }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const isLight = canvasMode === 'light';
+  const loaded = memory.status === 'loaded';
+  const denied = memory.status === 'denied';
+  const toneClass = loaded
+    ? isLight ? 'border-cyan-200 bg-cyan-50/80 text-cyan-900' : 'border-cyan-500/15 bg-cyan-500/5 text-cyan-200'
+    : denied
+      ? isLight ? 'border-rose-200 bg-rose-50/80 text-rose-900' : 'border-rose-500/15 bg-rose-500/5 text-rose-200'
+      : isLight ? 'border-slate-200 bg-slate-50 text-slate-700' : 'border-slate-700/70 bg-slate-800/40 text-slate-300';
+  const statusText = loaded
+    ? t('memory.conversation.loaded')
+    : denied
+      ? t('memory.denied')
+      : t('memory.conversation.empty');
+  const details = [
+    memory.summaryPresent ? t('memory.summaryPresent') : t('memory.summaryMissing'),
+    t('memory.recentMessages', { count: memory.recentCount }),
+    memory.turnCount ? t('memory.turns', { count: memory.turnCount }) : '',
+    memory.currentDiagramVersionId ? t('memory.diagramVersion', { id: memory.currentDiagramVersionId.slice(0, 8) }) : '',
+  ].filter(Boolean);
+
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 ${toneClass}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Database className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate text-[11px] font-semibold">{t('memory.conversation.title')}</span>
+        </div>
+        <span className="shrink-0 text-[10px] opacity-75">{statusText}</span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {details.map((detail) => (
+          <span key={detail} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${isLight ? 'bg-white/80' : 'bg-white/10'}`}>
+            {detail}
+          </span>
+        ))}
+      </div>
+      {memory.reason && !loaded && (
+        <p className="mt-1.5 truncate text-[10px] opacity-70">{memory.reason}</p>
+      )}
+    </div>
+  );
+}
+
+function LongTermPreferencesCard({ preferences }: { preferences: LongTermPreferencesSummary }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const isLight = canvasMode === 'light';
+  const loaded = preferences.status === 'loaded';
+  const denied = preferences.status === 'denied';
+  const sourceLabels = Object.entries(preferences.sources || {})
+    .filter(([, enabled]) => enabled)
+    .map(([source]) => translatedOptional(t, `memory.source.${source}`, titleCaseKey(source)))
+    .slice(0, 3);
+  const keyLabels = preferences.keys
+    .map((key) => translatedOptional(t, `memory.preferenceKey.${key}`, titleCaseKey(key)))
+    .slice(0, 5);
+
+  const toneClass = loaded && preferences.keys.length > 0
+    ? isLight ? 'border-lime-200 bg-lime-50/80 text-lime-900' : 'border-lime-500/15 bg-lime-500/5 text-lime-200'
+    : denied
+      ? isLight ? 'border-rose-200 bg-rose-50/80 text-rose-900' : 'border-rose-500/15 bg-rose-500/5 text-rose-200'
+      : isLight ? 'border-slate-200 bg-slate-50 text-slate-700' : 'border-slate-700/70 bg-slate-800/40 text-slate-300';
+  const statusText = loaded && preferences.keys.length > 0
+    ? t('memory.preferences.loaded')
+    : denied
+      ? t('memory.denied')
+      : t('memory.preferences.empty');
+
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 ${toneClass}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate text-[11px] font-semibold">{t('memory.preferences.title')}</span>
+        </div>
+        <span className="shrink-0 text-[10px] opacity-75">{statusText}</span>
+      </div>
+      {(sourceLabels.length > 0 || keyLabels.length > 0) && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {sourceLabels.map((source) => (
+            <span key={`source-${source}`} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${isLight ? 'bg-white/80' : 'bg-white/10'}`}>
+              {source}
+            </span>
+          ))}
+          {keyLabels.map((key) => (
+            <span key={`key-${key}`} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${isLight ? 'bg-white/80' : 'bg-white/10'}`}>
+              {key}
+            </span>
+          ))}
+        </div>
+      )}
+      {preferences.reason && !loaded && (
+        <p className="mt-1.5 truncate text-[10px] opacity-70">{preferences.reason}</p>
+      )}
+    </div>
+  );
+}
+
+function ConversationResumeNoticeCard({ notice }: { notice: ConversationResumeNotice }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const isLight = canvasMode === 'light';
+  const restored = notice.status === 'canvas_restored';
+  const toneClass = restored
+    ? isLight ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900' : 'border-emerald-500/15 bg-emerald-500/5 text-emerald-200'
+    : isLight ? 'border-amber-200 bg-amber-50/90 text-amber-900' : 'border-amber-500/20 bg-amber-500/10 text-amber-200';
+  const detailItems = [
+    t('conversationHistory.messages', { count: notice.messageCount }),
+    notice.currentDiagramVersionId ? t('memory.diagramVersion', { id: notice.currentDiagramVersionId.slice(0, 8) }) : '',
+  ].filter(Boolean);
+
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 ${toneClass}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {restored
+            ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            : <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          }
+          <span className="truncate text-[11px] font-semibold">
+            {restored ? t('conversationHistory.canvasRestoredTitle') : t('conversationHistory.canvasMissingTitle')}
+          </span>
+        </div>
+        <span className="shrink-0 text-[10px] opacity-75">
+          {restored ? t('conversationHistory.canvasAvailable') : t('conversationHistory.canvasUnavailable')}
+        </span>
+      </div>
+      <p className="mt-1.5 line-clamp-2 text-[10px] opacity-80">
+        {restored
+          ? t('conversationHistory.canvasRestoredDetail', { title: notice.conversationTitle })
+          : t('conversationHistory.canvasMissingDetail', { title: notice.conversationTitle })
+        }
+      </p>
+      {detailItems.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {detailItems.map((detail) => (
+            <span key={detail} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${isLight ? 'bg-white/80' : 'bg-white/10'}`}>
+              {detail}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlannerPlanCard({ plan }: { plan: PlannerPlanSummary }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const isLight = canvasMode === 'light';
+  const steps = plan.subtasks
+    .map((item) => String(item.label || '').trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  if (steps.length === 0) return null;
+
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 ${
+      isLight ? 'border-sky-200 bg-sky-50/80 text-sky-900' : 'border-sky-500/15 bg-sky-500/5 text-sky-200'
+    }`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Brain className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate text-[11px] font-semibold">{t('agentCard.plan')}</span>
+        </div>
+        <span className={`shrink-0 text-[10px] ${isLight ? 'text-sky-700' : 'text-sky-300/70'}`}>
+          {plan.mode || plan.status}
+        </span>
+      </div>
+      <div className="mt-1.5 space-y-1">
+        {steps.map((step, index) => (
+          <div key={`${step}-${index}`} className={`truncate text-[10px] ${isLight ? 'text-sky-800' : 'text-sky-200/80'}`}>
+            {index + 1}. {step}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DesignAgentCard({ summary }: { summary: DesignAgentSummary }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const isLight = canvasMode === 'light';
+  const rules = summary.appliedRules.slice(0, 3);
+
+  if (!summary.changed && rules.length === 0) return null;
+
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 ${
+      isLight ? 'border-teal-200 bg-teal-50/80 text-teal-900' : 'border-teal-500/15 bg-teal-500/5 text-teal-200'
+    }`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate text-[11px] font-semibold">{t('agentCard.design')}</span>
+        </div>
+        <span className={`shrink-0 text-[10px] ${isLight ? 'text-teal-700' : 'text-teal-300/70'}`}>
+          {summary.changed ? t('agentCard.optimized') : summary.status}
+        </span>
+      </div>
+      {rules.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {rules.map((rule) => (
+            <span
+              key={rule}
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                isLight ? 'bg-white text-teal-700' : 'bg-teal-500/10 text-teal-200'
+              }`}
+            >
+              {rule.replace(/^[^.]+\./, '')}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RepairAgentCard({ summary }: { summary: RepairAgentSummary }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const isLight = canvasMode === 'light';
+  const rules = summary.appliedRules.slice(0, 3);
+
+  if (!summary.repaired && summary.validationOk) return null;
+
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 ${
+      summary.repaired
+        ? isLight ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900' : 'border-emerald-500/15 bg-emerald-500/5 text-emerald-200'
+        : isLight ? 'border-rose-200 bg-rose-50/80 text-rose-900' : 'border-rose-500/15 bg-rose-500/5 text-rose-200'
+    }`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {summary.repaired
+            ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            : <X className="h-3.5 w-3.5 shrink-0" />
+          }
+          <span className="truncate text-[11px] font-semibold">{t('agentCard.repair')}</span>
+        </div>
+        <span className="shrink-0 text-[10px] opacity-75">
+          {summary.repaired ? t('agentCard.repaired') : summary.status}
+        </span>
+      </div>
+      {rules.length > 0 ? (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {rules.map((rule) => (
+            <span
+              key={rule}
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                isLight ? 'bg-white/80' : 'bg-white/10'
+              }`}
+            >
+              {rule.replace(/^[^.]+\./, '')}
+            </span>
+          ))}
+        </div>
+      ) : summary.errors.length > 0 ? (
+        <p className="mt-1.5 truncate text-[10px] opacity-80">{summary.errors[0]}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function ConsistencyAgentCard({ summary }: { summary: ConsistencyAgentSummary }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const isLight = canvasMode === 'light';
+  const issues = [
+    ...summary.missingRequiredTerms.map((term) => t('consistency.missingTerm', { term })),
+    ...summary.forbiddenTermsPresent.map((term) => t('consistency.forbiddenTerm', { term })),
+  ].slice(0, 3);
+
+  if (summary.ok && summary.checkedChunks === 0) return null;
+
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 ${
+      summary.ok
+        ? isLight ? 'border-indigo-200 bg-indigo-50/80 text-indigo-900' : 'border-indigo-500/15 bg-indigo-500/5 text-indigo-200'
+        : isLight ? 'border-amber-200 bg-amber-50/90 text-amber-900' : 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+    }`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {summary.ok
+            ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            : <Brain className="h-3.5 w-3.5 shrink-0" />
+          }
+          <span className="truncate text-[11px] font-semibold">{t('agentCard.consistency')}</span>
+        </div>
+        <span className="shrink-0 text-[10px] opacity-75">
+          {summary.needsUserInput ? t('agentCard.needsConfirm') : summary.status}
+        </span>
+      </div>
+      {issues.length > 0 ? (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {issues.map((issue) => (
+            <span key={issue} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${isLight ? 'bg-white/80' : 'bg-white/10'}`}>
+              {issue}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-1.5 truncate text-[10px] opacity-80">
+          {t('consistency.checkedConstraints', { count: summary.checkedChunks })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function HumanApprovalCard({ approval }: { approval: HumanApprovalSummary }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const [status, setStatus] = useState(approval.status);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const isLight = canvasMode === 'light';
+
+  const decide = async (decision: 'approved' | 'rejected') => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/api/approvals/${approval.approvalId}/decision`, {
+        method: 'POST',
+        headers: enterpriseHeaders(),
+        body: JSON.stringify({
+          ...enterpriseBodyContext(),
+          decision,
+          comment: 'frontend_human_decision',
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const payload = await res.json();
+      setStatus(String(payload.status || decision));
+    } catch (err) {
+      console.error('[Approval] decision failed:', err);
+      setError(t('approval.failed', { message: (err as Error).message }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 ${
+      isLight ? 'border-amber-200 bg-amber-50/90 text-amber-900' : 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+    }`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate text-[11px] font-semibold">{t('approval.title')}</span>
+        </div>
+        <span className="shrink-0 text-[10px] opacity-75">{status}</span>
+      </div>
+      <p className="mt-1.5 line-clamp-2 text-[10px] opacity-80">{approval.reason}</p>
+      {error && <p className="mt-1.5 text-[10px] text-rose-500">{error}</p>}
+      {status === 'pending' && (
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => decide('approved')}
+            className={`rounded-md px-2 py-1 text-[10px] font-medium disabled:opacity-50 ${
+              isLight ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30'
+            }`}
+          >
+            {t('approval.approve')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => decide('rejected')}
+            className={`rounded-md px-2 py-1 text-[10px] font-medium disabled:opacity-50 ${
+              isLight ? 'bg-white text-amber-800 ring-1 ring-amber-200 hover:bg-amber-100' : 'bg-white/10 text-amber-100 hover:bg-white/15'
+            }`}
+          >
+            {t('approval.reject')}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KnowledgeContextCard({ context }: { context: KnowledgeContextSummary }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const isRetrieved = ['retrieved', 'retrieved_with_template', 'template_selected', 'history_selected'].includes(context.status);
+  const isUnavailable = context.status === 'unavailable';
+  const selectedTemplate = context.selectedTemplate;
+  const historicalDiagrams = context.historicalDiagrams || [];
+  const toneClass = isRetrieved
+    ? canvasMode === 'light'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+      : 'border-emerald-500/15 bg-emerald-500/5 text-emerald-300'
+    : isUnavailable
+      ? canvasMode === 'light'
+        ? 'border-rose-200 bg-rose-50 text-rose-800'
+        : 'border-rose-500/15 bg-rose-500/5 text-rose-300'
+      : canvasMode === 'light'
+        ? 'border-slate-200 bg-slate-50 text-slate-700'
+        : 'border-slate-700/60 bg-slate-800/40 text-slate-300';
+  const label = isRetrieved
+    ? selectedTemplate
+      ? t('knowledge.templateApplied', { name: selectedTemplate.name })
+      : historicalDiagrams.length > 0
+        ? t('knowledge.historyReferenced', { count: historicalDiagrams.length })
+        : t('knowledge.citations', { count: context.count })
+    : isUnavailable
+      ? t('knowledge.unavailable')
+      : t('knowledge.empty');
+  const citationText = context.citations
+    .slice(0, 3)
+    .map((citation) => {
+      const source = String(citation.source_id || 'unknown-source');
+      const locator = String(citation.source_locator || '');
+      return locator ? `${source} · ${locator}` : source;
+    })
+    .join(' / ');
+
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 text-[11px] ${toneClass}`}>
+      <div className="flex items-center gap-2 font-medium">
+        <Database className="w-3.5 h-3.5 shrink-0" />
+        <span>{label}</span>
+      </div>
+      {citationText && (
+        <div className={`mt-1 truncate ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+          {citationText}
+        </div>
+      )}
+      {selectedTemplate && (
+        <div className={`mt-1 truncate ${canvasMode === 'light' ? 'text-emerald-700/80' : 'text-emerald-300/70'}`}>
+          {selectedTemplate.engineType || 'template'} · score {Number(selectedTemplate.matchScore || 0).toFixed(1)}
+        </div>
+      )}
+      {historicalDiagrams.length > 0 && (
+        <div className={`mt-1 truncate ${canvasMode === 'light' ? 'text-emerald-700/80' : 'text-emerald-300/70'}`}>
+          {historicalDiagrams.slice(0, 2).map((item) => item.title || item.diagramId).join(' / ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DiagramHistoryPanel({
+  open,
+  mode,
+  items,
+  conversationItems,
+  query,
+  loading,
+  error,
+  onClose,
+  onModeChange,
+  onQueryChange,
+  onSearch,
+  onRefresh,
+  onUse,
+  onBranch,
+  onResumeConversation,
+}: {
+  open: boolean;
+  mode: HistoryMode;
+  items: DiagramHistoryItem[];
+  conversationItems: ConversationHistoryItem[];
+  query: string;
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+  onModeChange: (mode: HistoryMode) => void;
+  onQueryChange: (value: string) => void;
+  onSearch: () => void;
+  onRefresh: () => void;
+  onUse: (item: DiagramHistoryItem) => void;
+  onBranch: (item: DiagramHistoryItem) => void;
+  onResumeConversation: (item: ConversationHistoryItem) => void;
+}) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  if (!open) return null;
+  const isLight = canvasMode === 'light';
+  const activeCount = mode === 'diagrams' ? items.length : conversationItems.length;
+  const isDiagramMode = mode === 'diagrams';
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
+      <div
+        className={`h-full w-full max-w-[420px] border-l shadow-2xl ${
+          isLight ? 'border-slate-200 bg-white text-slate-900' : 'border-slate-700 bg-slate-950 text-slate-100'
+        }`}
+      >
+        <div className={`flex items-center justify-between border-b px-4 py-3 ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
+          <div className="flex min-w-0 items-center gap-2">
+            <History className={`h-4 w-4 shrink-0 ${isLight ? 'text-slate-600' : 'text-slate-300'}`} />
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-semibold">{isDiagramMode ? t('history.title') : t('conversationHistory.title')}</div>
+              <div className={`truncate text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>{t('history.count', { count: activeCount })}</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={`rounded-lg p-2 transition-colors ${
+              isLight ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-900' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-100'
+            }`}
+            title={t('common.close')}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className={`border-b p-3 ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
+          <div className={`mb-2 grid grid-cols-2 gap-1 rounded-lg border p-1 ${
+            isLight ? 'border-slate-200 bg-slate-100' : 'border-slate-800 bg-slate-900'
+          }`}>
+            {[
+              { value: 'diagrams' as const, label: t('history.diagramsTab') },
+              { value: 'conversations' as const, label: t('history.conversationsTab') },
+            ].map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => onModeChange(item.value)}
+                className={`rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                  mode === item.value
+                    ? isLight ? 'bg-white text-slate-900 shadow-sm' : 'bg-slate-800 text-slate-100'
+                    : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-500 hover:text-slate-200'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 ${
+            isLight ? 'border-slate-200 bg-slate-50' : 'border-slate-800 bg-slate-900'
+          }`}>
+            <Search className={`h-3.5 w-3.5 shrink-0 ${isLight ? 'text-slate-500' : 'text-slate-500'}`} />
+            <input
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') onSearch();
+              }}
+              className={`min-w-0 flex-1 bg-transparent text-[12px] outline-none ${
+                isLight ? 'placeholder:text-slate-400' : 'placeholder:text-slate-600'
+              }`}
+              placeholder={isDiagramMode ? t('history.placeholder') : t('conversationHistory.placeholder')}
+            />
+            <button
+              type="button"
+              onClick={onSearch}
+              disabled={loading}
+              className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                isLight ? 'bg-slate-900 text-white hover:bg-slate-700' : 'bg-slate-100 text-slate-900 hover:bg-white'
+              }`}
+            >
+              {t('common.search')}
+            </button>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={loading}
+              className={`rounded-md p-1.5 transition-colors disabled:opacity-50 ${
+                isLight ? 'text-slate-500 hover:bg-slate-200' : 'text-slate-400 hover:bg-slate-800'
+              }`}
+              title={t('common.refresh')}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          {error && <div className="mt-2 text-[11px] text-rose-500">{error}</div>}
+        </div>
+
+        <div className="h-[calc(100%-154px)] overflow-y-auto p-3">
+          {loading && activeCount === 0 ? (
+            <div className={`flex items-center gap-2 rounded-lg border px-3 py-3 text-[12px] ${
+              isLight ? 'border-slate-200 text-slate-500' : 'border-slate-800 text-slate-400'
+            }`}>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {t('common.loading')}
+            </div>
+          ) : activeCount === 0 ? (
+            <div className={`rounded-lg border px-3 py-6 text-center text-[12px] ${
+              isLight ? 'border-slate-200 text-slate-500' : 'border-slate-800 text-slate-400'
+            }`}>
+              {isDiagramMode ? t('history.empty') : t('conversationHistory.empty')}
+            </div>
+          ) : isDiagramMode ? (
+            <div className="space-y-2">
+              {items.map((item) => {
+                const version = item.current_version;
+                const summary = item.conversation?.summary || version?.design_concept || version?.code_preview || '';
+                const process = version?.agent_process;
+                const processSteps = Array.isArray(process?.steps) ? process.steps : [];
+                const processSeconds = Number(process?.duration_seconds ?? ((process?.duration_ms || 0) / 1000));
+                const totalTokens = Number(process?.token_usage?.estimated_total_tokens || 0);
+                const canUse = Boolean(version?.code);
+                const canBranch = Boolean(version?.diagram_version_id);
+                return (
+                  <div
+                    key={`${item.diagram_id}-${version?.diagram_version_id || item.current_version_id || 'current'}`}
+                    className={`rounded-lg border px-3 py-2.5 ${
+                      isLight ? 'border-slate-200 bg-slate-50/80' : 'border-slate-800 bg-slate-900/70'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className={`truncate text-[12px] font-semibold ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+                          {item.title || t('history.untitled')}
+                        </div>
+                        <div className={`mt-1 flex flex-wrap items-center gap-1.5 text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                          <span>{item.engine_type || version?.engine_type || 'diagram'}</span>
+                          <span>V{version?.version_number || '-'}</span>
+                          {version?.code_hash && <span>{version.code_hash}</span>}
+                        </div>
+                        {process && (
+                          <div className={`mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] ${
+                            isLight ? 'text-blue-700' : 'text-blue-300'
+                          }`}>
+                            <Brain className="h-3 w-3" />
+                            <span>{t('history.agentProcess')}</span>
+                            <span>{t('history.agentProcessSummary', {
+                              steps: process.step_count || processSteps.length,
+                              duration: formatSeconds(processSeconds),
+                            })}</span>
+                            {totalTokens > 0 && (
+                              <span className={isLight ? 'text-slate-500' : 'text-slate-500'}>
+                                {t('history.agentProcessTokens', { tokens: totalTokens })}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={!canUse}
+                          onClick={() => onUse(item)}
+                          className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                            isLight
+                              ? 'bg-blue-600 text-white hover:bg-blue-700'
+                              : 'bg-blue-500/20 text-blue-200 hover:bg-blue-500/30'
+                          }`}
+                        >
+                          {t('history.use')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!canBranch}
+                          onClick={() => onBranch(item)}
+                          className={`rounded-md border px-2 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                            isLight
+                              ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                              : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                          }`}
+                          title={t('history.branchTitle')}
+                        >
+                          {t('history.branch')}
+                        </button>
+                      </div>
+                    </div>
+                    {summary && (
+                      <div className={`mt-2 line-clamp-2 text-[11px] leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                        {summary}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {conversationItems.map((item) => {
+                const messages = Array.isArray(item.messages) ? item.messages : [];
+                const assistantProcess = [...messages]
+                  .reverse()
+                  .find((message) => message.role === 'assistant' && message.agent_process)?.agent_process;
+                const processSteps = Array.isArray(assistantProcess?.steps) ? assistantProcess.steps : [];
+                const processSeconds = Number(assistantProcess?.duration_seconds ?? ((assistantProcess?.duration_ms || 0) / 1000));
+                const totalTokens = Number(assistantProcess?.token_usage?.estimated_total_tokens || 0);
+                const memory = item.context?.short_term_memory || {};
+                const previewMessages = messages.slice(-3);
+                const hasCanvasSnapshot = Boolean(item.current_diagram?.code && item.current_diagram?.diagram_version_id);
+                return (
+                  <div
+                    key={item.conversation_id}
+                    className={`rounded-lg border px-3 py-2.5 ${
+                      isLight ? 'border-slate-200 bg-slate-50/80' : 'border-slate-800 bg-slate-900/70'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className={`truncate text-[12px] font-semibold ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+                          {item.title || t('conversationHistory.untitled')}
+                        </div>
+                        <div className={`mt-1 flex flex-wrap items-center gap-1.5 text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                          <span>{item.status || t('common.unknown')}</span>
+                          <span>{t('conversationHistory.messages', { count: item.message_count || messages.length })}</span>
+                          {memory.turn_count ? <span>{t('conversationHistory.turns', { count: memory.turn_count })}</span> : null}
+                          {item.context?.last_engine_type ? <span>{item.context.last_engine_type}</span> : null}
+                        </div>
+                        {assistantProcess && (
+                          <div className={`mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] ${
+                            isLight ? 'text-blue-700' : 'text-blue-300'
+                          }`}>
+                            <Brain className="h-3 w-3" />
+                            <span>{t('history.agentProcess')}</span>
+                            <span>{t('history.agentProcessSummary', {
+                              steps: assistantProcess.step_count || processSteps.length,
+                              duration: formatSeconds(processSeconds),
+                            })}</span>
+                            {totalTokens > 0 && (
+                              <span className={isLight ? 'text-slate-500' : 'text-slate-500'}>
+                                {t('history.agentProcessTokens', { tokens: totalTokens })}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onResumeConversation(item)}
+                        className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                          isLight
+                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                            : 'bg-blue-500/20 text-blue-200 hover:bg-blue-500/30'
+                        }`}
+                      >
+                        {t('conversationHistory.resume')}
+                      </button>
+                    </div>
+                    <div className="mt-2">
+                      <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium ${
+                        hasCanvasSnapshot
+                          ? isLight ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-500/20'
+                          : isLight ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200' : 'bg-amber-500/10 text-amber-200 ring-1 ring-amber-500/20'
+                      }`}>
+                        {hasCanvasSnapshot
+                          ? <CheckCircle2 className="h-3 w-3" />
+                          : <AlertCircle className="h-3 w-3" />
+                        }
+                        {hasCanvasSnapshot ? t('conversationHistory.canvasAvailable') : t('conversationHistory.canvasUnavailable')}
+                      </span>
+                    </div>
+                    {(item.summary || memory.last_user_message) && (
+                      <div className={`mt-2 line-clamp-2 text-[11px] leading-relaxed ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                        {item.summary || memory.last_user_message}
+                      </div>
+                    )}
+                    {previewMessages.length > 0 && (
+                      <div className={`mt-2 space-y-1 rounded-md border px-2 py-2 ${
+                        isLight ? 'border-slate-200 bg-white/70' : 'border-slate-800 bg-slate-950/40'
+                      }`}>
+                        {previewMessages.map((message) => (
+                          <div key={message.id} className={`flex gap-1.5 text-[10px] leading-relaxed ${
+                            isLight ? 'text-slate-600' : 'text-slate-400'
+                          }`}>
+                            <span className={`shrink-0 font-semibold ${
+                              message.role === 'assistant'
+                                ? isLight ? 'text-blue-700' : 'text-blue-300'
+                                : isLight ? 'text-slate-700' : 'text-slate-300'
+                            }`}>
+                              {message.role === 'assistant' ? t('conversationHistory.assistant') : t('conversationHistory.user')}
+                            </span>
+                            <span className="line-clamp-1 min-w-0">{message.content || t('common.empty')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Copy Button ── */
 function CopyButton({ text }: { text: string }) {
+  const { t } = useT();
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard.writeText(text).then(() => {
@@ -91,7 +1264,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button onClick={handleCopy}
       className="p-1 rounded text-slate-500 hover:text-slate-300 transition-colors opacity-0 group-hover:opacity-100"
-      title="复制">
+      title={t('common.copy')}>
       {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
     </button>
   );
@@ -138,28 +1311,545 @@ function LiveTimer({ startTime }: { startTime: number | null }) {
 export default function ChatPanel() {
   const {
     messages, addMessage, updateLastAssistantMessage, clearMessages,
+    conversationId, setConversationId,
     isStreaming, setIsStreaming,
     streamStartTime, setStreamStartTime,
     setCurrentTask, setCurrentEngine, setCanvasCode, setCanvasTask, setCanvasEngine,
     canvasCode, canvasTask, canvasEngine,
+    canvasDiagramId, setCanvasDiagramId,
+    canvasDiagramVersionId, setCanvasDiagramVersionId,
     setDesignConcept, modelConfig,
+    setSelectedNode,
     addPendingElement, clearPendingElements,
     inputImages, addInputImage, removeInputImage, clearInputImages,
     setCanvasPhase,
     setStreamingCode,
     detailLevel, setDetailLevel,
-    canvasMode, setCanvasMode,
+    canvasMode,
   } = useChatStore();
+  const { t } = useT();
 
   const [input, setInput] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<DiagramAgentMeta | null>(null);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [showLengthPicker, setShowLengthPicker] = useState(false);
+  const [versionActionBusy, setVersionActionBusy] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyMode, setHistoryMode] = useState<HistoryMode>('diagrams');
+  const [historyItems, setHistoryItems] = useState<DiagramHistoryItem[]>([]);
+  const [conversationHistoryItems, setConversationHistoryItems] = useState<ConversationHistoryItem[]>([]);
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [branchDialog, setBranchDialog] = useState<BranchDialogState | null>(null);
+  const [rollbackDialog, setRollbackDialog] = useState<Message | null>(null);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [noticeDialog, setNoticeDialog] = useState<{ title: string; message: string } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const activeAbortControllerRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const diagramActionHeaders = () => enterpriseHeaders();
+
+  const showError = (message: string) => {
+    setNoticeDialog({ title: t('common.error'), message });
+  };
+
+  const activateVersionPayload = (payload: VersionActionPayload) => {
+    clearPendingElements();
+    if (payload.code) setCanvasCode(payload.code);
+    if (payload.task_type) setCanvasTask(payload.task_type);
+    if (payload.engine_type) setCanvasEngine(payload.engine_type);
+    setCanvasDiagramId(payload.diagram_id);
+    setCanvasDiagramVersionId(payload.diagram_version_id);
+    if (payload.design_concept) setDesignConcept(payload.design_concept);
+  };
+
+  const loadDiagramHistory = async (searchText = historyQuery) => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const params = new URLSearchParams({
+        include_code: 'true',
+        limit: '20',
+      });
+      const trimmedQuery = searchText.trim();
+      if (trimmedQuery) params.set('query', trimmedQuery);
+      const res = await fetch(`${API_BASE}/api/diagrams/history?${params.toString()}`, {
+        method: 'GET',
+        headers: diagramActionHeaders(),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const payload = await res.json() as { diagrams?: DiagramHistoryItem[] };
+      setHistoryItems(Array.isArray(payload.diagrams) ? payload.diagrams : []);
+    } catch (err) {
+      console.error('[History] Load failed:', err);
+      setHistoryError((err as Error).message);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const loadConversationHistory = async (searchText = historyQuery) => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const params = new URLSearchParams({
+        include_messages: 'true',
+        include_current_diagram: 'true',
+        limit: '20',
+      });
+      const trimmedQuery = searchText.trim();
+      if (trimmedQuery) params.set('query', trimmedQuery);
+      const res = await fetch(`${API_BASE}/api/conversations/history?${params.toString()}`, {
+        method: 'GET',
+        headers: diagramActionHeaders(),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const payload = await res.json() as { conversations?: ConversationHistoryItem[] };
+      setConversationHistoryItems(Array.isArray(payload.conversations) ? payload.conversations : []);
+    } catch (err) {
+      console.error('[ConversationHistory] Load failed:', err);
+      setHistoryError((err as Error).message);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const loadCurrentHistory = (searchText = historyQuery, mode = historyMode) => {
+    if (mode === 'conversations') {
+      void loadConversationHistory(searchText);
+    } else {
+      void loadDiagramHistory(searchText);
+    }
+  };
+
+  const changeHistoryMode = (mode: HistoryMode) => {
+    setHistoryMode(mode);
+    setHistoryError('');
+    loadCurrentHistory(historyQuery, mode);
+  };
+
+  const openDiagramHistory = () => {
+    setHistoryOpen(true);
+    loadCurrentHistory(historyQuery);
+  };
+
+  const startNewConversation = () => {
+    if (isStreaming) return;
+    activeAbortControllerRef.current?.abort();
+    activeAbortControllerRef.current = null;
+    clearMessages();
+    clearPendingElements();
+    clearInputImages();
+    setInput('');
+    setSelectedAgent(null);
+    setShowAgentPicker(false);
+    setShowLengthPicker(false);
+    setHistoryOpen(false);
+    setHistoryQuery('');
+    setHistoryError('');
+    setBranchDialog(null);
+    setRollbackDialog(null);
+    setSelectedNode(null);
+    setCurrentTask(null);
+    setCurrentEngine(null);
+    setStreamStartTime(null);
+    setIsStreaming(false);
+    setCanvasCode('');
+    setCanvasTask(null);
+    setCanvasEngine(null);
+    setCanvasDiagramId(null);
+    setCanvasDiagramVersionId(null);
+    setDesignConcept('');
+    setCanvasPhase('idle');
+    setStreamingCode('');
+  };
+
+  const useHistoricalDiagram = (item: DiagramHistoryItem) => {
+    const version = item.current_version;
+    if (!version?.code || !version.diagram_version_id) return;
+    const engine = (version.engine_type || item.engine_type || 'general') as DiagramEngineType;
+    const task = (version.task_type || item.task_type || getTaskByEngine(engine) || 'general') as DiagramTaskType;
+    const restoredSteps = historyProcessToThinkingSteps(version.agent_process);
+    const processSeconds = Number(version.agent_process?.duration_seconds ?? ((version.agent_process?.duration_ms || 0) / 1000));
+    const assistantContent = version.agent_process?.assistant_content?.trim();
+    clearPendingElements();
+    setCanvasCode(version.code);
+    setCanvasTask(task);
+    setCanvasEngine(engine);
+    setCanvasDiagramId(item.diagram_id);
+    setCanvasDiagramVersionId(version.diagram_version_id);
+    setDesignConcept(version.design_concept || '');
+    setCanvasPhase('done');
+    setStreamingCode('');
+    setHistoryOpen(false);
+    addMessage({
+      id: `a_history_${Date.now()}`,
+      role: 'assistant',
+      content: assistantContent || t('history.loaded', { title: item.title || item.diagram_id }),
+      code: version.code,
+      engineType: engine,
+      taskType: task,
+      designConcept: version.design_concept,
+      diagramId: item.diagram_id,
+      diagramVersionId: version.diagram_version_id,
+      steps: restoredSteps.length > 0 ? restoredSteps : undefined,
+      statusText: restoredSteps.length > 0
+        ? t('history.agentProcessSummary', { steps: restoredSteps.length, duration: formatSeconds(processSeconds) })
+        : undefined,
+      timestamp: Date.now(),
+    });
+  };
+
+  const createHistoryBranch = async (item: DiagramHistoryItem, branchName: string) => {
+    const version = item.current_version;
+    if (!version?.diagram_version_id) return;
+    setVersionActionBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/diagrams/${item.diagram_id}/versions/${version.diagram_version_id}/branch`, {
+        method: 'POST',
+        headers: diagramActionHeaders(),
+        body: JSON.stringify({
+          ...enterpriseBodyContext(),
+          branch_name: branchName,
+          reason: 'frontend_history_branch',
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const payload = await res.json() as VersionActionPayload;
+      activateVersionPayload(payload);
+      setHistoryOpen(false);
+      addMessage({
+        id: `a_history_branch_${Date.now()}`,
+        role: 'assistant',
+        content: t('history.branchCreated', { name: branchName }),
+        code: payload.code,
+        engineType: payload.engine_type,
+        taskType: payload.task_type,
+        designConcept: payload.design_concept,
+        diagramId: payload.diagram_id,
+        diagramVersionId: payload.diagram_version_id,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      console.error('[History] Branch failed:', err);
+      showError(t('history.branchFailed', { message: (err as Error).message }));
+    } finally {
+      setVersionActionBusy(false);
+    }
+  };
+
+  const branchHistoricalDiagram = (item: DiagramHistoryItem) => {
+    const version = item.current_version;
+    if (!version?.diagram_version_id) return;
+    setBranchDialog({
+      kind: 'history',
+      item,
+      initialValue: t('dialog.branch.historyDefault', { title: item.title || t('history.untitled') }),
+    });
+  };
+
+  const resumeConversationHistory = (item: ConversationHistoryItem) => {
+    const historyMessages = Array.isArray(item.messages) ? item.messages : [];
+    const currentDiagram = item.current_diagram || null;
+    const conversationTitle = item.title || item.conversation_id;
+    const canvasSnapshotCode = currentDiagram?.code || '';
+    const canvasSnapshotVersionId = currentDiagram?.diagram_version_id || '';
+    const hasCanvasSnapshot = Boolean(canvasSnapshotCode && canvasSnapshotVersionId);
+    const diagramEngine = currentDiagram?.engine_type as DiagramEngineType | undefined;
+    const diagramTask = currentDiagram?.task_type as DiagramTaskType | undefined;
+    clearMessages();
+    setConversationId(item.conversation_id);
+    setCanvasDiagramVersionId(currentDiagram?.diagram_version_id || item.current_diagram_version_id || null);
+    if (hasCanvasSnapshot && currentDiagram) {
+      clearPendingElements();
+      setCanvasCode(canvasSnapshotCode);
+      if (diagramEngine) setCanvasEngine(diagramEngine);
+      if (diagramTask) setCanvasTask(diagramTask);
+      setCanvasDiagramId(currentDiagram.diagram_id || null);
+      setCanvasDiagramVersionId(canvasSnapshotVersionId);
+      setDesignConcept(currentDiagram.design_concept || '');
+      setCanvasPhase('done');
+      setStreamingCode('');
+    } else {
+      clearPendingElements();
+      setCanvasCode('');
+      setCanvasDiagramId(null);
+      setDesignConcept('');
+      setCanvasPhase('idle');
+      setStreamingCode('');
+    }
+    const lastEngine = item.context?.last_engine_type as DiagramEngineType | undefined;
+    const lastTask = item.context?.last_task_type as DiagramTaskType | undefined;
+    const activeEngine = diagramEngine || lastEngine;
+    const activeTask = diagramTask || lastTask;
+    if (activeEngine) {
+      setCurrentEngine(activeEngine);
+      if (!currentDiagram?.code) setCanvasEngine(activeEngine);
+    }
+    if (activeTask) {
+      setCurrentTask(activeTask);
+      if (!currentDiagram?.code) setCanvasTask(activeTask);
+    }
+    let attachedCurrentDiagram = false;
+    historyMessages.forEach((message, index) => {
+      const restoredSteps = message.role === 'assistant'
+        ? historyProcessToThinkingSteps(message.agent_process)
+        : [];
+      const processSeconds = Number(message.agent_process?.duration_seconds ?? ((message.agent_process?.duration_ms || 0) / 1000));
+      const isCurrentDiagramMessage = Boolean(
+        currentDiagram?.code
+        && canvasSnapshotVersionId
+        && message.diagram_version_id === canvasSnapshotVersionId
+        && message.role === 'assistant'
+      );
+      if (isCurrentDiagramMessage) attachedCurrentDiagram = true;
+      addMessage({
+        id: message.id || `history_message_${Date.now()}_${index}`,
+        role: message.role === 'assistant' ? 'assistant' : 'user',
+        content: message.content || '',
+        engineType: isCurrentDiagramMessage ? diagramEngine : message.engine_type as DiagramEngineType | undefined,
+        taskType: isCurrentDiagramMessage ? diagramTask : message.task_type as DiagramTaskType | undefined,
+        diagramVersionId: message.diagram_version_id,
+        code: isCurrentDiagramMessage ? currentDiagram?.code : undefined,
+        designConcept: isCurrentDiagramMessage ? currentDiagram?.design_concept : undefined,
+        diagramId: isCurrentDiagramMessage ? currentDiagram?.diagram_id : undefined,
+        steps: restoredSteps.length > 0 ? restoredSteps : undefined,
+        statusText: restoredSteps.length > 0
+          ? t('history.agentProcessSummary', { steps: restoredSteps.length, duration: formatSeconds(processSeconds) })
+          : undefined,
+        timestamp: message.created_at ? new Date(message.created_at).getTime() || Date.now() : Date.now(),
+      });
+    });
+    if (hasCanvasSnapshot && currentDiagram && !attachedCurrentDiagram) {
+      addMessage({
+        id: `a_conversation_canvas_resume_${Date.now()}`,
+        role: 'assistant',
+        content: t('conversationHistory.canvasRestored', { title: conversationTitle }),
+        code: canvasSnapshotCode,
+        engineType: diagramEngine,
+        taskType: diagramTask,
+        designConcept: currentDiagram.design_concept,
+        diagramId: currentDiagram.diagram_id,
+        diagramVersionId: canvasSnapshotVersionId,
+        resumeNotice: {
+          status: 'canvas_restored',
+          conversationTitle,
+          messageCount: item.message_count || historyMessages.length,
+          currentDiagramVersionId: canvasSnapshotVersionId,
+        },
+        timestamp: Date.now(),
+      });
+    } else if (!hasCanvasSnapshot) {
+      addMessage({
+        id: `a_conversation_canvas_missing_${Date.now()}`,
+        role: 'assistant',
+        content: t('conversationHistory.canvasMissing', { title: conversationTitle }),
+        engineType: activeEngine,
+        taskType: activeTask,
+        diagramVersionId: item.current_diagram_version_id,
+        resumeNotice: {
+          status: 'canvas_missing',
+          conversationTitle,
+          messageCount: item.message_count || historyMessages.length,
+          currentDiagramVersionId: item.current_diagram_version_id,
+          reason: currentDiagram ? 'snapshot_without_code' : 'missing_snapshot',
+        },
+        timestamp: Date.now(),
+      });
+    } else if (historyMessages.length === 0) {
+      addMessage({
+        id: `a_conversation_resume_${Date.now()}`,
+        role: 'assistant',
+        content: t('conversationHistory.resumed', { title: conversationTitle }),
+        timestamp: Date.now(),
+      });
+    }
+    setHistoryOpen(false);
+  };
+
+  const formatVersionDiffMessage = (payload: VersionDiffPayload) => {
+    const { summary } = payload;
+    const nodes = summary.structured?.nodes;
+    const edges = summary.structured?.edges;
+    const labelChanges = nodes?.label_changes || [];
+    const lines = [
+      t('version.diffHeader', { base: payload.base_version.version_number, target: payload.target_version.version_number }),
+      t('version.diffStatus', { status: summary.changed ? t('version.diffChanged') : t('version.diffUnchanged') }),
+      t('version.diffLines', { added: summary.added_line_count, removed: summary.removed_line_count, blocks: summary.changed_blocks }),
+      t('version.diffChars', { delta: `${summary.char_delta >= 0 ? '+' : ''}${summary.char_delta}` }),
+    ];
+    if (nodes) {
+      lines.push(t('version.diffNodes', {
+        added: nodes.added_ids?.length || 0,
+        removed: nodes.removed_ids?.length || 0,
+        changed: nodes.changed_ids?.length || 0,
+      }));
+    }
+    if (edges) {
+      lines.push(t('version.diffEdges', {
+        added: edges.added_ids?.length || 0,
+        removed: edges.removed_ids?.length || 0,
+        changed: edges.changed_ids?.length || 0,
+      }));
+    }
+    if (labelChanges.length > 0) {
+      lines.push(t('version.diffLabelChanges'));
+      labelChanges.slice(0, 5).forEach((change) => {
+        lines.push(`  - ${change.id}: ${change.before || t('version.diffEmpty')} → ${change.after || t('version.diffEmpty')}`);
+      });
+    }
+    const addedPreview = payload.preview?.added_lines?.slice(0, 3) || [];
+    const removedPreview = payload.preview?.removed_lines?.slice(0, 3) || [];
+    if (addedPreview.length > 0) {
+      lines.push(t('version.diffAddedPreview', { preview: addedPreview.join(' | ') }));
+    }
+    if (removedPreview.length > 0) {
+      lines.push(t('version.diffRemovedPreview', { preview: removedPreview.join(' | ') }));
+    }
+    if (payload.truncated) {
+      lines.push(t('version.diffTruncated'));
+    }
+    return lines.join('\n');
+  };
+
+  const handleCompareVersion = async (msg: Message) => {
+    if (!msg.diagramId || !msg.diagramVersionId) return;
+    const targetVersionId = canvasDiagramId === msg.diagramId && canvasDiagramVersionId
+      ? canvasDiagramVersionId
+      : undefined;
+    setVersionActionBusy(true);
+    try {
+      const params = targetVersionId && targetVersionId !== msg.diagramVersionId
+        ? `?target_version_id=${encodeURIComponent(targetVersionId)}`
+        : '';
+      const res = await fetch(`${API_BASE}/api/diagrams/${msg.diagramId}/versions/${msg.diagramVersionId}/diff${params}`, {
+        method: 'GET',
+        headers: diagramActionHeaders(),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const payload = await res.json() as VersionDiffPayload;
+      addMessage({
+        id: `a_diff_${Date.now()}`,
+        role: 'assistant',
+        content: formatVersionDiffMessage(payload),
+        diagramId: payload.diagram_id,
+        diagramVersionId: payload.target_version.diagram_version_id,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      console.error('[Version] Diff failed:', err);
+      showError(t('version.diffFailed', { message: (err as Error).message }));
+    } finally {
+      setVersionActionBusy(false);
+    }
+  };
+
+  const createMessageBranch = async (msg: Message, branchName: string) => {
+    if (!msg.diagramId || !msg.diagramVersionId) return;
+    setVersionActionBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/diagrams/${msg.diagramId}/versions/${msg.diagramVersionId}/branch`, {
+        method: 'POST',
+        headers: diagramActionHeaders(),
+        body: JSON.stringify({
+          ...enterpriseBodyContext(),
+          branch_name: branchName,
+          reason: 'frontend_user_created_branch',
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const payload = await res.json() as VersionActionPayload;
+      activateVersionPayload(payload);
+      addMessage({
+        id: `a_branch_${Date.now()}`,
+        role: 'assistant',
+        content: t('version.branchCreated', { name: branchName }),
+        code: payload.code,
+        engineType: payload.engine_type,
+        taskType: payload.task_type,
+        designConcept: payload.design_concept,
+        diagramId: payload.diagram_id,
+        diagramVersionId: payload.diagram_version_id,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      console.error('[Version] Branch failed:', err);
+      showError(t('version.branchFailed', { message: (err as Error).message }));
+    } finally {
+      setVersionActionBusy(false);
+    }
+  };
+
+  const handleCreateBranch = (msg: Message) => {
+    if (!msg.diagramId || !msg.diagramVersionId) return;
+    setBranchDialog({
+      kind: 'message',
+      message: msg,
+      initialValue: t('dialog.branch.messageDefault'),
+    });
+  };
+
+  const confirmBranchDialog = async (branchName: string) => {
+    const dialog = branchDialog;
+    if (!dialog) return;
+    if (dialog.kind === 'history') {
+      await createHistoryBranch(dialog.item, branchName);
+    } else {
+      await createMessageBranch(dialog.message, branchName);
+    }
+    setBranchDialog(null);
+  };
+
+  const performRollback = async (msg: Message) => {
+    if (!msg.diagramId || !msg.diagramVersionId) return;
+    setVersionActionBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/diagrams/${msg.diagramId}/versions/${msg.diagramVersionId}/rollback`, {
+        method: 'POST',
+        headers: diagramActionHeaders(),
+        body: JSON.stringify({
+          ...enterpriseBodyContext(),
+          reason: 'frontend_user_rollback',
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const payload = await res.json() as VersionActionPayload;
+      activateVersionPayload(payload);
+      addMessage({
+        id: `a_rollback_${Date.now()}`,
+        role: 'assistant',
+        content: t('version.rollbackCreated', { version: payload.version_number ?? '' }).trim(),
+        code: payload.code,
+        engineType: payload.engine_type,
+        taskType: payload.task_type,
+        designConcept: payload.design_concept,
+        diagramId: payload.diagram_id,
+        diagramVersionId: payload.diagram_version_id,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      console.error('[Version] Rollback failed:', err);
+      showError(t('version.rollbackFailed', { message: (err as Error).message }));
+    } finally {
+      setVersionActionBusy(false);
+    }
+  };
+
+  const handleRollback = (msg: Message) => {
+    if (!msg.diagramId || !msg.diagramVersionId) return;
+    setRollbackDialog(msg);
+  };
+
+  const confirmRollbackDialog = async () => {
+    const msg = rollbackDialog;
+    if (!msg) return;
+    await performRollback(msg);
+    setRollbackDialog(null);
+  };
 
   /* ── File / Image handlers ── */
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -200,9 +1890,10 @@ export default function ChatPanel() {
 
   // Detect @agent in input and auto-select agent
   useEffect(() => {
-    const match = input.match(/^@(\w+)/);
+    const match = input.match(/^@([\w-]+)/);
     if (match) {
-      const found = DIAGRAM_AGENTS.find(a => a.id === match[1].toLowerCase());
+      const tag = match[1].toLowerCase();
+      const found = DIAGRAM_AGENTS.find(a => a.id === tag);
       if (found && found !== selectedAgent) {
         setSelectedAgent(found);
       }
@@ -237,6 +1928,25 @@ export default function ChatPanel() {
     setStreamingCode('');
 
     let currentSteps: ThinkingStep[] = [];
+    let currentExecutionPlan: ExecutionPlanStep[] = [];
+
+    const setExecutionPlan = (steps: ExecutionPlanStep[]) => {
+      currentExecutionPlan = steps;
+      updateLastAssistantMessage({ executionPlan: [...currentExecutionPlan] });
+    };
+
+    const applyExecutionPlanStatus = (stepId: string, action?: string, status?: string) => {
+      if (currentExecutionPlan.length === 0) return;
+      const nextPlan = updateExecutionPlanStepStatus(currentExecutionPlan, stepId, action, status);
+      if (nextPlan !== currentExecutionPlan) {
+        setExecutionPlan(nextPlan);
+      }
+    };
+
+    const failExecutionPlan = (message: string) => {
+      if (currentExecutionPlan.length === 0) return;
+      setExecutionPlan(markExecutionPlanFailed(currentExecutionPlan, message));
+    };
 
     // Abort previous active request if any
     if (activeAbortControllerRef.current) {
@@ -266,12 +1976,16 @@ export default function ChatPanel() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...enterpriseBodyContext(),
           message: text,
           images: imagesToSend,
           history,
           current_code: canvasCode || '',
           current_task: canvasTask || '',
           current_engine: canvasEngine || '',
+          current_diagram_id: canvasDiagramId || '',
+          current_diagram_version_id: canvasDiagramVersionId || '',
+          conversation_id: conversationId,
           model_config: modelConfig,
           detailLevel,
         }),
@@ -290,8 +2004,15 @@ export default function ChatPanel() {
         try {
           const data = JSON.parse(line.slice(6));
           switch (data.type) {
+            case 'conversation': {
+              if (data.conversation_id) {
+                setConversationId(String(data.conversation_id));
+              }
+              break;
+            }
             case 'status': {
               const { step_id, content, action } = data;
+              applyExecutionPlanStatus(String(step_id || ''), String(action || ''));
               if (action === 'start') {
                 currentSteps = currentSteps.map(s => 
                   s.status === 'running' 
@@ -329,6 +2050,166 @@ export default function ChatPanel() {
               });
               break;
             }
+            case 'execution_plan': {
+              const incomingPlan = Array.isArray(data.steps) ? parseExecutionPlanSteps(data.steps) : [];
+              setExecutionPlan(mergeExecutionPlanSteps(incomingPlan, currentExecutionPlan));
+              break;
+            }
+            case 'conversation_memory': {
+              updateLastAssistantMessage({
+                conversationMemory: {
+                  status: String(data.status || 'empty'),
+                  reason: typeof data.reason === 'string' ? data.reason : undefined,
+                  summaryPresent: Boolean(data.summary_present),
+                  recentCount: Number(data.recent_count || 0),
+                  turnCount: data.turn_count === undefined || data.turn_count === null ? undefined : Number(data.turn_count),
+                  currentDiagramVersionId: typeof data.current_diagram_version_id === 'string'
+                    ? data.current_diagram_version_id
+                    : undefined,
+                },
+              });
+              break;
+            }
+            case 'long_term_preferences': {
+              updateLastAssistantMessage({
+                longTermPreferences: {
+                  status: String(data.status || 'empty'),
+                  reason: typeof data.reason === 'string' ? data.reason : undefined,
+                  sources: typeof data.sources === 'object' && data.sources ? data.sources as Record<string, boolean> : {},
+                  keys: Array.isArray(data.keys) ? data.keys.map(String) : [],
+                },
+              });
+              break;
+            }
+            case 'planner_plan': {
+              updateLastAssistantMessage({
+                plannerPlan: {
+                  status: String(data.status || 'unknown'),
+                  mode: typeof data.mode === 'string' ? data.mode : undefined,
+                  complexity: typeof data.complexity === 'string' ? data.complexity : undefined,
+                  engineType: typeof data.engine_type === 'string' ? data.engine_type : undefined,
+                  knowledgeRequired: Boolean(data.knowledge_required),
+                  subtasks: Array.isArray(data.subtasks) ? data.subtasks : [],
+                  qualityGates: Array.isArray(data.quality_gates) ? data.quality_gates.map(String) : [],
+                  assumptions: Array.isArray(data.assumptions) ? data.assumptions.map(String) : [],
+                  note: typeof data.note === 'string' ? data.note : undefined,
+                },
+              });
+              break;
+            }
+            case 'design_agent': {
+              updateLastAssistantMessage({
+                designAgent: {
+                  status: String(data.status || 'unknown'),
+                  engineType: typeof data.engine_type === 'string' ? data.engine_type : undefined,
+                  changed: Boolean(data.changed),
+                  appliedRules: Array.isArray(data.applied_rules) ? data.applied_rules.map(String) : [],
+                  note: typeof data.note === 'string' ? data.note : undefined,
+                },
+              });
+              break;
+            }
+            case 'repair_agent': {
+              updateLastAssistantMessage({
+                repairAgent: {
+                  status: String(data.status || 'unknown'),
+                  engineType: typeof data.engine_type === 'string' ? data.engine_type : undefined,
+                  repaired: Boolean(data.repaired),
+                  appliedRules: Array.isArray(data.applied_rules) ? data.applied_rules.map(String) : [],
+                  errors: Array.isArray(data.errors) ? data.errors.map(String) : [],
+                  validationOk: Boolean(data.validation_ok),
+                  note: typeof data.note === 'string' ? data.note : undefined,
+                },
+              });
+              break;
+            }
+            case 'consistency_agent': {
+              updateLastAssistantMessage({
+                consistencyAgent: {
+                  status: String(data.status || 'unknown'),
+                  ok: Boolean(data.ok),
+                  needsUserInput: Boolean(data.needs_user_input),
+                  checkedChunks: Number(data.checked_chunks || 0),
+                  missingRequiredTerms: Array.isArray(data.missing_required_terms) ? data.missing_required_terms.map(String) : [],
+                  forbiddenTermsPresent: Array.isArray(data.forbidden_terms_present) ? data.forbidden_terms_present.map(String) : [],
+                  coverageRatio: Number(data.coverage_ratio ?? 1),
+                  note: typeof data.note === 'string' ? data.note : undefined,
+                },
+              });
+              break;
+            }
+            case 'human_approval_required': {
+              updateLastAssistantMessage({
+                approvalRequest: {
+                  approvalId: String(data.approval_id || ''),
+                  approvalType: String(data.approval_type || ''),
+                  status: String(data.status || 'pending'),
+                  requiredScope: String(data.required_scope || ''),
+                  reason: String(data.reason || ''),
+                  resource: typeof data.resource === 'object' && data.resource ? data.resource : {},
+                },
+              });
+              break;
+            }
+            case 'knowledge_context': {
+              const selectedTemplate = data.selected_template && typeof data.selected_template === 'object'
+                ? {
+                    templateId: String(data.selected_template.template_id || ''),
+                    name: String(data.selected_template.name || ''),
+                    engineType: data.selected_template.engine_type ? String(data.selected_template.engine_type) : undefined,
+                    taskType: data.selected_template.task_type ? String(data.selected_template.task_type) : undefined,
+                    matchScore: Number(data.selected_template.match_score || 0),
+                  }
+                : undefined;
+              const historicalDiagrams = Array.isArray(data.historical_diagrams)
+                ? (data.historical_diagrams as unknown[])
+                    .filter((item: unknown): item is Record<string, unknown> => !!item && typeof item === 'object')
+                    .map((item: Record<string, unknown>) => ({
+                      diagramId: String(item.diagram_id || ''),
+                      title: String(item.title || ''),
+                      engineType: item.engine_type ? String(item.engine_type) : undefined,
+                      taskType: item.task_type ? String(item.task_type) : undefined,
+                      currentVersionId: item.current_version_id ? String(item.current_version_id) : undefined,
+                    }))
+                : [];
+              updateLastAssistantMessage({
+                knowledgeContext: {
+                  status: String(data.status || 'unknown'),
+                  count: Number(data.count || 0),
+                  citations: Array.isArray(data.citations) ? data.citations : [],
+                  selectedTemplate,
+                  historicalDiagrams,
+                  note: typeof data.note === 'string' ? data.note : undefined,
+                },
+              });
+              break;
+            }
+            case 'export_plan': {
+              updateLastAssistantMessage({
+                exportPlan: {
+                  status: String(data.status || 'unknown'),
+                  engineType: typeof data.engine_type === 'string' ? data.engine_type : undefined,
+                  preferredFormat: typeof data.preferred_format === 'string' ? data.preferred_format : undefined,
+                  allowedFormats: Array.isArray(data.allowed_formats) ? data.allowed_formats : [],
+                  deniedFormats: Array.isArray(data.denied_formats) ? data.denied_formats : [],
+                  note: typeof data.note === 'string' ? data.note : undefined,
+                },
+              });
+              break;
+            }
+            case 'diagram_saved': {
+              if (data.persisted && data.diagram_id && data.diagram_version_id) {
+                const diagramId = String(data.diagram_id);
+                const diagramVersionId = String(data.diagram_version_id);
+                setCanvasDiagramId(diagramId);
+                setCanvasDiagramVersionId(diagramVersionId);
+                updateLastAssistantMessage({
+                  diagramId,
+                  diagramVersionId,
+                });
+              }
+              break;
+            }
             case 'agent': {
               const taskType = (data.task as DiagramTaskType) || getTaskByEngine(data.name as DiagramEngineType) || undefined;
               const engineType = data.name as DiagramEngineType;
@@ -346,26 +2227,27 @@ export default function ChatPanel() {
               break;
             }
             case 'design_start':
-              updateLastAssistantMessage({ content: '✨ 正在分析需求...' });
+              updateLastAssistantMessage({ content: t('chat.status.analyzing') });
               break;
             case 'design':
               designBuffer += data.content;
               setDesignConcept(designBuffer);
-              updateLastAssistantMessage({ designConcept: designBuffer, content: '✨ 设计思路生成中...' });
+              updateLastAssistantMessage({ designConcept: designBuffer, content: t('chat.status.designing') });
               break;
             case 'design_end':
               break;
             case 'code_start':
+              applyExecutionPlanStatus('generating', 'start');
               clearPendingElements();
               elementCount = 0;
               codeBuffer = '';
               setCanvasPhase('generating');
-              updateLastAssistantMessage({ content: '🔨 正在生成图表...' });
+              updateLastAssistantMessage({ content: t('chat.status.generating') });
               break;
             case 'element':
               elementCount++;
               addPendingElement(data.content);
-              updateLastAssistantMessage({ content: `🎨 正在绘制图表 (${elementCount} 个元素)...` });
+              updateLastAssistantMessage({ content: t('chat.status.drawing', { count: elementCount }) });
               break;
             case 'code':
               localCodeBuffer += (data.content || '');
@@ -381,6 +2263,9 @@ export default function ChatPanel() {
               break;
             case 'code_end': {
               if (codeFlushTimer) { clearTimeout(codeFlushTimer); codeFlushTimer = null; }
+              applyExecutionPlanStatus('generating', 'end');
+              applyExecutionPlanStatus('renderer', 'start');
+              applyExecutionPlanStatus('renderer', 'end');
               currentSteps = currentSteps.map(s => 
                 s.id === 'generating' && s.status === 'running'
                   ? { ...s, status: 'completed', duration: (Date.now() - s.startTime) / 1000 }
@@ -397,7 +2282,7 @@ export default function ChatPanel() {
               setCanvasPhase('done');
               setStreamingCode('');
               const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-              updateLastAssistantMessage({ code: finalCode || '[]', content: `✅ 图表已生成完毕 · ${elapsed}s` });
+              updateLastAssistantMessage({ code: finalCode || '[]', content: t('chat.status.done', { seconds: elapsed }) });
               break;
             }
             case 'text':
@@ -405,6 +2290,7 @@ export default function ChatPanel() {
               updateLastAssistantMessage({ content: textBuffer });
               break;
             case 'error':
+              failExecutionPlan(String(data.message || t('common.error')));
               updateLastAssistantMessage({ content: `❌ ${data.message}` });
               break;
           }
@@ -437,7 +2323,8 @@ export default function ChatPanel() {
         return;
       }
       const errMsg = e instanceof Error ? e.message : String(e);
-      updateLastAssistantMessage({ content: `❌ 连接失败: ${errMsg}` });
+      failExecutionPlan(errMsg);
+      updateLastAssistantMessage({ content: t('chat.status.connectionFailed', { message: errMsg }) });
     } finally {
       setIsStreaming(false);
       setStreamStartTime(null);
@@ -453,7 +2340,12 @@ export default function ChatPanel() {
         updateLastAssistantMessage({ steps: [...currentSteps] });
       }
     }
-  }, [input, isStreaming, modelConfig, messages, canvasCode, canvasTask, canvasEngine, selectedAgent, addPendingElement, clearPendingElements, inputImages]);
+  }, [
+    input, isStreaming, modelConfig, messages,
+    canvasCode, canvasTask, canvasEngine, canvasDiagramId, canvasDiagramVersionId,
+    conversationId, selectedAgent, addPendingElement, clearPendingElements, inputImages,
+    setConversationId, setCanvasDiagramId, setCanvasDiagramVersionId, t,
+  ]);
 
   // Listen for external direct message events (e.g. from canvas node AI optimize overlay)
   useEffect(() => {
@@ -495,9 +2387,30 @@ export default function ChatPanel() {
       case 'charts': return 'bg-pink-500/10 text-pink-400';
       case 'drawio': return 'bg-cyan-500/10 text-cyan-400';
       case 'infographic': return 'bg-rose-500/10 text-rose-400';
+      case 'html_email': return 'bg-teal-500/10 text-teal-400';
+      case 'web_report_html': return 'bg-orange-500/10 text-orange-400';
       default: return 'bg-slate-500/10 text-slate-400';
     }
   };
+
+  const promptExamples = [
+    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'charts')!, text: t('chat.example.charts') },
+    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'flow')!, text: t('chat.example.flow') },
+    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'drawio')!, text: t('chat.example.drawio') },
+    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'mermaid')!, text: t('chat.example.mermaid') },
+    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'mindmap')!, text: t('chat.example.mindmap') },
+    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'excalidraw')!, text: t('chat.example.excalidraw') },
+    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'infographic')!, text: t('chat.example.infographic') },
+    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'html_email')!, text: t('chat.example.html_email') },
+    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'web_report_html')!, text: t('chat.example.web_report_html') },
+  ];
+
+  const detailOptions = [
+    { value: 'short', label: t('chat.detail.short'), desc: t('chat.detail.shortDesc') },
+    { value: 'medium', label: t('chat.detail.medium'), desc: t('chat.detail.mediumDesc') },
+    { value: 'long', label: t('chat.detail.long'), desc: t('chat.detail.longDesc') },
+  ] as const;
+  const activeDetailLabel = detailOptions.find((option) => option.value === detailLevel)?.label || t('chat.detail.medium');
 
   return (
     <div className={`h-full flex flex-col transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50 text-slate-800' : 'bg-dark-900 text-slate-200'}`}>
@@ -512,31 +2425,105 @@ export default function ChatPanel() {
           </div>
           <div>
             <h1 className={`text-[13px] font-semibold tracking-tight ${canvasMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>SmartDiagram</h1>
-            <p className={`text-[10px] ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>AI Visualization</p>
+            <p className={`text-[10px] ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>{t('app.subtitle')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-0.5">
-          <button onClick={() => setCanvasMode(canvasMode === 'light' ? 'dark' : 'light')}
-            title={canvasMode === 'light' ? '切换为暗色模式' : '切换为亮色模式'}
-            className={`p-2 rounded-lg transition-colors cursor-pointer ${
-              canvasMode === 'light' ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-200' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={startNewConversation}
+            disabled={isStreaming}
+            title={isStreaming ? t('chat.newConversationDisabled') : t('chat.newConversation')}
+            aria-label={t('chat.newConversation')}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
+              isStreaming
+                ? 'cursor-not-allowed opacity-45'
+                : canvasMode === 'light'
+                  ? 'border-slate-200 bg-white text-slate-500 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'
+                  : 'border-slate-800 bg-slate-900/70 text-slate-400 hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-200'
+            }`}
+          >
+            <SquarePen className="w-4 h-4" />
+          </button>
+          <button onClick={openDiagramHistory}
+            title={t('history.title')}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+              canvasMode === 'light'
+                ? 'border-slate-200 bg-white text-slate-500 shadow-sm hover:border-slate-300 hover:text-slate-900'
+                : 'border-slate-800 bg-slate-900/70 text-slate-400 hover:border-slate-700 hover:text-slate-100'
             }`}>
-            {canvasMode === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            <History className="w-4 h-4" />
           </button>
           <button onClick={() => setSettingsOpen(true)}
-            className={`p-2 rounded-lg transition-colors ${
-              canvasMode === 'light' ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-200' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+            title={t('settings.open')}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
+              canvasMode === 'light'
+                ? 'border-slate-200 bg-white text-slate-500 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'
+                : 'border-slate-800 bg-slate-900/70 text-slate-400 hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-200'
             }`}>
             <Settings className="w-4 h-4" />
           </button>
-          <button onClick={clearMessages}
-            className={`p-2 rounded-lg transition-colors ${
-              canvasMode === 'light' ? 'text-slate-500 hover:text-red-600 hover:bg-red-500/10' : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'
-            }`}>
-            <Trash2 className="w-4 h-4" />
-          </button>
         </div>
       </div>
+
+      <TextInputDialog
+        open={Boolean(branchDialog)}
+        title={t('dialog.branch.title')}
+        label={t('dialog.branch.label')}
+        description={t('dialog.branch.description')}
+        initialValue={branchDialog?.initialValue || ''}
+        confirmLabel={t('common.confirm')}
+        cancelLabel={t('common.cancel')}
+        busy={versionActionBusy}
+        onCancel={() => setBranchDialog(null)}
+        onConfirm={confirmBranchDialog}
+      />
+      <ConfirmDialog
+        open={Boolean(rollbackDialog)}
+        title={t('dialog.rollback.title')}
+        message={t('dialog.rollback.message')}
+        confirmLabel={t('common.confirm')}
+        cancelLabel={t('common.cancel')}
+        busy={versionActionBusy}
+        onCancel={() => setRollbackDialog(null)}
+        onConfirm={confirmRollbackDialog}
+      />
+      <ConfirmDialog
+        open={clearDialogOpen}
+        title={t('dialog.clearConversation.title')}
+        message={t('dialog.clearConversation.message')}
+        confirmLabel={t('dialog.clearConversation.confirm')}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setClearDialogOpen(false)}
+        onConfirm={() => {
+          clearMessages();
+          setClearDialogOpen(false);
+        }}
+      />
+      <NoticeDialog
+        open={Boolean(noticeDialog)}
+        title={noticeDialog?.title || t('common.error')}
+        message={noticeDialog?.message || ''}
+        closeLabel={t('common.close')}
+        onClose={() => setNoticeDialog(null)}
+      />
+      <DiagramHistoryPanel
+        open={historyOpen}
+        mode={historyMode}
+        items={historyItems}
+        conversationItems={conversationHistoryItems}
+        query={historyQuery}
+        loading={historyLoading}
+        error={historyError}
+        onClose={() => setHistoryOpen(false)}
+        onModeChange={changeHistoryMode}
+        onQueryChange={setHistoryQuery}
+        onSearch={() => loadCurrentHistory(historyQuery)}
+        onRefresh={() => loadCurrentHistory(historyQuery)}
+        onUse={useHistoricalDiagram}
+        onBranch={branchHistoricalDiagram}
+        onResumeConversation={resumeConversationHistory}
+      />
 
       {/* ── Messages Area ── */}
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-3">
@@ -547,20 +2534,12 @@ export default function ChatPanel() {
             }`}>
               <Sparkles className="w-7 h-7 text-blue-500/70" />
             </div>
-            <p className={`text-sm font-medium mb-1 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>描述你想要的图表</p>
+            <p className={`text-sm font-medium mb-1 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{t('chat.emptyTitle')}</p>
             <p className={`text-xs mb-6 ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-600'}`}>
-              点击 <code className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${canvasMode === 'light' ? 'bg-slate-200 text-indigo-700' : 'bg-slate-800 text-blue-400'}`}>+</code> 上传图片，按任务选择图类型，或直接用 <code className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${canvasMode === 'light' ? 'bg-slate-200 text-indigo-700' : 'bg-slate-800 text-blue-400'}`}>@</code> 指定底层引擎
+              {t('chat.emptyDescription')}
             </p>
             <div className="flex flex-col gap-2 w-full max-w-[320px]">
-              {[
-                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'charts')!, text: '2026 Q1 各产品线营收对比图' },
-                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'flow')!, text: 'AI Agent 多轮审批工作流' },
-                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'drawio')!, text: '微服务电商系统架构图' },
-                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'mermaid')!, text: 'OAuth 2.0 授权时序图' },
-                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'mindmap')!, text: '2026 年 AI 技术栈全景图' },
-                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'excalidraw')!, text: '前后端分离部署示意图' },
-                { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'infographic')!, text: '团队 OKR 季度看板' },
-              ].map((ex, i) => (
+              {promptExamples.map((ex, i) => (
                 <button key={i}
                   onClick={() => {
                     setSelectedAgent(ex.agent);
@@ -632,6 +2611,50 @@ export default function ChatPanel() {
                   />
                 )}
 
+                {msg.role === 'assistant' && msg.executionPlan && msg.executionPlan.length > 0 && (
+                  <ExecutionPlanCard steps={msg.executionPlan} />
+                )}
+
+                {msg.role === 'assistant' && msg.conversationMemory && (
+                  <ConversationMemoryCard memory={msg.conversationMemory} />
+                )}
+
+                {msg.role === 'assistant' && msg.longTermPreferences && (
+                  <LongTermPreferencesCard preferences={msg.longTermPreferences} />
+                )}
+
+                {msg.role === 'assistant' && msg.resumeNotice && (
+                  <ConversationResumeNoticeCard notice={msg.resumeNotice} />
+                )}
+
+                {msg.role === 'assistant' && msg.plannerPlan && (
+                  <PlannerPlanCard plan={msg.plannerPlan} />
+                )}
+
+                {msg.role === 'assistant' && msg.knowledgeContext && (
+                  <KnowledgeContextCard context={msg.knowledgeContext} />
+                )}
+
+                {msg.role === 'assistant' && msg.designAgent && (
+                  <DesignAgentCard summary={msg.designAgent} />
+                )}
+
+                {msg.role === 'assistant' && msg.repairAgent && (
+                  <RepairAgentCard summary={msg.repairAgent} />
+                )}
+
+                {msg.role === 'assistant' && msg.consistencyAgent && (
+                  <ConsistencyAgentCard summary={msg.consistencyAgent} />
+                )}
+
+                {msg.role === 'assistant' && msg.approvalRequest && (
+                  <HumanApprovalCard approval={msg.approvalRequest} />
+                )}
+
+                {msg.role === 'assistant' && msg.exportPlan && (
+                  <ExportPlanCard plan={msg.exportPlan} />
+                )}
+
                 {/* Design concept */}
                 {msg.role === 'assistant' && msg.designConcept && (
                   <DesignConceptCard text={msg.designConcept} />
@@ -639,26 +2662,77 @@ export default function ChatPanel() {
 
                 {/* Content */}
                 {msg.role === 'assistant' && msg.code ? (
-                  <button
-                    className={`text-xs mt-1.5 flex items-center gap-1.5 transition-colors cursor-pointer ${
-                      canvasMode === 'light' ? 'text-emerald-600 hover:text-emerald-700' : 'text-emerald-400 hover:text-emerald-300'
-                    }`}
-                    onClick={() => {
-                      clearPendingElements();
-                      setCanvasCode(msg.code!);
-                      if (msg.taskType) setCanvasTask(msg.taskType);
-                      if (msg.engineType) setCanvasEngine(msg.engineType);
-                    }}
-                    title="点击在画布中查看此图表"
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${canvasMode === 'light' ? 'bg-emerald-600' : 'bg-emerald-400'}`} />
-                    图表已生成到画布
-                  </button>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <button
+                      className={`text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
+                        canvasMode === 'light' ? 'text-emerald-600 hover:text-emerald-700' : 'text-emerald-400 hover:text-emerald-300'
+                      }`}
+                      onClick={() => {
+                        clearPendingElements();
+                        setCanvasCode(msg.code!);
+                        if (msg.taskType) setCanvasTask(msg.taskType);
+                        if (msg.engineType) setCanvasEngine(msg.engineType);
+                        if (msg.diagramId) setCanvasDiagramId(msg.diagramId);
+                        if (msg.diagramVersionId) setCanvasDiagramVersionId(msg.diagramVersionId);
+                      }}
+                      title={t('chat.viewOnCanvasTitle')}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${canvasMode === 'light' ? 'bg-emerald-600' : 'bg-emerald-400'}`} />
+                      {t('chat.generatedToCanvas')}
+                    </button>
+
+                    {msg.diagramId && msg.diagramVersionId && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={versionActionBusy}
+                          onClick={() => handleCompareVersion(msg)}
+                          className={`text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 border transition-colors disabled:opacity-50 ${
+                            canvasMode === 'light'
+                              ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                              : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                          }`}
+                          title={t('version.compareTitle')}
+                        >
+                          <FileDiff className="w-3 h-3" />
+                          {t('version.compare')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={versionActionBusy}
+                          onClick={() => handleCreateBranch(msg)}
+                          className={`text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 border transition-colors disabled:opacity-50 ${
+                            canvasMode === 'light'
+                              ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                              : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                          }`}
+                          title={t('version.branchTitle')}
+                        >
+                          <GitBranch className="w-3 h-3" />
+                          {t('version.branch')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={versionActionBusy || msg.diagramVersionId === canvasDiagramVersionId}
+                          onClick={() => handleRollback(msg)}
+                          className={`text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 border transition-colors disabled:opacity-50 ${
+                            canvasMode === 'light'
+                              ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                              : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                          }`}
+                          title={t('version.rollbackTitle')}
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          {t('version.rollback')}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 ) : msg.role === 'assistant' && !msg.content && isStreaming ? (
                   msg.steps && msg.steps.length > 0 ? null : (
                     <div className="flex items-center gap-2 py-0.5">
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                      <span className="text-xs text-slate-500">{msg.statusText || '思考中'}</span>
+                      <span className="text-xs text-slate-500">{msg.statusText || t('chat.thinking')}</span>
                       <span className="flex gap-[3px]">
                         {[0, 1, 2].map(i => (
                           <span key={i} className="w-1 h-1 rounded-full bg-blue-400"
@@ -737,7 +2811,7 @@ export default function ChatPanel() {
                       cursor: 'pointer', color: '#f87171',
                       fontSize: '11px', lineHeight: 1,
                     }}
-                    title="移除图片"
+                    title={t('chat.removeImage')}
                   >
                     <X style={{ width: 10, height: 10 }} />
                   </button>
@@ -754,7 +2828,7 @@ export default function ChatPanel() {
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder={inputImages.length > 0 ? '描述图片内容和目标图类型，AI 会自动选择合适引擎...' : '描述你想表达的内容，例如流程图、架构图、数据图表、时序图...'}
+              placeholder={inputImages.length > 0 ? t('chat.inputPlaceholderWithImages') : t('chat.inputPlaceholder')}
               rows={1}
               disabled={isStreaming}
               style={{
@@ -798,7 +2872,7 @@ export default function ChatPanel() {
                   e.currentTarget.style.background = inputImages.length > 0 ? 'rgba(59,130,246,0.1)' : 'transparent';
                   e.currentTarget.style.color = inputImages.length > 0 ? '#60a5fa' : '#94a3b8';
                 }}
-                title="上传图片（支持粘贴）"
+                title={t('chat.uploadImage')}
               >
                 {inputImages.length > 0
                   ? <ImageIcon style={{ width: 14, height: 14 }} />
@@ -834,7 +2908,7 @@ export default function ChatPanel() {
                   ) : (
                     <>
                       <Sparkles style={{ width: 12, height: 12 }} />
-                      任务自动识别
+                      {t('chat.autoDetectTask')}
                     </>
                   )}
                   <ChevronDown style={{ width: 12, height: 12, opacity: 0.6 }} />
@@ -886,7 +2960,7 @@ export default function ChatPanel() {
                       onMouseLeave={(e) => (e.currentTarget.style.background = !selectedAgent ? (canvasMode === 'light' ? '#f1f5f9' : '#334155') : 'transparent')}
                     >
                       <Sparkles style={{ width: 14, height: 14, color: '#60a5fa' }} />
-                      <span>AI 自动选择</span>
+                      <span>{t('chat.aiAutoSelect')}</span>
                       {!selectedAgent && <Check style={{ width: 12, height: 12, color: '#60a5fa', marginLeft: 'auto' }} />}
                     </button>
 
@@ -943,7 +3017,7 @@ export default function ChatPanel() {
                 >
                   <SlidersHorizontal style={{ width: 12, height: 12, opacity: 0.8 }} />
                   <span>
-                    {detailLevel === 'short' ? '短 (精简)' : detailLevel === 'long' ? '长 (详细)' : '中 (标准)'}
+                    {activeDetailLabel}
                   </span>
                   <ChevronDown style={{ width: 12, height: 12, opacity: 0.6 }} />
                 </button>
@@ -979,15 +3053,11 @@ export default function ChatPanel() {
                       minWidth: '130px',
                     }}
                   >
-                    {[
-                      { value: 'short', label: '短 (精简)', desc: '核心主干步骤' },
-                      { value: 'medium', label: '中 (标准)', desc: '标准分支逻辑' },
-                      { value: 'long', label: '长 (详细)', desc: '展开各种异常与边缘情况' },
-                    ].map((opt) => (
+                    {detailOptions.map((opt) => (
                       <button
                         key={opt.value}
                         onClick={() => {
-                          setDetailLevel(opt.value as any);
+                          setDetailLevel(opt.value);
                           setShowLengthPicker(false);
                         }}
                         style={{
@@ -1024,7 +3094,7 @@ export default function ChatPanel() {
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(248,113,113,0.2)'; e.currentTarget.style.color = '#f87171'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(148,163,184,0.15)'; e.currentTarget.style.color = '#94a3b8'; }}
-                  title="清除 Agent 选择"
+                  title={t('chat.clearAgent')}
                 >
                   <X style={{ width: 10, height: 10 }} />
                 </button>
@@ -1058,12 +3128,19 @@ export default function ChatPanel() {
           </div>
         </div>
         <div style={{ textAlign: 'right', padding: '4px 8px 0', fontSize: '10px', color: canvasMode === 'light' ? '#64748b' : '#475569' }}>
-          Enter 发送 · Shift+Enter 换行
+          {t('chat.keyboardHint')}
         </div>
       </div>
 
       {/* Settings Modal */}
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onClearConversation={() => {
+          setSettingsOpen(false);
+          setClearDialogOpen(true);
+        }}
+      />
     </div>
   );
 }
@@ -1076,6 +3153,7 @@ interface ThinkingProcessProps {
 
 function ThinkingProcess({ steps, isStreaming }: ThinkingProcessProps) {
   const { canvasMode } = useChatStore();
+  const { t } = useT();
   const [collapsed, setCollapsed] = useState(!isStreaming);
 
   // 用组件内部 tick 在 isStreaming 为真时进行 100ms 的递增渲染，保证思考秒数实时变化
@@ -1090,12 +3168,13 @@ function ThinkingProcess({ steps, isStreaming }: ThinkingProcessProps) {
   }, [isStreaming]);
 
   // 计算当前总共思考的秒数
+  const now = Date.now() + tick * 0;
   const totalDuration = steps.reduce((acc, step) => {
     if (step.duration !== undefined) {
       return acc + step.duration;
     }
     if (step.status === 'running') {
-      return acc + (Date.now() - step.startTime) / 1000;
+      return acc + (now - step.startTime) / 1000;
     }
     return acc;
   }, 0);
@@ -1132,7 +3211,7 @@ function ThinkingProcess({ steps, isStreaming }: ThinkingProcessProps) {
           ) : (
             <Brain className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
           )}
-          <span>{isCompleted ? '已完成深度思考' : '正在进行深度思考'}</span>
+          <span>{isCompleted ? t('thinking.completed') : t('thinking.active')}</span>
           <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
             canvasMode === 'light' ? 'bg-slate-200/60 text-slate-600' : 'bg-slate-800 text-slate-400'
           }`}>

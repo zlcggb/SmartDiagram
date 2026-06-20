@@ -5,6 +5,11 @@
 import { create } from 'zustand';
 import type { DiagramEngineType, DiagramTaskType } from '../types/diagram';
 
+const makeClientId = (prefix: string) => {
+  const randomId = globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  return `${prefix}_${randomId}`;
+};
+
 export type CanvasPhase = 'idle' | 'routing' | 'designing' | 'generating' | 'done';
 
 export interface SelectedNodeInfo {
@@ -21,6 +26,120 @@ export interface ThinkingStep {
   status: 'running' | 'completed';
 }
 
+export interface ExecutionPlanStep {
+  id: string;
+  label: string;
+  agent: string;
+  phase: string;
+  status: string;
+  durationMs?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ConversationMemorySummary {
+  status: string;
+  reason?: string;
+  summaryPresent: boolean;
+  recentCount: number;
+  turnCount?: number;
+  currentDiagramVersionId?: string;
+}
+
+export interface LongTermPreferencesSummary {
+  status: string;
+  reason?: string;
+  sources: Record<string, boolean>;
+  keys: string[];
+}
+
+export interface ConversationResumeNotice {
+  status: 'canvas_restored' | 'canvas_missing';
+  conversationTitle: string;
+  messageCount: number;
+  currentDiagramVersionId?: string;
+  reason?: string;
+}
+
+export interface KnowledgeContextSummary {
+  status: string;
+  count: number;
+  citations: Record<string, unknown>[];
+  selectedTemplate?: {
+    templateId: string;
+    name: string;
+    engineType?: string;
+    taskType?: string;
+    matchScore?: number;
+  };
+  historicalDiagrams?: {
+    diagramId: string;
+    title: string;
+    engineType?: string;
+    taskType?: string;
+    currentVersionId?: string;
+  }[];
+  note?: string;
+}
+
+export interface PlannerPlanSummary {
+  status: string;
+  mode?: string;
+  complexity?: string;
+  engineType?: string;
+  knowledgeRequired: boolean;
+  subtasks: Record<string, unknown>[];
+  qualityGates: string[];
+  assumptions: string[];
+  note?: string;
+}
+
+export interface DesignAgentSummary {
+  status: string;
+  engineType?: string;
+  changed: boolean;
+  appliedRules: string[];
+  note?: string;
+}
+
+export interface RepairAgentSummary {
+  status: string;
+  engineType?: string;
+  repaired: boolean;
+  appliedRules: string[];
+  errors: string[];
+  validationOk: boolean;
+  note?: string;
+}
+
+export interface ConsistencyAgentSummary {
+  status: string;
+  ok: boolean;
+  needsUserInput: boolean;
+  checkedChunks: number;
+  missingRequiredTerms: string[];
+  forbiddenTermsPresent: string[];
+  coverageRatio: number;
+  note?: string;
+}
+
+export interface HumanApprovalSummary {
+  approvalId: string;
+  approvalType: string;
+  status: string;
+  requiredScope: string;
+  reason: string;
+  resource: Record<string, unknown>;
+}
+
+export interface ExportPlanSummary {
+  status: string;
+  engineType?: string;
+  preferredFormat?: string;
+  allowedFormats: Record<string, unknown>[];
+  deniedFormats: Record<string, unknown>[];
+  note?: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -29,9 +148,22 @@ export interface Message {
   engineType?: DiagramEngineType;
   designConcept?: string;
   code?: string;
+  diagramId?: string;
+  diagramVersionId?: string;
   images?: string[];
   statusText?: string;
   steps?: ThinkingStep[];
+  executionPlan?: ExecutionPlanStep[];
+  conversationMemory?: ConversationMemorySummary;
+  longTermPreferences?: LongTermPreferencesSummary;
+  resumeNotice?: ConversationResumeNotice;
+  plannerPlan?: PlannerPlanSummary;
+  designAgent?: DesignAgentSummary;
+  repairAgent?: RepairAgentSummary;
+  consistencyAgent?: ConsistencyAgentSummary;
+  approvalRequest?: HumanApprovalSummary;
+  knowledgeContext?: KnowledgeContextSummary;
+  exportPlan?: ExportPlanSummary;
   timestamp: number;
 }
 
@@ -47,6 +179,10 @@ interface ChatStore {
   addMessage: (msg: Message) => void;
   updateLastAssistantMessage: (updates: Partial<Message>) => void;
   clearMessages: () => void;
+
+  // Enterprise persistence context
+  conversationId: string;
+  setConversationId: (v: string) => void;
 
   // Selected canvas node for precise editing
   selectedNode: SelectedNodeInfo | null;
@@ -69,6 +205,10 @@ interface ChatStore {
   setCanvasTask: (v: DiagramTaskType | null) => void;
   canvasEngine: DiagramEngineType | null;
   setCanvasEngine: (v: DiagramEngineType | null) => void;
+  canvasDiagramId: string | null;
+  setCanvasDiagramId: (v: string | null) => void;
+  canvasDiagramVersionId: string | null;
+  setCanvasDiagramVersionId: (v: string | null) => void;
 
   // Design concept
   designConcept: string;
@@ -128,7 +268,15 @@ export const useChatStore = create<ChatStore>((set) => ({
       }
       return { messages: msgs };
     }),
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () => set({
+    messages: [],
+    conversationId: makeClientId('conv'),
+    canvasDiagramId: null,
+    canvasDiagramVersionId: null,
+  }),
+
+  conversationId: makeClientId('conv'),
+  setConversationId: (v) => set({ conversationId: v }),
 
   selectedNode: null,
   setSelectedNode: (v) => set({ selectedNode: v }),
@@ -148,6 +296,10 @@ export const useChatStore = create<ChatStore>((set) => ({
   setCanvasTask: (v) => set({ canvasTask: v }),
   canvasEngine: null,
   setCanvasEngine: (v) => set({ canvasEngine: v }),
+  canvasDiagramId: null,
+  setCanvasDiagramId: (v) => set({ canvasDiagramId: v }),
+  canvasDiagramVersionId: null,
+  setCanvasDiagramVersionId: (v) => set({ canvasDiagramVersionId: v }),
 
   designConcept: '',
   setDesignConcept: (v) => set({ designConcept: v }),

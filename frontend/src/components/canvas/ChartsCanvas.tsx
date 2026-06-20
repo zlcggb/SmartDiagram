@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { useChatStore } from '../../store/chatStore';
+import { useT } from '../../i18n';
 
 // ─── Streaming JSON Parser for Charts ───
 
@@ -104,6 +105,7 @@ function tryParseStreamingJSON(rawStr: string) {
 
 export default function ChartsCanvas() {
   const { canvasCode, streamingCode, isStreaming, canvasMode } = useChatStore();
+  const { t } = useT();
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -186,10 +188,10 @@ export default function ChartsCanvas() {
     } catch (e: unknown) {
       if (!isStreaming) {
         const msg = e instanceof Error ? e.message : String(e);
-        setError(`Parse error: ${msg}`);
+        setError(t('charts.parseError', { message: msg }));
       }
     }
-  }, [isStreaming, canvasCode, streamingCode, initCounter]);
+  }, [isStreaming, canvasCode, streamingCode, initCounter, t]);
 
   const handleBgChange = (bg: 'dark' | 'light' | 'warm') => {
     setChartBg(bg);
@@ -201,21 +203,21 @@ export default function ChartsCanvas() {
     <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border shadow-md backdrop-blur-md transition-all bg-white/70 dark:bg-slate-900/70 border-slate-200 dark:border-slate-800/80 hover:bg-white/90 dark:hover:bg-slate-900/90">
       <button
         onClick={() => handleBgChange('dark')}
-        title="暗夜深空"
+        title={t('charts.themeDark')}
         className={`w-3.5 h-3.5 rounded-full bg-slate-950 border transition-all cursor-pointer hover:scale-125 active:scale-95 ${
           chartBg === 'dark' ? 'border-indigo-500 ring-2 ring-indigo-500/30 scale-110' : 'border-slate-300 dark:border-slate-600'
         }`}
       />
       <button
         onClick={() => handleBgChange('light')}
-        title="纯白极简"
+        title={t('charts.themeLight')}
         className={`w-3.5 h-3.5 rounded-full bg-white border transition-all cursor-pointer hover:scale-125 active:scale-95 ${
           chartBg === 'light' ? 'border-indigo-500 ring-2 ring-indigo-500/30 scale-110' : 'border-slate-300 dark:border-slate-600'
         }`}
       />
       <button
         onClick={() => handleBgChange('warm')}
-        title="暖阳沙色"
+        title={t('charts.themeWarm')}
         className={`w-3.5 h-3.5 rounded-full bg-[#faf9f6] border transition-all cursor-pointer hover:scale-125 active:scale-95 ${
           chartBg === 'warm' ? 'border-indigo-500 ring-2 ring-indigo-500/30 scale-110' : 'border-slate-300 dark:border-slate-600'
         }`}
@@ -230,7 +232,7 @@ export default function ChartsCanvas() {
       }`}>
         {renderSwitcher()}
         <div className="text-red-400 text-sm bg-red-950/20 p-4 rounded-xl border border-red-900/30 max-w-md shadow-lg">
-          <p className="font-medium mb-1 text-slate-200">Charts 渲染失败</p>
+          <p className="font-medium mb-1 text-slate-200">{t('charts.renderFailed')}</p>
           <pre className="text-xs whitespace-pre-wrap text-red-400">{error}</pre>
         </div>
       </div>

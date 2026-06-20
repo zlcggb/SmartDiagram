@@ -13,6 +13,7 @@ import MindElixir from 'mind-elixir';
 import 'mind-elixir/style.css';
 import { Transformer } from 'markmap-lib';
 import { useChatStore } from '../../store/chatStore';
+import { useT } from '../../i18n';
 
 // ─── Helpers (from original DeepDiagram-Pro) ───
 
@@ -158,6 +159,7 @@ const fitWithPadding = (me: any) => {
 
 export default function MindmapCanvas() {
   const { canvasCode, streamingCode, isStreaming, setCanvasCode, setMindmapInstance, setSelectedNode, canvasMode } = useChatStore();
+  const { t } = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const mindInstance = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -591,7 +593,7 @@ export default function MindmapCanvas() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p className="text-sm font-semibold text-slate-200">MindMap 渲染失败</p>
+          <p className="text-sm font-semibold text-slate-200">{t('mindmap.renderFailed')}</p>
           <p className="text-xs text-slate-400 mt-1 max-w-xs">{error}</p>
         </div>
       ) : (
@@ -612,7 +614,7 @@ export default function MindmapCanvas() {
                       updateMiniMap();
                     }
                   }}
-                  title="放大"
+                  title={t('common.zoomIn')}
                   className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -626,7 +628,7 @@ export default function MindmapCanvas() {
                       updateMiniMap();
                     }
                   }}
-                  title="缩小"
+                  title={t('common.zoomOut')}
                   className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -640,7 +642,7 @@ export default function MindmapCanvas() {
                       updateMiniMap();
                     }
                   }}
-                  title="自适应"
+                  title={t('mindmap.fit')}
                   className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -661,7 +663,7 @@ export default function MindmapCanvas() {
                       updateMiniMap();
                     }
                   }}
-                  title="全部折叠"
+                  title={t('mindmap.collapseAll')}
                   className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -676,7 +678,7 @@ export default function MindmapCanvas() {
                       updateMiniMap();
                     }
                   }}
-                  title="全部展开"
+                  title={t('mindmap.expandAll')}
                   className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

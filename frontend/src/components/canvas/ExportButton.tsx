@@ -14,6 +14,23 @@
 import { useState, useRef, useEffect } from 'react';
 import { Download, ChevronDown } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
+import { ConfirmDialog, NoticeDialog } from '../common/AppDialog';
+import { useT } from '../../i18n';
+import { renderHtmlArtifact } from './htmlArtifactRenderer';
+
+const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '';
+const ENTERPRISE_EXPORT_SCOPES = [
+  'diagram:read',
+  'diagram:write',
+  'artifact:read',
+  'artifact:write',
+  'tool:diagram',
+  'tool:office',
+  'knowledge:read',
+  'export:basic',
+  'export:pdf',
+  'export:pptx',
+];
 
 /** Download a blob as a file */
 function downloadBlob(blob: Blob, filename: string) {
@@ -93,12 +110,64 @@ async function svgStringToPng(svgString: string, scale = 2): Promise<Blob> {
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob!), 'image/png'));
 }
 
-type ExportFormat = 'png' | 'svg';
+type ExportFormat = 'png' | 'svg' | 'json' | 'pdf' | 'pptx' | 'html';
+type LocalExportFormat = 'png' | 'svg' | 'html';
+type BackendExportJob = {
+  status: string;
+  asset_id?: string | null;
+  error_message?: string;
+};
+
+function isLocalExportFormat(format: ExportFormat): format is LocalExportFormat {
+  return format === 'png' || format === 'svg' || format === 'html';
+}
+
+function filenameFromDisposition(disposition: string | null, fallback: string) {
+  const match = disposition?.match(/filename="?([^"]+)"?/i);
+  return match?.[1] || fallback;
+}
+
+function shouldSendEnterpriseDownloadHeaders(url: string) {
+  if (!url) return false;
+  if (url.startsWith('/')) return true;
+  try {
+    const target = new URL(url, window.location.origin);
+    if (API_BASE) {
+      const apiOrigin = new URL(API_BASE, window.location.origin).origin;
+      return target.origin === apiOrigin;
+    }
+    return target.origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+async function readErrorPayload(response: Response) {
+  const raw = await response.text();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { detail: raw };
+  }
+}
 
 export default function ExportButton() {
-  const { canvasEngine, canvasCode, excalidrawAPI, mindmapInstance, isStreaming } = useChatStore();
+  const {
+    canvasEngine,
+    canvasCode,
+    canvasDiagramId,
+    canvasDiagramVersionId,
+    conversationId,
+    excalidrawAPI,
+    mindmapInstance,
+    isStreaming,
+  } = useChatStore();
+  const { t } = useT();
   const [showMenu, setShowMenu] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ format: ExportFormat; message: string } | null>(null);
+  const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -117,6 +186,14 @@ export default function ExportButton() {
   if (!canvasCode || isStreaming) return null;
 
   const timestamp = () => new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  const hasVersionedExport = Boolean(canvasDiagramId && canvasDiagramVersionId);
+
+  const enterpriseHeaders = () => ({
+    'Content-Type': 'application/json',
+    'x-tenant-id': 'local',
+    'x-user-id': 'anonymous',
+    'x-scopes': ENTERPRISE_EXPORT_SCOPES.join(','),
+  });
 
   // ── Export handlers per agent ──
 
@@ -137,7 +214,7 @@ export default function ExportButton() {
   };
 
   const exportExcalidraw = async (format: ExportFormat) => {
-    if (!excalidrawAPI) throw new Error('Excalidraw API 未就绪');
+    if (!excalidrawAPI) throw new Error(t('export.excalidrawNotReady'));
     const elements = excalidrawAPI.getSceneElements();
     const appState = { ...excalidrawAPI.getAppState(), exportBackground: true };
     const files = excalidrawAPI.getFiles();
@@ -158,7 +235,7 @@ export default function ExportButton() {
     // ECharts renders to <canvas> — grab it directly
     const canvasContainer = document.querySelector('[data-canvas]');
     const canvasEl = canvasContainer?.querySelector('canvas');
-    if (!canvasEl) throw new Error('找不到 ECharts 画布');
+    if (!canvasEl) throw new Error(t('export.chartsCanvasMissing'));
 
     // Try echarts getConnectedDataURL if instance is accessible
     const echartsModule = await import('echarts');
@@ -180,14 +257,14 @@ export default function ExportButton() {
   const exportDrawio = async (format: ExportFormat) => {
     // DrawIO uses iframe postMessage protocol for export
     const iframe = document.querySelector('iframe[src*="diagrams.net"]') as HTMLIFrameElement;
-    if (!iframe?.contentWindow) throw new Error('Draw.io iframe 未就绪');
+    if (!iframe?.contentWindow) throw new Error(t('export.drawioNotReady'));
 
     const exportFormat = format === 'svg' ? 'xmlsvg' : 'png';
 
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         window.removeEventListener('message', handler);
-        reject(new Error('Draw.io 导出超时'));
+        reject(new Error(t('export.drawioTimeout')));
       }, 10000);
 
       const handler = (event: MessageEvent) => {
@@ -218,7 +295,7 @@ export default function ExportButton() {
 
   const exportMindmap = async (format: ExportFormat) => {
     if (!mindmapInstance) {
-      throw new Error('Mindmap 实例未就绪，请稍后重试');
+      throw new Error(t('export.mindmapNotReady'));
     }
 
     // 1. Temporarily restore scale to 1.0 to ensure correct sizing and prevent clipping
@@ -251,8 +328,8 @@ export default function ExportButton() {
         if (container) {
           const { snapdom } = await import('@zumer/snapdom');
           const result = await snapdom(container);
-          const svgStr = await result.toSvg();
-          downloadText(svgStr, `Mindmap_${timestamp()}.svg`, 'image/svg+xml');
+          const blob = await result.toBlob({ type: 'svg' });
+          downloadBlob(blob, `Mindmap_${timestamp()}.svg`);
           return;
         }
       } else {
@@ -262,7 +339,8 @@ export default function ExportButton() {
           const { snapdom } = await import('@zumer/snapdom');
           // Use scale: 3 for ultra-crisp high-res png output
           const result = await snapdom(container, { scale: 3 });
-          await result.download({ format: 'png', filename: `Mindmap_${timestamp()}` });
+          const blob = await result.toBlob({ type: 'png', scale: 3 });
+          downloadBlob(blob, `Mindmap_${timestamp()}.png`);
           return;
         }
 
@@ -276,7 +354,7 @@ export default function ExportButton() {
         }
       }
 
-      throw new Error('未找到可用的导出方法');
+      throw new Error(t('export.noAvailableMethod'));
     } catch (error) {
       console.error('[Export] Mindmap export failed:', error);
       throw error;
@@ -306,7 +384,7 @@ export default function ExportButton() {
     // Infographic renders SVG via @antv/infographic — extract from DOM
     const container = document.querySelector('[data-canvas]');
     const svgEl = container?.querySelector('svg');
-    if (!svgEl) throw new Error('找不到信息图 SVG');
+    if (!svgEl) throw new Error(t('export.infographicSvgMissing'));
 
     const clone = svgEl.cloneNode(true) as SVGElement;
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
@@ -320,33 +398,144 @@ export default function ExportButton() {
     }
   };
 
+  const exportArtifactHtml = async () => {
+    const rendered = renderHtmlArtifact(canvasCode);
+    downloadText(rendered.html, `OfficeArtifact_${timestamp()}.html`, 'text/html;charset=utf-8');
+  };
+
   // ── Main export dispatcher ──
 
-  const handleExport = async (format: ExportFormat) => {
+  const exportLocal = async (format: LocalExportFormat) => {
+    switch (canvasEngine) {
+      case 'mermaid':     await exportMermaid(format); break;
+      case 'excalidraw':  await exportExcalidraw(format); break;
+      case 'charts':      await exportCharts(format); break;
+      case 'drawio':      await exportDrawio(format); break;
+      case 'mindmap':     await exportMindmap(format); break;
+      case 'flow':        await exportFlow(format); break;
+      case 'infographic': await exportInfographic(format); break;
+      case 'html_email':
+      case 'web_report_html':
+        if (format !== 'html') throw new Error(t('export.unsupported', { engine: canvasEngine || 'artifact' }));
+        await exportArtifactHtml();
+        break;
+      default:
+        throw new Error(t('export.unsupported', { engine: canvasEngine || 'diagram' }));
+    }
+  };
+
+  const createBackendExportJob = async (format: ExportFormat, confirmed = false): Promise<BackendExportJob> => {
+    if (!canvasDiagramId || !canvasDiagramVersionId) {
+      throw new Error(t('export.enterpriseVersionRequired'));
+    }
+
+    const exportRes = await fetch(`${API_BASE}/api/diagrams/${canvasDiagramId}/versions/${canvasDiagramVersionId}/exports`, {
+      method: 'POST',
+      headers: enterpriseHeaders(),
+      body: JSON.stringify({
+        format,
+        conversation_id: conversationId,
+        scopes: ENTERPRISE_EXPORT_SCOPES,
+        confirmed,
+        confirmation_reason: confirmed ? 'frontend_user_confirmed' : '',
+      }),
+    });
+    if (!exportRes.ok) {
+      const payload = await readErrorPayload(exportRes);
+      const detail = payload?.detail || payload;
+      if (exportRes.status === 409 && detail?.required_confirmation) {
+        const message = detail.message || t('export.confirmRequired', { format: format.toUpperCase() });
+        const error = new Error(message) as Error & { requiredConfirmation?: boolean; format?: ExportFormat };
+        error.requiredConfirmation = true;
+        error.format = format;
+        throw error;
+      }
+      const message = typeof detail === 'string' ? detail : JSON.stringify(detail);
+      throw new Error(t('export.jobCreateFailed', { message: message || exportRes.status }));
+    }
+
+    return exportRes.json();
+  };
+
+  const exportBackend = async (format: ExportFormat, confirmed = false) => {
+    const job = await createBackendExportJob(format, confirmed);
+    if (job.status !== 'completed' || !job.asset_id) {
+      throw new Error(job.error_message || t('export.jobIncomplete'));
+    }
+
+    const urlRes = await fetch(`${API_BASE}/api/export-assets/${job.asset_id}/download-url`, {
+      headers: enterpriseHeaders(),
+    });
+    if (!urlRes.ok) {
+      const detail = await urlRes.text();
+      throw new Error(t('export.downloadUrlFailed', { message: detail || urlRes.status }));
+    }
+
+    const { download_url } = await urlRes.json();
+    const assetUrl = String(download_url || '');
+    const finalUrl = assetUrl.startsWith('/') ? `${API_BASE}${assetUrl}` : assetUrl;
+    const assetRes = await fetch(
+      finalUrl,
+      shouldSendEnterpriseDownloadHeaders(finalUrl) ? { headers: enterpriseHeaders() } : undefined,
+    );
+    if (!assetRes.ok) {
+      const detail = await assetRes.text();
+      throw new Error(t('export.assetDownloadFailed', { message: detail || assetRes.status }));
+    }
+
+    const blob = await assetRes.blob();
+    const filename = filenameFromDisposition(
+      assetRes.headers.get('Content-Disposition'),
+      `SmartDiagram_${timestamp()}.${format}`,
+    );
+    downloadBlob(blob, filename);
+  };
+
+  const handleExport = async (format: ExportFormat, confirmed = false) => {
     setExporting(true);
     setShowMenu(false);
     try {
-      switch (canvasEngine) {
-        case 'mermaid':     await exportMermaid(format); break;
-        case 'excalidraw':  await exportExcalidraw(format); break;
-        case 'charts':      await exportCharts(format); break;
-        case 'drawio':      await exportDrawio(format); break;
-        case 'mindmap':     await exportMindmap(format); break;
-        case 'flow':        await exportFlow(format); break;
-        case 'infographic': await exportInfographic(format); break;
-        default:
-          alert(`暂不支持 ${canvasEngine} 类型的导出`);
+      if (hasVersionedExport) {
+        await exportBackend(format, confirmed);
+        return;
       }
+
+      if (!isLocalExportFormat(format)) {
+        throw new Error(t('export.versionRequired'));
+      }
+      await exportLocal(format);
     } catch (err) {
       console.error('[Export] Failed:', err);
-      alert(`导出失败: ${(err as Error).message}`);
+      const exportError = err as Error & { requiredConfirmation?: boolean; format?: ExportFormat };
+      if (exportError.requiredConfirmation && exportError.format) {
+        setConfirmation({ format: exportError.format, message: exportError.message });
+        return;
+      }
+      if (hasVersionedExport && isLocalExportFormat(format)) {
+        console.warn('[Export] Falling back to local canvas export.');
+        try {
+          await exportLocal(format);
+          return;
+        } catch (fallbackErr) {
+          console.error('[Export] Local fallback failed:', fallbackErr);
+        }
+      }
+      setNotice({ title: t('common.error'), message: t('export.failed', { message: (err as Error).message }) });
     } finally {
       setExporting(false);
     }
   };
 
+  const confirmExport = async () => {
+    const pending = confirmation;
+    if (!pending) return;
+    setConfirmation(null);
+    await handleExport(pending.format, true);
+  };
+
   // Determine which formats are available
-  const svgSupported = ['mermaid', 'excalidraw', 'drawio', 'infographic', 'flow', 'mindmap'].includes(canvasEngine || '');
+  const officeArtifact = canvasEngine === 'html_email' || canvasEngine === 'web_report_html';
+  const svgSupported = !officeArtifact && (hasVersionedExport || ['mermaid', 'excalidraw', 'drawio', 'infographic', 'flow', 'mindmap'].includes(canvasEngine || ''));
 
   return (
     <div ref={menuRef} style={{ position: 'relative', zIndex: 100 }}>
@@ -361,12 +550,12 @@ export default function ExportButton() {
         {exporting ? (
           <>
             <span className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin inline-block" />
-            导出中
+            {t('export.exporting')}
           </>
         ) : (
           <>
             <Download className="w-3.5 h-3.5" />
-            导出
+            {t('export.title')}
             <ChevronDown className="w-3 h-3 opacity-50" />
           </>
         )}
@@ -387,24 +576,80 @@ export default function ExportButton() {
             zIndex: 200,
           }}
         >
-          <button
-            onClick={() => handleExport('png')}
-            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors border-none cursor-pointer"
-          >
-            <span className="text-sm">🖼️</span>
-            导出为 PNG
-          </button>
+          {officeArtifact ? (
+            <button
+              onClick={() => handleExport('html')}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors border-none cursor-pointer"
+            >
+              <span className="text-sm">HTML</span>
+              {t('export.as', { format: 'HTML' })}
+            </button>
+          ) : (
+            <button
+              onClick={() => handleExport('png')}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors border-none cursor-pointer"
+            >
+              <span className="text-sm">PNG</span>
+              {t('export.as', { format: 'PNG' })}
+            </button>
+          )}
           {svgSupported && (
             <button
               onClick={() => handleExport('svg')}
               className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors border-none cursor-pointer border-t border-slate-100"
             >
               <span className="text-sm">📐</span>
-              导出为 SVG
+              {t('export.as', { format: 'SVG' })}
             </button>
+          )}
+          {hasVersionedExport && (
+            <>
+              <button
+                onClick={() => handleExport('json')}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors border-none cursor-pointer border-t border-slate-100"
+              >
+                <span className="text-sm">JSON</span>
+                {t('export.as', { format: 'JSON' })}
+              </button>
+              {!officeArtifact && (
+                <>
+                  <button
+                    onClick={() => handleExport('pdf')}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors border-none cursor-pointer border-t border-slate-100"
+                  >
+                    <span className="text-sm">PDF</span>
+                    {t('export.as', { format: 'PDF' })}
+                  </button>
+                  <button
+                    onClick={() => handleExport('pptx')}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors border-none cursor-pointer border-t border-slate-100"
+                  >
+                    <span className="text-sm">PPT</span>
+                    {t('export.as', { format: 'PPTX' })}
+                  </button>
+                </>
+              )}
+            </>
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(confirmation)}
+        title={t('export.confirmTitle')}
+        message={t('export.confirmMessage', { message: confirmation?.message || '' })}
+        confirmLabel={t('common.confirm')}
+        cancelLabel={t('common.cancel')}
+        busy={exporting}
+        onConfirm={confirmExport}
+        onCancel={() => setConfirmation(null)}
+      />
+      <NoticeDialog
+        open={Boolean(notice)}
+        title={notice?.title || t('common.error')}
+        message={notice?.message || ''}
+        closeLabel={t('common.close')}
+        onClose={() => setNotice(null)}
+      />
     </div>
   );
 }
