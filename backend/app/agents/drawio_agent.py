@@ -6,9 +6,10 @@ Includes post-processing to fix edge routing issues that LLMs cannot avoid.
 
 import re
 import xml.etree.ElementTree as ET
-from langchain_core.messages import SystemMessage, AIMessage
+from langchain_core.messages import AIMessage
 from app.state.state import AgentState
 from app.core.llm import create_llm_for_agent, extract_text_content
+from app.agents.context import build_agent_messages
 from app.agents.semantic_knowledge import (
     get_shape_vocabulary,
     get_arrow_semantics,
@@ -512,6 +513,6 @@ async def drawio_agent_node(state: AgentState) -> dict:
     """Generate or edit Draw.io mxGraph XML from user request."""
     llm = create_llm_for_agent(state, "drawio")
     response = await llm.ainvoke(
-        [SystemMessage(content=SYSTEM_PROMPT)] + list(state["messages"])
+        build_agent_messages(state, SYSTEM_PROMPT)
     )
     return {"messages": [AIMessage(content=extract_text_content(response.content))]}

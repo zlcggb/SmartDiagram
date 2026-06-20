@@ -3,9 +3,10 @@ Flow Agent — generates React Flow JSON flowcharts.
 Supports both new creation and incremental editing via <existing_code>.
 """
 
-from langchain_core.messages import SystemMessage, AIMessage
+from langchain_core.messages import AIMessage
 from app.state.state import AgentState
 from app.core.llm import create_llm_for_agent, extract_text_content
+from app.agents.context import build_agent_messages
 from app.agents.semantic_knowledge import (
     get_shape_vocabulary,
     get_arrow_semantics,
@@ -69,6 +70,6 @@ Respond in the same language as the user's input.
 async def flow_agent_node(state: AgentState) -> dict:
     llm = create_llm_for_agent(state, "flow")
     response = await llm.ainvoke(
-        [SystemMessage(content=SYSTEM_PROMPT)] + list(state["messages"])
+        build_agent_messages(state, SYSTEM_PROMPT)
     )
     return {"messages": [AIMessage(content=extract_text_content(response.content))]}

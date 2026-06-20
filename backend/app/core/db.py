@@ -9,6 +9,15 @@ engine = create_async_engine(settings.DATABASE_URL, echo=False)
 async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
+def import_model_modules() -> None:
+    """Import table modules so SQLModel metadata is complete in every process."""
+
+    from app.models import audit, conversation, diagram, export, knowledge, project, tenant, usage  # noqa: F401
+
+
+import_model_modules()
+
+
 async def init_db():
     """Create all tables on startup."""
     async with engine.begin() as conn:

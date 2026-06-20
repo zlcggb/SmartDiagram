@@ -7,6 +7,7 @@ Supports both new creation and incremental editing.
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from app.state.state import AgentState
 from app.core.llm import create_llm_for_agent, extract_text_content
+from app.agents.context import build_agent_messages
 from app.data.template_syntax import (
     TEMPLATES,
     COMMON_SYNTAX_RULES,
@@ -155,7 +156,7 @@ async def infographic_agent_node(state: AgentState) -> dict:
     )
 
     response = await llm.ainvoke(
-        [SystemMessage(content=code_prompt)] + messages
+        build_agent_messages(state, code_prompt)
     )
 
     return {"messages": [AIMessage(content=extract_text_content(response.content))]}

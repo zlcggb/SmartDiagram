@@ -10,6 +10,8 @@ TaskType = Literal[
     "data_chart",
     "architecture",
     "infographic",
+    "html_email",
+    "web_report_html",
     "general",
 ]
 
@@ -21,6 +23,8 @@ EngineType = Literal[
     "charts",
     "drawio",
     "infographic",
+    "html_email",
+    "web_report_html",
     "general",
 ]
 
@@ -32,6 +36,8 @@ TASK_TO_ENGINE: dict[TaskType, EngineType] = {
     "data_chart": "charts",
     "architecture": "drawio",
     "infographic": "infographic",
+    "html_email": "html_email",
+    "web_report_html": "web_report_html",
     "general": "general",
 }
 

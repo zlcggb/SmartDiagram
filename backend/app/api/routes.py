@@ -5,15 +5,51 @@ Supports multi-turn conversation and incremental editing.
 """
 
 import json
+import hashlib
 import re
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from app.agents.orchestrator import graph
 from app.agents.catalog import get_task_for_engine
+from app.artifacts.catalog import is_office_artifact
 from app.agents.drawio_agent import sanitize_drawio_xml
+from app.core.db import async_session
 from app.core.llm import extract_text_content
 from app.core.logger import logger
+from app.models.audit import AuditEvent
+from app.services.agent_runtime import (
+    build_default_execution_plan,
+    steps_to_events,
+)
+from app.services.human_approval_service import (
+    create_human_approval_request,
+    serialize_approval_request,
+)
+from app.services.agent_trace_service import AgentTraceRecorder
+from app.services.audit_service import (
+    create_agent_run_id,
+    persist_agent_run_finish,
+    persist_agent_run_start,
+)
+from app.services.diagram_persistence_service import (
+    create_conversation_id,
+    persist_generated_diagram,
+)
+from app.services.conversation_memory_service import (
+    format_conversation_memory_for_prompt,
+    load_conversation_memory,
+)
+from app.services.long_term_memory_service import load_long_term_preferences
+from app.services.budget_service import evaluate_tenant_budget
+from app.services.output_validation import validate_output
+from app.services.permission_service import build_permission_context
+from app.services.runtime_guard_service import (
+    RuntimeGuardError,
+    RuntimeRateLimitBackendError,
+    StreamLoopGuard,
+    evaluate_runtime_request_async,
+)
 
 router = APIRouter()
 
@@ -380,7 +416,7 @@ class StreamingTagParser:
 
 
 
-def _build_messages(body: dict) -> list:
+def _build_messages(body: dict, conversation_memory_prompt: str = "") -> list:
     """Build LangChain message sequence from request body.
 
     Supports:
@@ -391,6 +427,8 @@ def _build_messages(body: dict) -> list:
     Returns a list like [HumanMessage, AIMessage, ..., HumanMessage].
     """
     messages = []
+    if conversation_memory_prompt:
+        messages.append(SystemMessage(content=conversation_memory_prompt))
 
     # Reconstruct history
     history = body.get("history") or []
@@ -434,6 +472,215 @@ def _build_messages(body: dict) -> list:
     return messages
 
 
+def _build_knowledge_context_event(output: dict) -> dict | None:
+    """Build a sanitized SSE event for Knowledge Agent retrieval results."""
+
+    knowledge = (output.get("memory_context") or {}).get("knowledge") or {}
+    if not knowledge:
+        return None
+
+    selected_template = knowledge.get("selected_template") or {}
+    historical_diagrams = knowledge.get("historical_diagrams") or []
+    citations = knowledge.get("citations") or []
+    safe_citations = []
+    for citation in citations[:5]:
+        if not isinstance(citation, dict):
+            continue
+        safe_citations.append(
+            {
+                "source_id": citation.get("source_id"),
+                "document_id": citation.get("document_id"),
+                "source_locator": citation.get("source_locator", ""),
+            }
+        )
+
+    return {
+        "type": "knowledge_context",
+        "status": knowledge.get("status", "unknown"),
+        "count": len(knowledge.get("chunks") or []),
+        "citations": safe_citations,
+        "historical_diagrams": [
+            {
+                "diagram_id": item.get("diagram_id"),
+                "title": item.get("title"),
+                "engine_type": item.get("engine_type"),
+                "task_type": item.get("task_type"),
+                "current_version_id": item.get("current_version_id"),
+            }
+            for item in historical_diagrams[:3]
+            if isinstance(item, dict)
+        ],
+        "selected_template": {
+            "template_id": selected_template.get("template_id"),
+            "name": selected_template.get("name"),
+            "engine_type": selected_template.get("engine_type"),
+            "task_type": selected_template.get("task_type"),
+            "match_score": selected_template.get("match_score"),
+        } if selected_template else None,
+        "note": knowledge.get("note", ""),
+    }
+
+
+def _build_conversation_memory_event(memory: dict) -> dict | None:
+    """Build a sanitized SSE event for persisted short-term memory."""
+
+    if not memory:
+        return None
+    context = memory.get("context") or {}
+    short_term_memory = context.get("short_term_memory") or {}
+    return {
+        "type": "conversation_memory",
+        "status": memory.get("status", "empty"),
+        "reason": memory.get("reason", ""),
+        "summary_present": bool(memory.get("summary")),
+        "recent_count": len(memory.get("recent_messages") or []),
+        "turn_count": short_term_memory.get("turn_count") or 0,
+        "current_diagram_version_id": (
+            memory.get("current_diagram_version_id")
+            or context.get("current_diagram_version_id")
+            or ""
+        ),
+    }
+
+
+def _build_long_term_preferences_event(memory: dict) -> dict | None:
+    """Build a sanitized SSE event for long-term artifact preferences."""
+
+    if not memory:
+        return None
+    preferences = memory.get("preferences") or {}
+    return {
+        "type": "long_term_preferences",
+        "status": memory.get("status", "empty"),
+        "reason": memory.get("reason", ""),
+        "sources": memory.get("sources", {}),
+        "keys": sorted(preferences.keys()),
+    }
+
+
+def _build_planner_event(output: dict) -> dict | None:
+    """Build a sanitized SSE event for Planner Agent results."""
+
+    planning = (output.get("memory_context") or {}).get("planning") or {}
+    if not planning:
+        return None
+    subtasks = planning.get("subtasks") or []
+    safe_subtasks = []
+    for subtask in subtasks[:8]:
+        if not isinstance(subtask, dict):
+            continue
+        safe_subtasks.append(
+            {
+                "id": subtask.get("id", ""),
+                "label": subtask.get("label", ""),
+                "owner": subtask.get("owner", ""),
+                "required": bool(subtask.get("required", False)),
+            }
+        )
+    return {
+        "type": "planner_plan",
+        "status": planning.get("status", "unknown"),
+        "mode": planning.get("mode", ""),
+        "complexity": planning.get("complexity", ""),
+        "task_type": planning.get("task_type", ""),
+        "engine_type": planning.get("engine_type", ""),
+        "knowledge_required": bool(planning.get("knowledge_required")),
+        "subtasks": safe_subtasks,
+        "quality_gates": planning.get("quality_gates", []),
+        "assumptions": planning.get("assumptions", []),
+        "note": planning.get("note", ""),
+    }
+
+
+def _build_design_agent_event(output: dict) -> dict | None:
+    """Build a sanitized SSE event for Design Agent results."""
+
+    design = (output.get("memory_context") or {}).get("design") or {}
+    if not design:
+        return None
+    return {
+        "type": "design_agent",
+        "status": design.get("status", "unknown"),
+        "engine_type": design.get("engine_type", ""),
+        "changed": bool(design.get("changed")),
+        "applied_rules": design.get("applied_rules", []),
+        "note": design.get("note", ""),
+    }
+
+
+def _build_export_plan_event(output: dict) -> dict | None:
+    """Build a sanitized SSE event for Export Agent planning results."""
+
+    export_plan = (output.get("memory_context") or {}).get("export") or {}
+    if not export_plan:
+        return None
+    return {
+        "type": "export_plan",
+        "status": export_plan.get("status", "unknown"),
+        "engine_type": export_plan.get("engine_type", ""),
+        "preferred_format": export_plan.get("preferred_format", ""),
+        "allowed_formats": export_plan.get("allowed_formats", []),
+        "denied_formats": export_plan.get("denied_formats", []),
+        "note": export_plan.get("note", ""),
+    }
+
+
+def _build_validator_event(output: dict) -> dict | None:
+    """Build a sanitized SSE event for Validator Agent results."""
+
+    validation = (output.get("memory_context") or {}).get("validation") or {}
+    result = validation.get("result") or {}
+    if not result:
+        return None
+    return {
+        "type": "validation_agent",
+        "status": validation.get("status", "unknown"),
+        "ok": bool(result.get("ok")),
+        "engine_type": result.get("engine_type", ""),
+        "errors": result.get("errors", []),
+        "warnings": result.get("warnings", []),
+        "repairable": bool(result.get("repairable")),
+    }
+
+
+def _build_repair_event(output: dict) -> dict | None:
+    """Build a sanitized SSE event for Repair Agent results."""
+
+    repair = (output.get("memory_context") or {}).get("repair") or {}
+    if not repair:
+        return None
+    validation = repair.get("validation") or {}
+    return {
+        "type": "repair_agent",
+        "status": repair.get("status", "unknown"),
+        "engine_type": repair.get("engine_type", ""),
+        "repaired": bool(repair.get("repaired")),
+        "applied_rules": repair.get("applied_rules", []),
+        "errors": repair.get("errors", []),
+        "validation_ok": bool(validation.get("ok")),
+        "note": repair.get("note", ""),
+    }
+
+
+def _build_consistency_event(output: dict) -> dict | None:
+    """Build a sanitized SSE event for Consistency Agent results."""
+
+    consistency = (output.get("memory_context") or {}).get("consistency") or {}
+    if not consistency:
+        return None
+    return {
+        "type": "consistency_agent",
+        "status": consistency.get("status", "unknown"),
+        "ok": bool(consistency.get("ok", True)),
+        "needs_user_input": bool(consistency.get("needs_user_input", False)),
+        "checked_chunks": int(consistency.get("checked_chunks") or 0),
+        "missing_required_terms": consistency.get("missing_required_terms", []),
+        "forbidden_terms_present": consistency.get("forbidden_terms_present", []),
+        "coverage_ratio": consistency.get("coverage_ratio", 1.0),
+        "note": consistency.get("note", ""),
+    }
+
+
 @router.post("/chat/stream")
 async def chat_stream(request: Request):
     """SSE endpoint: streams agent response as design_concept + code events.
@@ -452,18 +699,138 @@ async def chat_stream(request: Request):
     if not user_message:
         return {"error": "message is required"}
 
+    permission_context = build_permission_context(body)
+    try:
+        runtime_guard = await evaluate_runtime_request_async(body, permission_context)
+    except RuntimeRateLimitBackendError as exc:
+        logger.warning(f"Runtime rate-limit backend unavailable: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail={"reason": "rate_limit_backend_unavailable"},
+        ) from exc
+    if not runtime_guard["allowed"]:
+        if runtime_guard["reason"] == "rate_limited":
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "reason": runtime_guard["reason"],
+                    "retry_after_seconds": runtime_guard["retry_after_seconds"],
+                },
+            )
+        raise HTTPException(status_code=413, detail={"reason": runtime_guard["reason"]})
+    if runtime_guard["degraded"] and not (body.get("detailLevel") or body.get("detail_level")):
+        body["detailLevel"] = "short"
+
+    budget_guard = {
+        "allowed": True,
+        "reason": "budget_check_unavailable",
+        "period": "",
+        "tenant_id": permission_context.get("tenant_id") or "local",
+    }
+    try:
+        async with async_session() as session:
+            budget_guard = await evaluate_tenant_budget(
+                session,
+                permission_context,
+                runtime_guard,
+            )
+            if not budget_guard["allowed"]:
+                session.add(
+                    AuditEvent(
+                        tenant_id=permission_context.get("tenant_id") or "local",
+                        project_id=permission_context.get("project_id"),
+                        user_id=permission_context.get("user_id") or "anonymous",
+                        event_type="tenant.budget.rejected",
+                        severity="warning",
+                        message="Request rejected by tenant monthly budget.",
+                        metadata_json=budget_guard,
+                    )
+                )
+                await session.commit()
+                raise HTTPException(status_code=402, detail=budget_guard)
+            await session.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning(f"Tenant budget check skipped: {exc}")
+
     async def event_generator():
         parser = StreamingTagParser()
         current_engine_name = ""  # Track which engine is active
         current_task_name = ""    # Track which task is active
         llm_ended = False        # Track if LLM step has ended
         in_router = False        # Track if currently executing the router chain
-
-        # Build multi-turn message sequence
-        messages = _build_messages(body)
+        execution_plan_sent = False
+        execution_plan_events = []
+        validation_events = []
+        audit_event_buffer = []
+        tool_call_buffer = []
+        design_code_override = ""
+        repair_code_override = ""
+        consistency_needs_user_input = False
+        consistency_event_payload = None
+        stream_status = "succeeded"
+        stream_error = ""
+        design_buffer = ""
+        latest_code = ""
+        assistant_content = ""
 
         current_engine = body.get("current_engine") or body.get("current_agent", "")
         current_task = body.get("current_task") or get_task_for_engine(current_engine)
+        conversation_id = body.get("conversation_id") or body.get("conversationId") or create_conversation_id()
+        current_diagram_id = body.get("current_diagram_id") or body.get("currentDiagramId")
+        conversation_memory = {}
+        conversation_memory_prompt = ""
+        long_term_preferences = {}
+        try:
+            async with async_session() as session:
+                conversation_memory = await load_conversation_memory(
+                    session,
+                    permission_context=permission_context,
+                    conversation_id=conversation_id,
+                )
+                conversation_memory_prompt = format_conversation_memory_for_prompt(conversation_memory)
+                long_term_preferences = await load_long_term_preferences(
+                    session,
+                    permission_context=permission_context,
+                )
+        except Exception as exc:
+            logger.warning(f"Memory load skipped: {exc}")
+            if not conversation_memory:
+                conversation_memory = {
+                    "status": "unavailable",
+                    "reason": "load_failed",
+                    "recent_messages": [],
+                }
+            if not long_term_preferences:
+                long_term_preferences = {
+                    "status": "unavailable",
+                    "reason": "load_failed",
+                    "preferences": {},
+                }
+
+        # Build multi-turn message sequence after persisted memory has been loaded.
+        messages = _build_messages(body, conversation_memory_prompt=conversation_memory_prompt)
+
+        run_id = create_agent_run_id()
+        loop_guard = StreamLoopGuard()
+        trace_recorder = AgentTraceRecorder(
+            run_id=run_id,
+            permission_context=permission_context,
+            conversation_id=conversation_id,
+        )
+        await persist_agent_run_start(
+            run_id=run_id,
+            permission_context=permission_context,
+            model_config=body.get("model_config"),
+            conversation_id=conversation_id,
+            token_usage={
+                "estimated_input_tokens": runtime_guard["estimated_input_tokens"],
+                "estimated_output_tokens": runtime_guard["estimated_output_tokens"],
+                "estimated_total_tokens": runtime_guard["estimated_total_tokens"],
+            },
+            cost_estimate=runtime_guard["estimated_cost"],
+        )
 
         input_state = {
             "messages": messages,
@@ -474,10 +841,111 @@ async def chat_stream(request: Request):
             "current_code": body.get("current_code", ""),
             "current_task": current_task,
             "current_engine": current_engine,
+            "tenant_id": permission_context.get("tenant_id", ""),
+            "user_id": permission_context.get("user_id", ""),
+            "team_id": permission_context.get("team_id", ""),
+            "project_id": permission_context.get("project_id", ""),
+            "permission_context": permission_context,
+            "run_id": run_id,
+            "conversation_id": conversation_id or "",
+            "memory_context": {
+                "conversation": conversation_memory,
+                "long_term_preferences": long_term_preferences,
+            },
+            "cost_estimate": runtime_guard["estimated_cost"],
         }
+        audit_event_buffer.append(
+            {
+                "type": "runtime.guard.evaluated",
+                "actor_user_id": permission_context.get("user_id"),
+                "tenant_id": permission_context.get("tenant_id"),
+                "project_id": permission_context.get("project_id"),
+                "message": "Runtime guard evaluated request budget.",
+                "metadata": {
+                    "reason": runtime_guard["reason"],
+                    "estimated_input_tokens": runtime_guard["estimated_input_tokens"],
+                    "estimated_output_tokens": runtime_guard["estimated_output_tokens"],
+                    "estimated_total_tokens": runtime_guard["estimated_total_tokens"],
+                    "estimated_cost": runtime_guard["estimated_cost"],
+                    "degraded": runtime_guard["degraded"],
+                    "degradation_reason": runtime_guard["degradation_reason"],
+                },
+            }
+        )
+        if runtime_guard["degraded"]:
+            audit_event_buffer.append(
+                {
+                    "type": "runtime.degraded",
+                    "actor_user_id": permission_context.get("user_id"),
+                    "tenant_id": permission_context.get("tenant_id"),
+                    "project_id": permission_context.get("project_id"),
+                    "message": "Request was degraded to concise output because estimated token usage is high.",
+                    "metadata": {
+                        "degradation_reason": runtime_guard["degradation_reason"],
+                        "estimated_total_tokens": runtime_guard["estimated_total_tokens"],
+                    },
+                }
+            )
+        audit_event_buffer.append(
+            {
+                "type": "tenant.budget.evaluated",
+                "actor_user_id": permission_context.get("user_id"),
+                "tenant_id": permission_context.get("tenant_id"),
+                "project_id": permission_context.get("project_id"),
+                "message": "Tenant budget evaluated request projection.",
+                "metadata": budget_guard,
+            }
+        )
+        audit_event_buffer.append(
+            {
+                "type": "conversation.memory.loaded",
+                "actor_user_id": permission_context.get("user_id"),
+                "tenant_id": permission_context.get("tenant_id"),
+                "project_id": permission_context.get("project_id"),
+                "message": "Short-term conversation memory loaded for Agent context.",
+                "metadata": {
+                    "status": conversation_memory.get("status", "empty"),
+                    "reason": conversation_memory.get("reason", ""),
+                    "summary_present": bool(conversation_memory.get("summary")),
+                    "recent_count": len(conversation_memory.get("recent_messages") or []),
+                    "current_diagram_version_id": (
+                        conversation_memory.get("current_diagram_version_id")
+                        or (conversation_memory.get("context") or {}).get("current_diagram_version_id")
+                        or ""
+                    ),
+                },
+            }
+        )
+        audit_event_buffer.append(
+            {
+                "type": "preference.memory.loaded",
+                "actor_user_id": permission_context.get("user_id"),
+                "tenant_id": permission_context.get("tenant_id"),
+                "project_id": permission_context.get("project_id"),
+                "message": "Long-term artifact preferences loaded for Agent context.",
+                "metadata": {
+                    "status": long_term_preferences.get("status", "empty"),
+                    "reason": long_term_preferences.get("reason", ""),
+                    "sources": long_term_preferences.get("sources", {}),
+                    "keys": sorted((long_term_preferences.get("preferences") or {}).keys()),
+                },
+            }
+        )
 
         try:
+            yield f"data: {json.dumps({'type': 'conversation', 'conversation_id': conversation_id}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'agent_run', 'run_id': run_id}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'runtime_guard', **runtime_guard}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'budget_guard', **budget_guard}, ensure_ascii=False)}\n\n"
+            conversation_memory_event = _build_conversation_memory_event(conversation_memory)
+            if conversation_memory_event:
+                yield f"data: {json.dumps(conversation_memory_event, ensure_ascii=False)}\n\n"
+            preferences_event = _build_long_term_preferences_event(long_term_preferences)
+            if preferences_event:
+                yield f"data: {json.dumps(preferences_event, ensure_ascii=False)}\n\n"
             async for event in graph.astream_events(input_state, version="v2"):
+                trace_recorder.observe_langgraph_event(event)
+                loop_guard.observe_event(event)
                 kind = event.get("event")
                 name = event.get("name", "")
 
@@ -491,30 +959,151 @@ async def chat_stream(request: Request):
                                 yield f"data: {json.dumps({'type': 'status', 'step_id': 'llm', 'action': 'end'}, ensure_ascii=False)}\n\n"
                             parsed_events = parser.feed(text)
                             for pe in parsed_events:
-                                if pe.get("type") == "code_start":
-                                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'generating', 'content': '生成与绘制图表', 'action': 'start'}, ensure_ascii=False)}\n\n"
+                                if pe.get("type") == "design":
+                                    design_buffer += pe.get("content", "")
+                                elif pe.get("type") == "text":
+                                    assistant_content += pe.get("content", "")
+                                elif pe.get("type") == "code_start":
+                                    generating_label = "生成办公产物" if is_office_artifact(current_engine_name) else "生成与绘制图表"
+                                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'generating', 'content': generating_label, 'action': 'start'}, ensure_ascii=False)}\n\n"
                                 elif pe.get("type") == "code_complete":
                                     yield f"data: {json.dumps({'type': 'status', 'step_id': 'generating', 'action': 'end'}, ensure_ascii=False)}\n\n"
                                     if current_engine_name == "drawio":
                                         pe["content"] = sanitize_drawio_xml(pe["content"])
+                                    latest_code = pe.get("content", "")
+                                    validation = validate_output(
+                                        current_engine_name,
+                                        pe.get("content", ""),
+                                    )
+                                    validation_event = {"type": "validation", **validation}
+                                    validation_events.append(validation_event)
+                                    yield f"data: {json.dumps(validation_event, ensure_ascii=False)}\n\n"
                                 yield f"data: {json.dumps(pe, ensure_ascii=False)}\n\n"
 
                 elif kind == "on_chain_end" and name == "router":
                     in_router = False
                     output = event.get("data", {}).get("output", {})
                     if isinstance(output, dict):
-                        current_task_name = output.get("task_type", "") or current_task_name
-                        current_engine_name = output.get("engine_type", "") or current_engine_name
+                        route_engine = output.get("engine_type", "") or output.get("intent", "")
+                        route_task = output.get("task_type", "") or get_task_for_engine(route_engine)
+                        current_task_name = route_task or current_task_name
+                        current_engine_name = route_engine or current_engine_name
                         if current_task_name or current_engine_name:
                             yield f"data: {json.dumps({'type': 'route', 'task': current_task_name, 'engine': current_engine_name}, ensure_ascii=False)}\n\n"
+                            if not execution_plan_sent:
+                                execution_plan = build_default_execution_plan(
+                                    current_task_name,
+                                    current_engine_name,
+                                )
+                                execution_plan_events = steps_to_events(execution_plan)
+                                yield f"data: {json.dumps({'type': 'execution_plan', 'steps': execution_plan_events}, ensure_ascii=False)}\n\n"
+                                execution_plan_sent = True
                     yield f"data: {json.dumps({'type': 'status', 'step_id': 'router', 'action': 'end'}, ensure_ascii=False)}\n\n"
+
+                elif kind == "on_chain_end" and name == "knowledge_agent":
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict):
+                        audit_event_buffer.extend(output.get("audit_events") or [])
+                        tool_call_buffer.extend(output.get("tool_calls") or [])
+                        knowledge_event = _build_knowledge_context_event(output)
+                        if knowledge_event:
+                            yield f"data: {json.dumps(knowledge_event, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'knowledge', 'action': 'end'}, ensure_ascii=False)}\n\n"
+
+                elif kind == "on_chain_end" and name == "planner_agent":
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict):
+                        audit_event_buffer.extend(output.get("audit_events") or [])
+                        tool_call_buffer.extend(output.get("tool_calls") or [])
+                        if output.get("execution_plan"):
+                            execution_plan_events = steps_to_events(output.get("execution_plan") or [])
+                            yield f"data: {json.dumps({'type': 'execution_plan', 'steps': execution_plan_events}, ensure_ascii=False)}\n\n"
+                        planner_event = _build_planner_event(output)
+                        if planner_event:
+                            yield f"data: {json.dumps(planner_event, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'planner', 'action': 'end'}, ensure_ascii=False)}\n\n"
+
+                elif kind == "on_chain_end" and name == "validator_agent":
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict):
+                        audit_event_buffer.extend(output.get("audit_events") or [])
+                        tool_call_buffer.extend(output.get("tool_calls") or [])
+                        validator_event = _build_validator_event(output)
+                        if validator_event:
+                            yield f"data: {json.dumps(validator_event, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'validator', 'action': 'end'}, ensure_ascii=False)}\n\n"
+
+                elif kind == "on_chain_end" and name == "repair_agent":
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict):
+                        audit_event_buffer.extend(output.get("audit_events") or [])
+                        tool_call_buffer.extend(output.get("tool_calls") or [])
+                        repair = (output.get("memory_context") or {}).get("repair") or {}
+                        if repair.get("repaired") and repair.get("repaired_code"):
+                            repair_code_override = repair.get("repaired_code", "")
+                        repair_event = _build_repair_event(output)
+                        if repair_event:
+                            yield f"data: {json.dumps(repair_event, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'repair', 'action': 'end'}, ensure_ascii=False)}\n\n"
+
+                elif kind == "on_chain_end" and name == "consistency_agent":
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict):
+                        audit_event_buffer.extend(output.get("audit_events") or [])
+                        tool_call_buffer.extend(output.get("tool_calls") or [])
+                        consistency = (output.get("memory_context") or {}).get("consistency") or {}
+                        consistency_needs_user_input = bool(consistency.get("needs_user_input"))
+                        consistency_event = _build_consistency_event(output)
+                        if consistency_event:
+                            consistency_event_payload = consistency_event
+                            validation_events.append({"type": "knowledge_consistency", **consistency_event})
+                            yield f"data: {json.dumps(consistency_event, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'consistency', 'action': 'end'}, ensure_ascii=False)}\n\n"
+
+                elif kind == "on_chain_end" and name == "design_agent":
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict):
+                        audit_event_buffer.extend(output.get("audit_events") or [])
+                        tool_call_buffer.extend(output.get("tool_calls") or [])
+                        design = (output.get("memory_context") or {}).get("design") or {}
+                        if design.get("changed") and design.get("designed_code"):
+                            design_code_override = design.get("designed_code", "")
+                        design_event = _build_design_agent_event(output)
+                        if design_event:
+                            yield f"data: {json.dumps(design_event, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'designer', 'action': 'end'}, ensure_ascii=False)}\n\n"
+
+                elif kind == "on_chain_end" and name == "export_agent":
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict):
+                        audit_event_buffer.extend(output.get("audit_events") or [])
+                        tool_call_buffer.extend(output.get("tool_calls") or [])
+                        export_event = _build_export_plan_event(output)
+                        if export_event:
+                            yield f"data: {json.dumps(export_event, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'status', 'step_id': 'export', 'action': 'end'}, ensure_ascii=False)}\n\n"
 
                 elif kind == "on_chain_start":
                     if name == "router":
                         in_router = True
                         yield f"data: {json.dumps({'type': 'status', 'step_id': 'router', 'content': '分析修改意图', 'action': 'start'}, ensure_ascii=False)}\n\n"
+                    elif name == "planner_agent":
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'planner', 'content': '拆解任务与制定生成计划', 'action': 'start'}, ensure_ascii=False)}\n\n"
+                    elif name == "knowledge_agent":
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'knowledge', 'content': '检索企业知识上下文', 'action': 'start'}, ensure_ascii=False)}\n\n"
+                    elif name == "design_agent":
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'designer', 'content': '优化布局、样式和可读性', 'action': 'start'}, ensure_ascii=False)}\n\n"
+                    elif name == "validator_agent":
+                        label = "校验办公产物结构与输出安全" if is_office_artifact(current_engine_name) else "校验图表结构与输出安全"
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'validator', 'content': label, 'action': 'start'}, ensure_ascii=False)}\n\n"
+                    elif name == "repair_agent":
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'repair', 'content': '修复可自动纠正的输出问题', 'action': 'start'}, ensure_ascii=False)}\n\n"
+                    elif name == "consistency_agent":
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'consistency', 'content': '检查与企业知识约束的一致性', 'action': 'start'}, ensure_ascii=False)}\n\n"
+                    elif name == "export_agent":
+                        yield f"data: {json.dumps({'type': 'status', 'step_id': 'export', 'content': '准备导出计划', 'action': 'start'}, ensure_ascii=False)}\n\n"
                     elif name.endswith("_agent"):
-                        current_engine_name = name.replace("_agent", "")
+                        current_engine_name = current_engine_name if name == "office_artifact_agent" else name.replace("_agent", "")
                         if not current_task_name:
                             current_task_name = get_task_for_engine(current_engine_name)
                         yield f"data: {json.dumps({'type': 'agent', 'name': current_engine_name, 'task': current_task_name}, ensure_ascii=False)}\n\n"
@@ -526,7 +1115,10 @@ async def chat_stream(request: Request):
                             "mindmap": "思维导图",
                             "charts": "ECharts 数据图表",
                             "drawio": "Draw.io 架构图",
-                            "infographic": "可视化信息图"
+                            "infographic": "可视化信息图",
+                            "html_email": "HTML 邮件",
+                            "web_report_html": "HTML 网页分析稿",
+                            "office_artifact": "办公产物",
                         }.get(current_engine_name, "图表")
                         yield f"data: {json.dumps({'type': 'status', 'step_id': 'agent', 'content': f'调配 {engine_zh} 专家', 'action': 'start'}, ensure_ascii=False)}\n\n"
 
@@ -536,13 +1128,172 @@ async def chat_stream(request: Request):
                         yield f"data: {json.dumps({'type': 'status', 'step_id': 'llm', 'content': '构思方案与设计', 'action': 'start'}, ensure_ascii=False)}\n\n"
 
             for pe in parser.flush():
+                if pe.get("type") == "design":
+                    design_buffer += pe.get("content", "")
+                elif pe.get("type") == "text":
+                    assistant_content += pe.get("content", "")
                 if pe.get("type") == "code_complete":
                     yield f"data: {json.dumps({'type': 'status', 'step_id': 'generating', 'action': 'end'}, ensure_ascii=False)}\n\n"
+                    if current_engine_name == "drawio":
+                        pe["content"] = sanitize_drawio_xml(pe["content"])
+                    latest_code = pe.get("content", "")
+                    validation = validate_output(
+                        current_engine_name,
+                        pe.get("content", ""),
+                    )
+                    validation_event = {"type": "validation", **validation}
+                    validation_events.append(validation_event)
+                    yield f"data: {json.dumps(validation_event, ensure_ascii=False)}\n\n"
                 yield f"data: {json.dumps(pe, ensure_ascii=False)}\n\n"
 
+            final_code_override = repair_code_override or design_code_override
+            if final_code_override and final_code_override != latest_code:
+                latest_code = final_code_override
+                validation = validate_output(current_engine_name, latest_code)
+                validation_event = {"type": "validation", **validation}
+                validation_events.append(validation_event)
+                yield f"data: {json.dumps(validation_event, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'code_complete', 'content': latest_code}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'code_end'}, ensure_ascii=False)}\n\n"
+
+            if consistency_needs_user_input:
+                assistant_content += "\n\n生成结果与企业知识约束存在冲突，已停止自动导出，等待人工确认。"
+
+            saved_diagram = await persist_generated_diagram(
+                permission_context=permission_context,
+                conversation_id=conversation_id,
+                user_message=user_message,
+                assistant_content=assistant_content,
+                diagram_code=latest_code,
+                design_concept=design_buffer,
+                task_type=current_task_name,
+                engine_type=current_engine_name,
+                validation_events=validation_events,
+                run_id=run_id,
+                diagram_id=current_diagram_id,
+            )
+            if saved_diagram:
+                yield f"data: {json.dumps({'type': 'diagram_saved', **saved_diagram}, ensure_ascii=False)}\n\n"
+                if consistency_needs_user_input:
+                    try:
+                        async with async_session() as session:
+                            approval = await create_human_approval_request(
+                                session,
+                                permission_context=permission_context,
+                                approval_type="knowledge_consistency",
+                                reason="Generated diagram conflicts with explicit enterprise knowledge constraints.",
+                                resource_json={
+                                    "kind": "diagram",
+                                    "diagram_id": saved_diagram.get("diagram_id"),
+                                    "diagram_version_id": saved_diagram.get("diagram_version_id"),
+                                    "version_number": saved_diagram.get("version_number"),
+                                    "engine_type": current_engine_name,
+                                    "task_type": current_task_name,
+                                    "code_hash": hashlib.sha256(latest_code.encode("utf-8")).hexdigest(),
+                                    "consistency": consistency_event_payload or {},
+                                },
+                                conversation_id=conversation_id,
+                                agent_run_id=run_id,
+                                required_scope="approval:write",
+                            )
+                            await session.commit()
+                            yield f"data: {json.dumps({'type': 'human_approval_required', **serialize_approval_request(approval)}, ensure_ascii=False)}\n\n"
+                    except Exception as exc:
+                        logger.warning(f"Human approval request persistence skipped: {exc}")
+
+            trace_spans = trace_recorder.finish(status=stream_status)
+            audit_event_buffer.append(trace_recorder.to_audit_event(trace_spans))
+            await persist_agent_run_finish(
+                run_id=run_id,
+                permission_context=permission_context,
+                status=stream_status,
+                task_type=current_task_name,
+                engine_type=current_engine_name,
+                execution_plan=execution_plan_events,
+                validation_events=validation_events,
+                audit_events=audit_event_buffer,
+                tool_calls=tool_call_buffer,
+                error_message=stream_error,
+                conversation_id=conversation_id,
+                token_usage={
+                    "estimated_input_tokens": runtime_guard["estimated_input_tokens"],
+                    "estimated_output_tokens": runtime_guard["estimated_output_tokens"],
+                    "estimated_total_tokens": runtime_guard["estimated_total_tokens"],
+                    "stream_event_count": loop_guard.event_count,
+                },
+                cost_estimate=runtime_guard["estimated_cost"],
+                trace_spans=trace_spans,
+            )
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
+        except RuntimeGuardError as e:
+            stream_status = "failed"
+            stream_error = str(e)
+            audit_event_buffer.append(
+                {
+                    "type": "runtime.loop_guard.triggered",
+                    "actor_user_id": permission_context.get("user_id"),
+                    "tenant_id": permission_context.get("tenant_id"),
+                    "project_id": permission_context.get("project_id"),
+                    "message": stream_error,
+                    "metadata": {
+                        "stream_event_count": loop_guard.event_count,
+                        "chain_start_counts": dict(loop_guard.chain_start_counts),
+                    },
+                }
+            )
+            trace_spans = trace_recorder.finish(status=stream_status)
+            audit_event_buffer.append(trace_recorder.to_audit_event(trace_spans))
+            await persist_agent_run_finish(
+                run_id=run_id,
+                permission_context=permission_context,
+                status=stream_status,
+                task_type=current_task_name,
+                engine_type=current_engine_name,
+                execution_plan=execution_plan_events,
+                validation_events=validation_events,
+                audit_events=audit_event_buffer,
+                tool_calls=tool_call_buffer,
+                error_message=stream_error,
+                conversation_id=conversation_id,
+                token_usage={
+                    "estimated_input_tokens": runtime_guard["estimated_input_tokens"],
+                    "estimated_output_tokens": runtime_guard["estimated_output_tokens"],
+                    "estimated_total_tokens": runtime_guard["estimated_total_tokens"],
+                    "stream_event_count": loop_guard.event_count,
+                },
+                cost_estimate=runtime_guard["estimated_cost"],
+                trace_spans=trace_spans,
+            )
+            logger.error(f"Runtime guard error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
         except Exception as e:
+            stream_status = "failed"
+            stream_error = str(e)
+            trace_spans = trace_recorder.finish(status=stream_status)
+            audit_event_buffer.append(trace_recorder.to_audit_event(trace_spans))
+            await persist_agent_run_finish(
+                run_id=run_id,
+                permission_context=permission_context,
+                status=stream_status,
+                task_type=current_task_name,
+                engine_type=current_engine_name,
+                execution_plan=execution_plan_events,
+                validation_events=validation_events,
+                audit_events=audit_event_buffer,
+                tool_calls=tool_call_buffer,
+                error_message=stream_error,
+                conversation_id=conversation_id,
+                token_usage={
+                    "estimated_input_tokens": runtime_guard["estimated_input_tokens"],
+                    "estimated_output_tokens": runtime_guard["estimated_output_tokens"],
+                    "estimated_total_tokens": runtime_guard["estimated_total_tokens"],
+                    "stream_event_count": loop_guard.event_count,
+                },
+                cost_estimate=runtime_guard["estimated_cost"],
+                trace_spans=trace_spans,
+            )
             logger.error(f"Stream error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 

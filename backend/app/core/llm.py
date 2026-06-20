@@ -53,6 +53,7 @@ def create_llm(
     base_url: str | None = None,
     temperature: float | None = None,
     max_tokens: int | None = None,
+    request_timeout: int | None = None,
 ) -> BaseChatModel:
     """
     Create a ChatOpenAI or ChatVertexAI instance with the given or default configuration.
@@ -66,6 +67,7 @@ def create_llm(
     final_model = (model or "").strip() or settings.MODEL_ID
     final_temp = temperature if temperature is not None else settings.TEMPERATURE
     final_tokens = max_tokens if max_tokens is not None else settings.MAX_TOKENS
+    final_timeout = request_timeout if request_timeout is not None else settings.LLM_REQUEST_TIMEOUT_SECONDS
 
     # Check if Vertex AI / Google AI is enabled and routing is requested for Gemini
     if os.getenv("USE_VERTEX_AI") == "true" and final_model and ("gemini" in final_model.lower()):
@@ -98,8 +100,8 @@ def create_llm(
         model=final_model,
         temperature=final_temp,
         streaming=True,
-        request_timeout=45,
-        max_retries=1,
+        request_timeout=final_timeout,
+        max_retries=settings.LLM_MAX_RETRIES,
         max_tokens=final_tokens,
     )
 
@@ -142,4 +144,9 @@ def create_llm_for_agent(
         api_key=config.get("api_key"),
         base_url=config.get("base_url"),
         temperature=temperature,
+        request_timeout=(
+            settings.LLM_DRAWIO_REQUEST_TIMEOUT_SECONDS
+            if agent_name == "drawio"
+            else settings.LLM_REQUEST_TIMEOUT_SECONDS
+        ),
     )

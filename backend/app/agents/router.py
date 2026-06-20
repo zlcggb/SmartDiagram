@@ -43,6 +43,14 @@ ENGINE_DESCRIPTIONS = {
         "Best for infographic-style storytelling, visual summaries, KPI posters, executive one-pagers, "
         "and polished presentation templates. Output: AntV Infographic DSL."
     ),
+    "html_email": (
+        "Best for enterprise HTML emails, approval notices, executive updates, blueprint reviews, "
+        "and communication-ready office artifacts. Output: governed HTML artifact DSL for email."
+    ),
+    "web_report_html": (
+        "Best for browser-readable HTML reports, analysis briefs, proposal pages, management summaries, "
+        "and office-style web documents. Output: governed HTML artifact DSL for web reports."
+    ),
     "general": (
         "Handles greetings, general questions, or requests that don't fit other agents."
     ),
@@ -77,6 +85,14 @@ TASK_ROUTING_HINTS = {
     "infographic": [
         "信息图", "海报", "kpi海报", "一页报告", "宣传图", "visual summary", "infographic",
     ],
+    "html_email": [
+        "html 邮件", "html邮件", "邮件模板", "企业邮件", "审批邮件", "通知邮件",
+        "战报邮件", "周报邮件", "email template", "html email", "newsletter",
+    ],
+    "web_report_html": [
+        "html 报告", "html报告", "网页报告", "网页分析稿", "web report", "html report",
+        "管理层摘要", "方案页", "分析稿", "briefing page", "proposal page",
+    ],
 }
 
 # Explicit @tag to agent mapping
@@ -102,6 +118,12 @@ EXPLICIT_MAPPINGS = {
     "@topology": "drawio",
     "@infographic": "infographic",
     "@infograph": "infographic",
+    "@html_email": "html_email",
+    "@email": "html_email",
+    "@mail": "html_email",
+    "@web_report_html": "web_report_html",
+    "@web_report": "web_report_html",
+    "@report_html": "web_report_html",
 }
 
 
@@ -159,7 +181,7 @@ async def router_node(state: AgentState) -> dict:
                 ).strip()
                 cleaned = re.sub(r"<existing_code>[\s\S]*?</existing_code>", "", cleaned).strip()
                 if not cleaned:
-                    cleaned = f"Generate a default {agent_name} diagram."
+                    cleaned = f"Generate a default {agent_name} artifact."
                 if isinstance(last_message.content, list):
                     for part in last_message.content:
                         if isinstance(part, dict) and part.get("type") == "text":
@@ -168,7 +190,11 @@ async def router_node(state: AgentState) -> dict:
                 else:
                     last_message.content = cleaned
                 logger.info(f"⏱️ Router (@tag shortcut) took {_time.time()-_t0:.1f}s → {agent_name}")
-                return {"intent": agent_name}
+                return {
+                    "task_type": ENGINE_TO_TASK.get(agent_name, "general"),
+                    "engine_type": agent_name,
+                    "intent": agent_name,
+                }
 
     current_task = state.get("current_task", "")
     current_engine = state.get("current_engine", "")
@@ -212,7 +238,7 @@ Analyze the user's request and classify the intent to route to the best agent.
 Available agents:
 {desc_text}
 
-Respond with ONLY one keyword: 'excalidraw', 'mermaid', 'flow', 'mindmap', 'charts', 'drawio', 'infographic', or 'general'.
+Respond with ONLY one keyword: 'excalidraw', 'mermaid', 'flow', 'mindmap', 'charts', 'drawio', 'infographic', 'html_email', 'web_report_html', or 'general'.
 """
 
     logger.info(f"⏱️ Router: keyword match failed, calling LLM for classification...")
@@ -248,6 +274,7 @@ def route_decision(
     "charts_agent",
     "drawio_agent",
     "infographic_agent",
+    "office_artifact_agent",
     "general_agent",
 ]:
     """Map intent string to agent node name."""
@@ -259,6 +286,8 @@ def route_decision(
         "charts": "charts_agent",
         "drawio": "drawio_agent",
         "infographic": "infographic_agent",
+        "html_email": "office_artifact_agent",
+        "web_report_html": "office_artifact_agent",
         "general": "general_agent",
     }
     return mapping.get(state.get("engine_type", "") or state.get("intent", ""), "general_agent")
