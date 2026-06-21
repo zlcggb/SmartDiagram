@@ -32,8 +32,8 @@ class Settings:
     RUNTIME_DEGRADE_TOKEN_THRESHOLD: int = int(os.getenv("RUNTIME_DEGRADE_TOKEN_THRESHOLD", "18000"))
     RUNTIME_MAX_STREAM_EVENTS: int = int(os.getenv("RUNTIME_MAX_STREAM_EVENTS", "2500"))
     RUNTIME_MAX_AGENT_REPEATS: int = int(os.getenv("RUNTIME_MAX_AGENT_REPEATS", "12"))
-    RUNTIME_INPUT_COST_PER_1K: float = float(os.getenv("RUNTIME_INPUT_COST_PER_1K", "0.00015"))
-    RUNTIME_OUTPUT_COST_PER_1K: float = float(os.getenv("RUNTIME_OUTPUT_COST_PER_1K", "0.00060"))
+    RUNTIME_INPUT_COST_PER_1K: float = float(os.getenv("RUNTIME_INPUT_COST_PER_1K", "0.0015"))   # Gemini 3.5 Flash: $1.50/M
+    RUNTIME_OUTPUT_COST_PER_1K: float = float(os.getenv("RUNTIME_OUTPUT_COST_PER_1K", "0.009"))   # Gemini 3.5 Flash: $9.00/M
     TENANT_DEFAULT_MONTHLY_COST_LIMIT: float = float(os.getenv("TENANT_DEFAULT_MONTHLY_COST_LIMIT", "25.0"))
     TENANT_DEFAULT_MONTHLY_TOKEN_LIMIT: int = int(os.getenv("TENANT_DEFAULT_MONTHLY_TOKEN_LIMIT", "5000000"))
     TENANT_BUDGET_HARD_LIMIT: bool = os.getenv("TENANT_BUDGET_HARD_LIMIT", "true").lower() == "true"
@@ -42,6 +42,18 @@ class Settings:
     USAGE_ROLLUP_REFRESH_INTERVAL_SECONDS: int = int(os.getenv("USAGE_ROLLUP_REFRESH_INTERVAL_SECONDS", "900"))
     WORKER_STALE_JOB_TIMEOUT_SECONDS: int = int(os.getenv("WORKER_STALE_JOB_TIMEOUT_SECONDS", "1800"))
     WORKER_STALE_JOB_ACTION: str = os.getenv("WORKER_STALE_JOB_ACTION", "requeue")
+
+    # Local auth gateway
+    AUTH_LOCAL_LOGIN_ENABLED: bool = os.getenv("AUTH_LOCAL_LOGIN_ENABLED", "true").lower() == "true"
+    AUTH_SESSION_SECRET: str = os.getenv(
+        "AUTH_SESSION_SECRET",
+        "smartdiagram-dev-session-secret-change-me",
+    )
+    AUTH_SESSION_TTL_SECONDS: int = int(os.getenv("AUTH_SESSION_TTL_SECONDS", "43200"))
+    AUTH_DEMO_USER_EMAIL: str = os.getenv("AUTH_DEMO_USER_EMAIL", "user@smartdiagram.local")
+    AUTH_DEMO_USER_PASSWORD: str = os.getenv("AUTH_DEMO_USER_PASSWORD", "user123456")
+    AUTH_DEMO_ADMIN_EMAIL: str = os.getenv("AUTH_DEMO_ADMIN_EMAIL", "admin@smartdiagram.local")
+    AUTH_DEMO_ADMIN_PASSWORD: str = os.getenv("AUTH_DEMO_ADMIN_PASSWORD", "admin123456")
 
     # Database
     DATABASE_URL: str = os.getenv(

@@ -5,25 +5,34 @@ import {
   CheckCircle,
   ChevronRight,
   Languages,
+  LogOut,
   Loader2,
   Moon,
   Palette,
   Settings2,
+  ShieldCheck,
   SlidersHorizontal,
   Sun,
   Trash2,
+  UserRound,
+  Users,
   X,
 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useT } from '../../i18n';
 import OpsDashboard from '../ops/OpsDashboard';
 import DiagramPreferencesPanel from './DiagramPreferencesPanel';
+import UserManagementPanel from './UserManagementPanel';
+import { canReadOps } from '../../config/enterpriseContext';
+import { isAdminSession, type AuthSession } from '../../config/auth';
 
-type SettingsSection = 'appearance' | 'model' | 'preferences' | 'ops' | 'session';
+type SettingsSection = 'appearance' | 'model' | 'preferences' | 'ops' | 'users' | 'session';
 
 interface SettingsModalProps {
   open: boolean;
+  authSession: AuthSession;
   onClose: () => void;
+  onLogout: () => void;
   onClearConversation: () => void;
 }
 
@@ -36,7 +45,9 @@ interface NavItem {
 
 export default function SettingsModal({
   open,
+  authSession,
   onClose,
+  onLogout,
   onClearConversation,
 }: SettingsModalProps) {
   const { modelConfig, setModelConfig, canvasMode, setCanvasMode } = useChatStore();
@@ -60,38 +71,51 @@ export default function SettingsModal({
     }
   }, [open, modelConfig]);
 
-  const navItems = useMemo<NavItem[]>(() => [
-    {
-      id: 'appearance',
-      icon: Palette,
-      label: t('settings.nav.appearance'),
-      description: t('settings.appearanceDescription'),
-    },
-    {
-      id: 'model',
-      icon: Settings2,
-      label: t('settings.nav.model'),
-      description: t('settings.modelDescription'),
-    },
-    {
-      id: 'preferences',
-      icon: SlidersHorizontal,
-      label: t('settings.nav.preferences'),
-      description: t('settings.preferencesDescription'),
-    },
-    {
-      id: 'ops',
-      icon: Activity,
-      label: t('settings.nav.ops'),
-      description: t('settings.opsDescription'),
-    },
-    {
+  const navItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = [
+      {
+        id: 'appearance',
+        icon: Palette,
+        label: t('settings.nav.appearance'),
+        description: t('settings.appearanceDescription'),
+      },
+      {
+        id: 'model',
+        icon: Settings2,
+        label: t('settings.nav.model'),
+        description: t('settings.modelDescription'),
+      },
+      {
+        id: 'preferences',
+        icon: SlidersHorizontal,
+        label: t('settings.nav.preferences'),
+        description: t('settings.preferencesDescription'),
+      },
+    ];
+    if (canReadOps()) {
+      items.push({
+        id: 'ops',
+        icon: Activity,
+        label: t('settings.nav.ops'),
+        description: t('settings.opsDescription'),
+      });
+    }
+    if (isAdminSession(authSession)) {
+      items.push({
+        id: 'users',
+        icon: Users,
+        label: t('settings.nav.users'),
+        description: t('settings.usersDescription'),
+      });
+    }
+    items.push({
       id: 'session',
-      icon: Trash2,
+      icon: UserRound,
       label: t('settings.nav.session'),
       description: t('settings.sessionDescription'),
-    },
-  ], [t]);
+    });
+    return items;
+  }, [t]);
 
   const activeItem = navItems.find((item) => item.id === activeSection) || navItems[0];
 
@@ -149,6 +173,13 @@ export default function SettingsModal({
       ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
       : 'border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800'
   }`;
+  const isAdmin = isAdminSession(authSession);
+  const roleLabel = isAdmin ? t('auth.adminUser') : t('auth.normalUser');
+  const userDisplayName = authSession.user.display_name || authSession.user.email;
+  const handleLogout = () => {
+    onClose();
+    onLogout();
+  };
 
   const renderSectionHeader = (title: string, description: string) => (
     <div className="mb-5">
@@ -287,8 +318,57 @@ export default function SettingsModal({
   );
 
   const renderSession = () => (
-    <div>
+    <div className="space-y-5">
       {renderSectionHeader(t('settings.sessionTitle'), t('settings.sessionDescription'))}
+      <div className={`rounded-lg border p-5 ${cardClass}`}>
+        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${
+              isAdmin
+                ? isLight ? 'bg-blue-50 text-blue-600' : 'bg-blue-500/10 text-blue-200'
+                : isLight ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-300'
+            }`}>
+              {isAdmin ? <ShieldCheck className="h-6 w-6" /> : <UserRound className="h-6 w-6" />}
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-base font-semibold">{userDisplayName}</h3>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  isAdmin
+                    ? isLight ? 'bg-blue-50 text-blue-700' : 'bg-blue-500/10 text-blue-200'
+                    : isLight ? 'bg-slate-100 text-slate-700' : 'bg-slate-800 text-slate-200'
+                }`}>
+                  {roleLabel}
+                </span>
+              </div>
+              <div className={`mt-1 text-sm ${mutedClass}`}>{authSession.user.email}</div>
+              <div className={`mt-3 flex flex-wrap gap-2 text-[11px] ${mutedClass}`}>
+                <span className={`rounded-md px-2 py-1 ${isLight ? 'bg-slate-50' : 'bg-slate-900'}`}>
+                  {t('auth.tenant')}: {authSession.user.tenant_id}
+                </span>
+                <span className={`rounded-md px-2 py-1 ${isLight ? 'bg-slate-50' : 'bg-slate-900'}`}>
+                  {t('auth.project')}: {authSession.user.project_id}
+                </span>
+                <span className={`rounded-md px-2 py-1 ${isLight ? 'bg-slate-50' : 'bg-slate-900'}`}>
+                  {t('auth.scopeCount', { count: authSession.user.scopes.length })}
+                </span>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className={`inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border px-3 text-[12px] font-semibold transition-colors ${
+              isLight
+                ? 'border-rose-200 bg-white text-rose-700 hover:bg-rose-50'
+                : 'border-rose-500/30 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20'
+            }`}
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            {t('auth.logout')}
+          </button>
+        </div>
+      </div>
       <div className={`rounded-lg border p-5 ${isLight ? 'border-rose-100 bg-white' : 'border-rose-500/20 bg-rose-500/5'}`}>
         <div className="flex items-start gap-3">
           <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${isLight ? 'bg-rose-50 text-rose-600' : 'bg-rose-500/10 text-rose-200'}`}>
@@ -322,6 +402,9 @@ export default function SettingsModal({
     }
     if (activeSection === 'ops') {
       return <OpsDashboard open onClose={() => setActiveSection('appearance')} embedded />;
+    }
+    if (activeSection === 'users') {
+      return <UserManagementPanel open onClose={() => setActiveSection('appearance')} embedded />;
     }
     return renderSession();
   };

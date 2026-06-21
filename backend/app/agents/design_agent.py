@@ -7,6 +7,7 @@ from typing import Any
 from langchain_core.messages import AIMessage
 
 from app.agents.validator_agent import extract_final_code_from_state
+from app.services.mermaid_sanitizer import normalize_mermaid_code
 from app.state.state import AgentState
 
 
@@ -242,10 +243,7 @@ def _optimize_excalidraw(content: str) -> tuple[str, list[str]]:
 
 
 def _optimize_mermaid(content: str) -> tuple[str, list[str]]:
-    cleaned = _strip_code_fences(content)
-    cleaned = "\n".join(line.rstrip() for line in cleaned.splitlines()).strip()
-    rules = ["mermaid.trimmed_code_fences"] if cleaned != content.strip() else []
-    return cleaned, rules
+    return normalize_mermaid_code(content)
 
 
 def _optimize_mindmap(content: str) -> tuple[str, list[str]]:

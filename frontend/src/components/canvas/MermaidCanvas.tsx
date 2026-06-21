@@ -7,8 +7,10 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import mermaid from 'mermaid';
+import { RefreshCw } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useT } from '../../i18n';
+import { normalizeMermaidCode, stabilizeMermaidFlowchartEdgeLabels } from '../../utils/mermaidSanitizer';
 
 const THEMES = [
   { id: 'default', labelKey: 'mermaid.theme.default', icon: '🎨' },
@@ -48,7 +50,20 @@ function balanceSequenceEndBlocks(code: string): string {
 }
 
 export default function MermaidCanvas() {
-  const { canvasCode, streamingCode, isStreaming, setCanvasCode, canvasMode, setCanvasMode } = useChatStore();
+  const {
+    canvasCode,
+    streamingCode,
+    isStreaming,
+    setCanvasCode,
+    canvasMode,
+    setCanvasMode,
+    canvasTask,
+    canvasEngine,
+    canvasDiagramId,
+    canvasDiagramVersionId,
+    canvasRenderRevision,
+    requestCanvasRenderRetry,
+  } = useChatStore();
   const { t } = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const svgWrapperRef = useRef<HTMLDivElement>(null);
@@ -96,6 +111,37 @@ export default function MermaidCanvas() {
   // Determine active mermaid code: use streamingCode during generation, canvasCode when done
   const codeToRender = (isStreaming && streamingCode) ? streamingCode : canvasCode;
 
+  const handleAutoRepairRetry = useCallback(() => {
+    const source = codeToRender || editorCode || canvasCode;
+    if (!source.trim()) return;
+    setError(null);
+    setHasRendered(false);
+    window.dispatchEvent(new CustomEvent('send-ai-message', {
+      detail: {
+        text: [
+          '@mermaid 请修复当前 Mermaid 图表并重新渲染。',
+          '要求：保留原业务内容、关键节点、分层结构和关系，不要降级为空图，不要删除核心节点，不要只改配色。',
+          '请针对 Mermaid 语法错误和布局渲染错误进行修复。不要使用 flowchart 边标签语法（例如 A -->|"关系"| B），请把关系文字改成独立关系节点，输出完整可渲染的 Mermaid 代码。',
+          error ? `当前渲染错误：${error}` : '',
+        ].filter(Boolean).join('\n'),
+        currentCode: source,
+        currentTask: canvasTask,
+        currentEngine: canvasEngine || 'mermaid',
+        currentDiagramId: canvasDiagramId,
+        currentDiagramVersionId: canvasDiagramVersionId,
+      },
+    }));
+  }, [
+    canvasCode,
+    canvasDiagramId,
+    canvasDiagramVersionId,
+    canvasEngine,
+    canvasTask,
+    codeToRender,
+    editorCode,
+    error,
+  ]);
+
   // Render mermaid
   useEffect(() => {
     if (!codeToRender) return;
@@ -105,7 +151,7 @@ export default function MermaidCanvas() {
 
     const render = async () => {
       try {
-        let code = codeToRender.trim();
+        let code = normalizeMermaidCode(codeToRender);
 
         // Handle streaming code: slice out incomplete trailing line to minimize syntax errors
         if (isStreaming) {
@@ -118,31 +164,58 @@ export default function MermaidCanvas() {
           code = balanceSequenceEndBlocks(code);
         }
 
-        if (code.startsWith('```')) {
-          code = code.replace(/^```\w*\n?/, '');
-          if (code.endsWith('```')) {
-            code = code.slice(0, -3).trim();
-          } else {
-            code = code.trim();
-          }
-        }
-        
         if (code.startsWith('[') || code.startsWith('{')) return;
         
         // Skip rendering if there are too few lines to form a valid diagram
         if (code.split('\n').length < 2) return;
 
-        // 创建临时 DOM 节点限制 Mermaid 的渲染行为，防止其在全局 body 产生残留炸弹报错
-        tempDiv = document.createElement('div');
-        tempDiv.id = `mermaid-temp-holder-${Date.now()}`;
-        tempDiv.style.display = 'none';
-        document.body.appendChild(tempDiv);
+        const stabilizedCode = stabilizeMermaidFlowchartEdgeLabels(code);
+        const candidateCodes = stabilizedCode && stabilizedCode !== code
+          ? [stabilizedCode, code]
+          : [code];
 
-        const id = `mermaid-${Date.now()}`;
-        const { svg } = await mermaid.render(id, code, tempDiv);
+        let svg = '';
+        let renderedCode = code;
+        let lastError: unknown = null;
+        for (let attempt = 0; attempt < candidateCodes.length; attempt++) {
+          const candidateCode = candidateCodes[attempt];
+          try {
+            // 创建临时 DOM 节点限制 Mermaid 的渲染行为，防止其在全局 body 产生残留炸弹报错
+            // 注意：不能用 display:none — Mermaid v11 内部需要容器参与布局计算（getBBox/firstChild），
+            // display:none 会导致 "Cannot read properties of null" 崩溃
+            tempDiv = document.createElement('div');
+            tempDiv.id = `mermaid-temp-holder-${Date.now()}-${attempt}`;
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.left = '-9999px';
+            tempDiv.style.top = '-9999px';
+            tempDiv.style.visibility = 'hidden';
+            document.body.appendChild(tempDiv);
+
+            const id = `mermaid-${Date.now()}-${attempt}`;
+            const rendered = await mermaid.render(id, candidateCode, tempDiv);
+            svg = rendered.svg;
+            renderedCode = candidateCode;
+            break;
+          } catch (renderError) {
+            lastError = renderError;
+          } finally {
+            if (tempDiv && document.body.contains(tempDiv)) {
+              document.body.removeChild(tempDiv);
+            }
+            tempDiv = null;
+          }
+        }
+
+        if (!svg) {
+          throw lastError || new Error('Mermaid render failed');
+        }
         
         if (containerRef.current) {
           containerRef.current.innerHTML = svg;
+          if (!isStreaming && renderedCode !== code) {
+            setCanvasCode(renderedCode);
+            setEditorCode(renderedCode);
+          }
           setError(null); // Clear errors on success
           
           // Only reset pan & zoom if this is the first rendering pass or final render
@@ -153,16 +226,23 @@ export default function MermaidCanvas() {
           }
           
           const svgEl = containerRef.current.querySelector('svg');
-          if (svgEl) {
-            svgEl.style.maxWidth = 'none';
-            svgEl.style.height = 'auto';
+          if (!svgEl) {
+            throw new Error('Mermaid returned an empty SVG');
           }
+          const visibleElementCount = svgEl.querySelectorAll('g,path,rect,text,polygon,circle,ellipse,line').length;
+          if (visibleElementCount === 0) {
+            throw new Error('Mermaid SVG has no visible elements');
+          }
+          svgEl.style.maxWidth = 'none';
+          svgEl.style.height = 'auto';
         }
       } catch (e: any) {
         console.warn('[MermaidCanvas] Intermediate parse/render error (ignored during streaming):', e);
         // Only trigger UI error state if NOT streaming to ensure fluid visual transitions
         if (!isStreaming) {
           setError(e.message || 'Mermaid render failed');
+          // 清空残留的半渲染 SVG，防止错误状态下显示空白
+          if (containerRef.current) containerRef.current.innerHTML = '';
         }
       } finally {
         // 销毁临时挂载节点
@@ -175,7 +255,9 @@ export default function MermaidCanvas() {
       }
     };
     render();
-  }, [isStreaming, codeToRender, theme, hasRendered]);
+  // hasRendered 仅在 effect 内部用于条件判断（是否重置 pan/zoom），不应作为触发依赖
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming, codeToRender, theme, canvasRenderRevision]);
 
   // Reset when canvas is cleared
   useEffect(() => {
@@ -187,12 +269,15 @@ export default function MermaidCanvas() {
     }
   }, [canvasCode]);
 
-  // Apply editor changes
+  // Apply editor changes — 始终强制重渲染，即使代码值未变也能从错误状态恢复
   const handleApplyEdit = useCallback(() => {
     if (editorCode.trim()) {
+      setError(null);
+      setHasRendered(false);
       setCanvasCode(editorCode.trim());
+      requestCanvasRenderRetry();
     }
-  }, [editorCode, setCanvasCode]);
+  }, [editorCode, setCanvasCode, requestCanvasRenderRetry]);
 
   // Keyboard shortcut: Cmd/Ctrl+Enter to apply
   const handleEditorKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -331,22 +416,32 @@ export default function MermaidCanvas() {
                   <pre className="text-xs whitespace-pre-wrap mt-1 text-red-300/80 max-h-40 overflow-auto bg-red-950/30 p-2 rounded">{canvasCode}</pre>
                 </details>
               )}
-              <button
-                onClick={() => setShowEditor(true)}
-                style={{
-                  marginTop: '10px',
-                  fontSize: '11px',
-                  padding: '4px 12px',
-                  background: '#ef4444',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                }}
-              >
-                {t('mermaid.openEditorFix')}
-              </button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleAutoRepairRetry}
+                  className="inline-flex items-center gap-1.5 rounded bg-red-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-red-600"
+                  title={t('mermaid.autoRepairRetryTitle')}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  {t('mermaid.autoRepairRetry')}
+                </button>
+                <button
+                  onClick={() => setShowEditor(true)}
+                  style={{
+                    fontSize: '11px',
+                    padding: '4px 12px',
+                    background: '#ef4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                  }}
+                >
+                  {t('mermaid.openEditorFix')}
+                </button>
+              </div>
             </div>
           </div>
         ) : isStreaming && !hasRendered ? (

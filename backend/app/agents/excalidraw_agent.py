@@ -85,6 +85,7 @@ Title text: `#1e40af`. Subtitle: `#3b82f6`. Detail: `#64748b`.
   "seed": 33333, "version": 1, "versionNonce": 44444,
   "isDeleted": false, "groupIds": [], "link": null, "locked": false,
   "points": [[0, 0], [120, 0]],
+  "roundness": {"type": 2},
   "startBinding": {"elementId": "elem1", "focus": 0, "gap": 2},
   "endBinding": {"elementId": "elem2", "focus": 0, "gap": 2},
   "startArrowhead": null, "endArrowhead": "arrow"

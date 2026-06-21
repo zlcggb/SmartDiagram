@@ -12,7 +12,8 @@
  * ALL styles are pure Tailwind v4 utility classes.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Send, Loader2, Settings, SquarePen,
   ChevronDown, ChevronUp, ChevronRight,
@@ -22,8 +23,6 @@ import {
   Database,
   Activity,
   AlertCircle,
-  FileDiff,
-  GitBranch,
   RotateCcw,
   History,
   Search,
@@ -53,12 +52,14 @@ import { API_BASE, enterpriseBodyContext, enterpriseHeaders } from '../../config
 import { useT } from '../../i18n';
 import {
   DIAGRAM_AGENTS,
+  VISIBLE_DIAGRAM_AGENTS,
   getAgentDisplayName,
   getTaskByEngine,
   getTaskDisplayName,
   type DiagramAgentMeta,
 } from '../../config/diagramAgents';
 import type { DiagramEngineType, DiagramTaskType } from '../../types/diagram';
+import type { AuthSession } from '../../config/auth';
 
 type VersionActionPayload = {
   diagram_id: string;
@@ -68,50 +69,6 @@ type VersionActionPayload = {
   task_type?: DiagramTaskType;
   design_concept?: string;
   version_number?: number;
-};
-
-type VersionDiffPayload = {
-  diagram_id: string;
-  base_version: {
-    diagram_version_id: string;
-    version_number: number;
-    code_hash?: string;
-  };
-  target_version: {
-    diagram_version_id: string;
-    version_number: number;
-    code_hash?: string;
-  };
-  summary: {
-    changed: boolean;
-    engine_changed: boolean;
-    task_changed: boolean;
-    design_concept_changed: boolean;
-    line_delta: number;
-    char_delta: number;
-    added_line_count: number;
-    removed_line_count: number;
-    changed_blocks: number;
-    structured?: {
-      available?: boolean;
-      nodes?: {
-        added_ids?: string[];
-        removed_ids?: string[];
-        changed_ids?: string[];
-        label_changes?: { id: string; before: string; after: string }[];
-      };
-      edges?: {
-        added_ids?: string[];
-        removed_ids?: string[];
-        changed_ids?: string[];
-      };
-    };
-  };
-  preview?: {
-    added_lines?: string[];
-    removed_lines?: string[];
-  };
-  truncated?: boolean;
 };
 
 type HistoryAgentProcess = {
@@ -206,9 +163,19 @@ type ConversationHistoryItem = {
 type HistoryMode = 'diagrams' | 'conversations';
 type TranslateFn = (key: string, values?: Record<string, string | number>) => string;
 
-type BranchDialogState =
-  | { kind: 'history'; item: DiagramHistoryItem; initialValue: string }
-  | { kind: 'message'; message: Message; initialValue: string };
+type BranchDialogState = { kind: 'history'; item: DiagramHistoryItem; initialValue: string };
+
+type SendMessageOverrides = {
+  forcedAgent?: DiagramAgentMeta | null;
+  images?: string[];
+  preserveInputImages?: boolean;
+  currentCode?: string;
+  currentTask?: DiagramTaskType | null;
+  currentEngine?: DiagramEngineType | null;
+  currentDiagramId?: string | null;
+  currentDiagramVersionId?: string | null;
+  designConcept?: string;
+};
 
 const formatSeconds = (value: number | undefined) => {
   const seconds = Number(value || 0);
@@ -915,6 +882,226 @@ function KnowledgeContextCard({ context }: { context: KnowledgeContextSummary })
   );
 }
 
+type AgentDetailCardItem = {
+  key: string;
+  label: string;
+  node: ReactNode;
+};
+
+function AgentDetailsDisclosure({ message }: { message: Message }) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const isLight = canvasMode === 'light';
+  const hasPlannerPlan = Boolean(message.plannerPlan?.subtasks.some((item) => String(item.label || '').trim()));
+  const hasDesignAgent = Boolean(message.designAgent && (message.designAgent.changed || message.designAgent.appliedRules.length > 0));
+  const hasRepairAgent = Boolean(message.repairAgent && (message.repairAgent.repaired || !message.repairAgent.validationOk));
+  const hasConsistencyAgent = Boolean(message.consistencyAgent && (!message.consistencyAgent.ok || message.consistencyAgent.checkedChunks > 0));
+  const hasExportPlan = Boolean(message.exportPlan?.allowedFormats.some((item) => String(item.format || '').trim()));
+  const detailCardCandidates: Array<AgentDetailCardItem | null> = [
+    message.executionPlan && message.executionPlan.length > 0
+      ? { key: 'execution', label: t('agentCard.execution'), node: <ExecutionPlanCard steps={message.executionPlan} /> }
+      : null,
+    message.conversationMemory
+      ? { key: 'conversation-memory', label: t('memory.conversation.title'), node: <ConversationMemoryCard memory={message.conversationMemory} /> }
+      : null,
+    message.longTermPreferences
+      ? { key: 'preferences', label: t('memory.preferences.title'), node: <LongTermPreferencesCard preferences={message.longTermPreferences} /> }
+      : null,
+    message.resumeNotice
+      ? { key: 'resume-notice', label: t('settings.nav.session'), node: <ConversationResumeNoticeCard notice={message.resumeNotice} /> }
+      : null,
+    message.plannerPlan && hasPlannerPlan
+      ? { key: 'planner', label: t('agentCard.plan'), node: <PlannerPlanCard plan={message.plannerPlan} /> }
+      : null,
+    message.knowledgeContext
+      ? { key: 'knowledge', label: t('knowledge.citations', { count: message.knowledgeContext.count }), node: <KnowledgeContextCard context={message.knowledgeContext} /> }
+      : null,
+    message.designAgent && hasDesignAgent
+      ? { key: 'design', label: t('agentCard.design'), node: <DesignAgentCard summary={message.designAgent} /> }
+      : null,
+    message.repairAgent && hasRepairAgent
+      ? { key: 'repair', label: t('agentCard.repair'), node: <RepairAgentCard summary={message.repairAgent} /> }
+      : null,
+    message.consistencyAgent && hasConsistencyAgent
+      ? { key: 'consistency', label: t('agentCard.consistency'), node: <ConsistencyAgentCard summary={message.consistencyAgent} /> }
+      : null,
+    message.exportPlan && hasExportPlan
+      ? { key: 'export', label: t('agentCard.export'), node: <ExportPlanCard plan={message.exportPlan} /> }
+      : null,
+  ];
+  const detailCards = detailCardCandidates.filter((item): item is AgentDetailCardItem => Boolean(item));
+
+  if (detailCards.length === 0) return null;
+
+  const preview = detailCards.slice(0, 3).map((item) => item.label).join(' / ');
+
+  return (
+    <div className="mb-2">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px] transition-colors ${
+          isLight
+            ? 'border-slate-200 bg-white/80 text-slate-700 hover:border-blue-200 hover:bg-blue-50/60'
+            : 'border-slate-700/70 bg-slate-900/50 text-slate-300 hover:border-blue-500/30 hover:bg-blue-500/10'
+        }`}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <Activity className={`h-3.5 w-3.5 shrink-0 ${isLight ? 'text-blue-600' : 'text-blue-300'}`} />
+          <span className="shrink-0 font-semibold">{t('agentCard.details')}</span>
+          {!open && (
+            <span className={`hidden min-w-0 truncate sm:inline ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+              {preview}
+            </span>
+          )}
+        </span>
+        <span className={`flex shrink-0 items-center gap-1.5 ${isLight ? 'text-blue-600' : 'text-blue-300'}`}>
+          <span>{open ? t('agentCard.detailsHide') : t('agentCard.detailsHidden', { count: detailCards.length })}</span>
+          {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-2">
+          {detailCards.map((item) => (
+            <div key={item.key}>{item.node}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DiagramTypeSwitchButton({
+  message,
+  open,
+  busy,
+  disabled,
+  onToggle,
+  onClose,
+  onSelect,
+}: {
+  message: Message;
+  open: boolean;
+  busy: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onSelect: (agent: DiagramAgentMeta) => void;
+}) {
+  const { canvasMode } = useChatStore();
+  const { t } = useT();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 0, top: 0, maxHeight: 360 });
+  const isLight = canvasMode === 'light';
+
+  const updatePosition = useCallback(() => {
+    const button = buttonRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    const width = 256;
+    const viewportWidth = window.innerWidth || 0;
+    const viewportHeight = window.innerHeight || 0;
+    const left = Math.min(Math.max(8, rect.left), Math.max(8, viewportWidth - width - 8));
+    const belowTop = rect.bottom + 8;
+    const belowSpace = viewportHeight - belowTop - 8;
+    const desiredHeight = Math.min(420, viewportHeight - 16);
+    const openAbove = belowSpace < 260 && rect.top > belowSpace;
+    const top = openAbove ? Math.max(8, rect.top - desiredHeight - 8) : belowTop;
+    const maxHeight = Math.max(180, Math.min(desiredHeight, viewportHeight - top - 8));
+    setPosition({ left, top, maxHeight });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      onClose();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    const handleLayoutChange = () => updatePosition();
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleLayoutChange);
+    window.addEventListener('scroll', handleLayoutChange, true);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleLayoutChange);
+      window.removeEventListener('scroll', handleLayoutChange, true);
+    };
+  }, [open, onClose, updatePosition]);
+
+  const menu = open
+    ? createPortal(
+        <div
+          ref={menuRef}
+          className={`fixed w-64 overflow-y-auto rounded-xl border p-1.5 shadow-2xl ${
+            isLight
+              ? 'border-slate-200 bg-white text-slate-900 shadow-slate-900/20'
+              : 'border-slate-700 bg-slate-950 text-slate-100 shadow-black/50'
+          }`}
+          style={{ left: position.left, top: position.top, maxHeight: position.maxHeight, zIndex: 10000 }}
+        >
+          <div className={`px-2 py-1.5 text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+            {t('version.changeTypeMenu')}
+          </div>
+          {VISIBLE_DIAGRAM_AGENTS
+            .filter((agent) => agent.id !== message.engineType)
+            .map((agent) => (
+              <button
+                key={agent.id}
+                type="button"
+                onClick={() => onSelect(agent)}
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors ${
+                  isLight ? 'hover:bg-slate-100' : 'hover:bg-slate-800'
+                }`}
+              >
+                <agent.Icon className="h-4 w-4 shrink-0" style={{ color: agent.color }} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12px] font-semibold">{agent.label}</span>
+                  <span className={`block truncate text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                    {agent.engineLabel}
+                  </span>
+                </span>
+              </button>
+            ))}
+        </div>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={busy || disabled}
+        onClick={onToggle}
+        className={`text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 border transition-colors disabled:opacity-50 ${
+          isLight
+            ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+            : 'border-blue-500/30 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20'
+        }`}
+        title={t('version.changeTypeTitle')}
+      >
+        <RefreshCw className="w-3 h-3" />
+        {t('version.changeType')}
+        <ChevronDown className="w-3 h-3" />
+      </button>
+      {menu}
+    </>
+  );
+}
+
 function DiagramHistoryPanel({
   open,
   mode,
@@ -1308,7 +1495,12 @@ function LiveTimer({ startTime }: { startTime: number | null }) {
 
 
 /* ── Main ChatPanel ── */
-export default function ChatPanel() {
+interface ChatPanelProps {
+  authSession: AuthSession;
+  onLogout: () => void;
+}
+
+export default function ChatPanel({ authSession, onLogout }: ChatPanelProps) {
   const {
     messages, addMessage, updateLastAssistantMessage, clearMessages,
     conversationId, setConversationId,
@@ -1318,6 +1510,7 @@ export default function ChatPanel() {
     canvasCode, canvasTask, canvasEngine,
     canvasDiagramId, setCanvasDiagramId,
     canvasDiagramVersionId, setCanvasDiagramVersionId,
+    requestCanvasRenderRetry,
     setDesignConcept, modelConfig,
     setSelectedNode,
     addPendingElement, clearPendingElements,
@@ -1344,6 +1537,7 @@ export default function ChatPanel() {
   const [historyError, setHistoryError] = useState('');
   const [branchDialog, setBranchDialog] = useState<BranchDialogState | null>(null);
   const [rollbackDialog, setRollbackDialog] = useState<Message | null>(null);
+  const [typeSwitchMessageId, setTypeSwitchMessageId] = useState<string | null>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [noticeDialog, setNoticeDialog] = useState<{ title: string; message: string } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1453,6 +1647,7 @@ export default function ChatPanel() {
     setHistoryError('');
     setBranchDialog(null);
     setRollbackDialog(null);
+    setTypeSwitchMessageId(null);
     setSelectedNode(null);
     setCurrentTask(null);
     setCurrentEngine(null);
@@ -1607,16 +1802,27 @@ export default function ChatPanel() {
         && message.role === 'assistant'
       );
       if (isCurrentDiagramMessage) attachedCurrentDiagram = true;
+      // Use per-message diagram snapshot from backend (code, diagram_id, design_concept)
+      // so every historical diagram version can be restored, not just the last one
+      const msgCode = isCurrentDiagramMessage
+        ? currentDiagram?.code
+        : (message.code || undefined);
+      const msgDesignConcept = isCurrentDiagramMessage
+        ? currentDiagram?.design_concept
+        : (message.design_concept || undefined);
+      const msgDiagramId = isCurrentDiagramMessage
+        ? currentDiagram?.diagram_id
+        : (message.diagram_id || undefined);
       addMessage({
         id: message.id || `history_message_${Date.now()}_${index}`,
         role: message.role === 'assistant' ? 'assistant' : 'user',
         content: message.content || '',
-        engineType: isCurrentDiagramMessage ? diagramEngine : message.engine_type as DiagramEngineType | undefined,
-        taskType: isCurrentDiagramMessage ? diagramTask : message.task_type as DiagramTaskType | undefined,
+        engineType: (isCurrentDiagramMessage ? diagramEngine : message.engine_type as DiagramEngineType | undefined),
+        taskType: (isCurrentDiagramMessage ? diagramTask : message.task_type as DiagramTaskType | undefined),
         diagramVersionId: message.diagram_version_id,
-        code: isCurrentDiagramMessage ? currentDiagram?.code : undefined,
-        designConcept: isCurrentDiagramMessage ? currentDiagram?.design_concept : undefined,
-        diagramId: isCurrentDiagramMessage ? currentDiagram?.diagram_id : undefined,
+        code: msgCode,
+        designConcept: msgDesignConcept,
+        diagramId: msgDiagramId,
         steps: restoredSteps.length > 0 ? restoredSteps : undefined,
         statusText: restoredSteps.length > 0
           ? t('history.agentProcessSummary', { steps: restoredSteps.length, duration: formatSeconds(processSeconds) })
@@ -1671,136 +1877,10 @@ export default function ChatPanel() {
     setHistoryOpen(false);
   };
 
-  const formatVersionDiffMessage = (payload: VersionDiffPayload) => {
-    const { summary } = payload;
-    const nodes = summary.structured?.nodes;
-    const edges = summary.structured?.edges;
-    const labelChanges = nodes?.label_changes || [];
-    const lines = [
-      t('version.diffHeader', { base: payload.base_version.version_number, target: payload.target_version.version_number }),
-      t('version.diffStatus', { status: summary.changed ? t('version.diffChanged') : t('version.diffUnchanged') }),
-      t('version.diffLines', { added: summary.added_line_count, removed: summary.removed_line_count, blocks: summary.changed_blocks }),
-      t('version.diffChars', { delta: `${summary.char_delta >= 0 ? '+' : ''}${summary.char_delta}` }),
-    ];
-    if (nodes) {
-      lines.push(t('version.diffNodes', {
-        added: nodes.added_ids?.length || 0,
-        removed: nodes.removed_ids?.length || 0,
-        changed: nodes.changed_ids?.length || 0,
-      }));
-    }
-    if (edges) {
-      lines.push(t('version.diffEdges', {
-        added: edges.added_ids?.length || 0,
-        removed: edges.removed_ids?.length || 0,
-        changed: edges.changed_ids?.length || 0,
-      }));
-    }
-    if (labelChanges.length > 0) {
-      lines.push(t('version.diffLabelChanges'));
-      labelChanges.slice(0, 5).forEach((change) => {
-        lines.push(`  - ${change.id}: ${change.before || t('version.diffEmpty')} → ${change.after || t('version.diffEmpty')}`);
-      });
-    }
-    const addedPreview = payload.preview?.added_lines?.slice(0, 3) || [];
-    const removedPreview = payload.preview?.removed_lines?.slice(0, 3) || [];
-    if (addedPreview.length > 0) {
-      lines.push(t('version.diffAddedPreview', { preview: addedPreview.join(' | ') }));
-    }
-    if (removedPreview.length > 0) {
-      lines.push(t('version.diffRemovedPreview', { preview: removedPreview.join(' | ') }));
-    }
-    if (payload.truncated) {
-      lines.push(t('version.diffTruncated'));
-    }
-    return lines.join('\n');
-  };
-
-  const handleCompareVersion = async (msg: Message) => {
-    if (!msg.diagramId || !msg.diagramVersionId) return;
-    const targetVersionId = canvasDiagramId === msg.diagramId && canvasDiagramVersionId
-      ? canvasDiagramVersionId
-      : undefined;
-    setVersionActionBusy(true);
-    try {
-      const params = targetVersionId && targetVersionId !== msg.diagramVersionId
-        ? `?target_version_id=${encodeURIComponent(targetVersionId)}`
-        : '';
-      const res = await fetch(`${API_BASE}/api/diagrams/${msg.diagramId}/versions/${msg.diagramVersionId}/diff${params}`, {
-        method: 'GET',
-        headers: diagramActionHeaders(),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const payload = await res.json() as VersionDiffPayload;
-      addMessage({
-        id: `a_diff_${Date.now()}`,
-        role: 'assistant',
-        content: formatVersionDiffMessage(payload),
-        diagramId: payload.diagram_id,
-        diagramVersionId: payload.target_version.diagram_version_id,
-        timestamp: Date.now(),
-      });
-    } catch (err) {
-      console.error('[Version] Diff failed:', err);
-      showError(t('version.diffFailed', { message: (err as Error).message }));
-    } finally {
-      setVersionActionBusy(false);
-    }
-  };
-
-  const createMessageBranch = async (msg: Message, branchName: string) => {
-    if (!msg.diagramId || !msg.diagramVersionId) return;
-    setVersionActionBusy(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/diagrams/${msg.diagramId}/versions/${msg.diagramVersionId}/branch`, {
-        method: 'POST',
-        headers: diagramActionHeaders(),
-        body: JSON.stringify({
-          ...enterpriseBodyContext(),
-          branch_name: branchName,
-          reason: 'frontend_user_created_branch',
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const payload = await res.json() as VersionActionPayload;
-      activateVersionPayload(payload);
-      addMessage({
-        id: `a_branch_${Date.now()}`,
-        role: 'assistant',
-        content: t('version.branchCreated', { name: branchName }),
-        code: payload.code,
-        engineType: payload.engine_type,
-        taskType: payload.task_type,
-        designConcept: payload.design_concept,
-        diagramId: payload.diagram_id,
-        diagramVersionId: payload.diagram_version_id,
-        timestamp: Date.now(),
-      });
-    } catch (err) {
-      console.error('[Version] Branch failed:', err);
-      showError(t('version.branchFailed', { message: (err as Error).message }));
-    } finally {
-      setVersionActionBusy(false);
-    }
-  };
-
-  const handleCreateBranch = (msg: Message) => {
-    if (!msg.diagramId || !msg.diagramVersionId) return;
-    setBranchDialog({
-      kind: 'message',
-      message: msg,
-      initialValue: t('dialog.branch.messageDefault'),
-    });
-  };
-
   const confirmBranchDialog = async (branchName: string) => {
     const dialog = branchDialog;
     if (!dialog) return;
-    if (dialog.kind === 'history') {
-      await createHistoryBranch(dialog.item, branchName);
-    } else {
-      await createMessageBranch(dialog.message, branchName);
-    }
+    await createHistoryBranch(dialog.item, branchName);
     setBranchDialog(null);
   };
 
@@ -1893,7 +1973,7 @@ export default function ChatPanel() {
     const match = input.match(/^@([\w-]+)/);
     if (match) {
       const tag = match[1].toLowerCase();
-      const found = DIAGRAM_AGENTS.find(a => a.id === tag);
+      const found = VISIBLE_DIAGRAM_AGENTS.find(a => a.id === tag);
       if (found && found !== selectedAgent) {
         setSelectedAgent(found);
       }
@@ -1901,23 +1981,26 @@ export default function ChatPanel() {
   }, [input]);
 
   /* ── Send message ── */
-  const sendMessage = useCallback(async (directText?: string) => {
+  const sendMessage = useCallback(async (directText?: string, overrides?: SendMessageOverrides) => {
     // 确保 directText 确实为字符串类型，防范 React 事件对象被当作参数误传入
     const isDirectString = typeof directText === 'string';
     let text = (isDirectString ? directText : input).trim();
-    const imagesToSend = [...inputImages];
+    const imagesToSend = overrides?.images ? [...overrides.images] : [...inputImages];
     if ((!text && imagesToSend.length === 0) || isStreaming) return;
 
     // If agent is selected but no @ prefix in text, prepend it
-    if (selectedAgent && !text.startsWith('@')) {
-      text = `${selectedAgent.prefix}${text}`;
+    const agentForSend = overrides?.forcedAgent ?? selectedAgent;
+    if (agentForSend && !text.startsWith('@')) {
+      text = `${agentForSend.prefix}${text}`;
     }
 
     addMessage({ id: `u_${Date.now()}`, role: 'user', content: text, images: imagesToSend.length > 0 ? imagesToSend : undefined, timestamp: Date.now() });
     if (!isDirectString) {
       setInput('');
     }
-    clearInputImages();
+    if (!overrides?.preserveInputImages) {
+      clearInputImages();
+    }
     setSelectedAgent(null);
     addMessage({ id: `a_${Date.now()}`, role: 'assistant', content: '', steps: [], timestamp: Date.now() });
     setIsStreaming(true);
@@ -1980,11 +2063,12 @@ export default function ChatPanel() {
           message: text,
           images: imagesToSend,
           history,
-          current_code: canvasCode || '',
-          current_task: canvasTask || '',
-          current_engine: canvasEngine || '',
-          current_diagram_id: canvasDiagramId || '',
-          current_diagram_version_id: canvasDiagramVersionId || '',
+          current_code: overrides?.currentCode ?? canvasCode ?? '',
+          current_task: overrides?.currentTask ?? canvasTask ?? '',
+          current_engine: overrides?.currentEngine ?? canvasEngine ?? '',
+          current_diagram_id: overrides?.currentDiagramId ?? canvasDiagramId ?? '',
+          current_diagram_version_id: overrides?.currentDiagramVersionId ?? canvasDiagramVersionId ?? '',
+          design_concept: overrides?.designConcept ?? '',
           conversation_id: conversationId,
           model_config: modelConfig,
           detailLevel,
@@ -2347,12 +2431,122 @@ export default function ChatPanel() {
     setConversationId, setCanvasDiagramId, setCanvasDiagramVersionId, t,
   ]);
 
+  const handleChangeDiagramType = useCallback((msg: Message, agent: DiagramAgentMeta) => {
+    if (isStreaming) return;
+    setTypeSwitchMessageId(null);
+    if (msg.code) {
+      clearPendingElements();
+      setCanvasCode(msg.code);
+      if (msg.taskType) setCanvasTask(msg.taskType);
+      if (msg.engineType) setCanvasEngine(msg.engineType);
+      if (msg.diagramId) setCanvasDiagramId(msg.diagramId);
+      if (msg.diagramVersionId) setCanvasDiagramVersionId(msg.diagramVersionId);
+      if (msg.designConcept) setDesignConcept(msg.designConcept);
+      setCanvasPhase('done');
+      setStreamingCode('');
+    }
+    void sendMessage(`${agent.prefix}${t('version.changeTypePrompt', { type: agent.label })}`, {
+      forcedAgent: agent,
+      images: [],
+      preserveInputImages: true,
+      currentCode: msg.code || canvasCode || '',
+      currentTask: msg.taskType || canvasTask || getTaskByEngine(agent.id) || null,
+      currentEngine: msg.engineType || canvasEngine || null,
+      designConcept: msg.designConcept || useChatStore.getState().designConcept || '',
+      // 换类型 = 新图表，不传旧 diagram_id，让后端创建独立记录
+      // 否则所有换类型的图表都会变成同一个 diagram 的版本，历史里只保留最后一个
+      currentDiagramId: null,
+      currentDiagramVersionId: null,
+    });
+  }, [
+    isStreaming,
+    sendMessage,
+    t,
+    clearPendingElements,
+    setCanvasCode,
+    setCanvasTask,
+    setCanvasEngine,
+    setCanvasDiagramId,
+    setCanvasDiagramVersionId,
+    setDesignConcept,
+    setCanvasPhase,
+    setStreamingCode,
+    canvasCode,
+    canvasTask,
+    canvasEngine,
+  ]);
+
+  const handleRetryRender = useCallback((msg: Message) => {
+    if (!msg.code || isStreaming) return;
+    clearPendingElements();
+    setCanvasCode(msg.code);
+    if (msg.taskType) setCanvasTask(msg.taskType);
+    if (msg.engineType) setCanvasEngine(msg.engineType);
+    if (msg.diagramId) setCanvasDiagramId(msg.diagramId);
+    if (msg.diagramVersionId) setCanvasDiagramVersionId(msg.diagramVersionId);
+    if (msg.designConcept) setDesignConcept(msg.designConcept);
+    setCanvasPhase('done');
+    setStreamingCode('');
+    if (msg.engineType === 'mermaid') {
+      void sendMessage([
+        '@mermaid 请修复当前 Mermaid 图表并重新渲染。',
+        '要求：保留原业务内容、关键节点、分层结构和关系，不要降级为空图，不要删除核心节点，不要只改配色。',
+        '请针对 Mermaid 语法错误和布局渲染错误进行修复。不要使用 flowchart 边标签语法（例如 A -->|"关系"| B），请把关系文字改成独立关系节点，输出完整可渲染的 Mermaid 代码。',
+      ].join('\n'), {
+        forcedAgent: DIAGRAM_AGENTS.find((agent) => agent.id === 'mermaid') || null,
+        images: [],
+        preserveInputImages: true,
+        currentCode: msg.code,
+        currentTask: msg.taskType || canvasTask || getTaskByEngine('mermaid') || null,
+        currentEngine: 'mermaid',
+        currentDiagramId: msg.diagramId || canvasDiagramId || null,
+        currentDiagramVersionId: msg.diagramVersionId || canvasDiagramVersionId || null,
+      });
+      return;
+    }
+    requestCanvasRenderRetry();
+  }, [
+    isStreaming,
+    sendMessage,
+    clearPendingElements,
+    setCanvasCode,
+    setCanvasTask,
+    setCanvasEngine,
+    setCanvasDiagramId,
+    setCanvasDiagramVersionId,
+    setDesignConcept,
+    setCanvasPhase,
+    setStreamingCode,
+    requestCanvasRenderRetry,
+    canvasTask,
+    canvasDiagramId,
+    canvasDiagramVersionId,
+  ]);
+
   // Listen for external direct message events (e.g. from canvas node AI optimize overlay)
   useEffect(() => {
     const handleSendDirect = (e: Event) => {
-      const { text } = (e as CustomEvent).detail;
+      const {
+        text,
+        currentCode,
+        currentTask,
+        currentEngine,
+        currentDiagramId,
+        currentDiagramVersionId,
+      } = (e as CustomEvent).detail || {};
       if (text) {
-        sendMessage(text);
+        sendMessage(text, {
+          currentCode,
+          currentTask,
+          currentEngine,
+          currentDiagramId,
+          currentDiagramVersionId,
+          forcedAgent: currentEngine === 'mermaid'
+            ? DIAGRAM_AGENTS.find((agent) => agent.id === 'mermaid') || null
+            : undefined,
+          images: [],
+          preserveInputImages: true,
+        });
       }
     };
     window.addEventListener('send-ai-message', handleSendDirect);
@@ -2387,8 +2581,6 @@ export default function ChatPanel() {
       case 'charts': return 'bg-pink-500/10 text-pink-400';
       case 'drawio': return 'bg-cyan-500/10 text-cyan-400';
       case 'infographic': return 'bg-rose-500/10 text-rose-400';
-      case 'html_email': return 'bg-teal-500/10 text-teal-400';
-      case 'web_report_html': return 'bg-orange-500/10 text-orange-400';
       default: return 'bg-slate-500/10 text-slate-400';
     }
   };
@@ -2401,8 +2593,6 @@ export default function ChatPanel() {
     { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'mindmap')!, text: t('chat.example.mindmap') },
     { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'excalidraw')!, text: t('chat.example.excalidraw') },
     { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'infographic')!, text: t('chat.example.infographic') },
-    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'html_email')!, text: t('chat.example.html_email') },
-    { agent: DIAGRAM_AGENTS.find((agent) => agent.id === 'web_report_html')!, text: t('chat.example.web_report_html') },
   ];
 
   const detailOptions = [
@@ -2611,48 +2801,12 @@ export default function ChatPanel() {
                   />
                 )}
 
-                {msg.role === 'assistant' && msg.executionPlan && msg.executionPlan.length > 0 && (
-                  <ExecutionPlanCard steps={msg.executionPlan} />
-                )}
-
-                {msg.role === 'assistant' && msg.conversationMemory && (
-                  <ConversationMemoryCard memory={msg.conversationMemory} />
-                )}
-
-                {msg.role === 'assistant' && msg.longTermPreferences && (
-                  <LongTermPreferencesCard preferences={msg.longTermPreferences} />
-                )}
-
-                {msg.role === 'assistant' && msg.resumeNotice && (
-                  <ConversationResumeNoticeCard notice={msg.resumeNotice} />
-                )}
-
-                {msg.role === 'assistant' && msg.plannerPlan && (
-                  <PlannerPlanCard plan={msg.plannerPlan} />
-                )}
-
-                {msg.role === 'assistant' && msg.knowledgeContext && (
-                  <KnowledgeContextCard context={msg.knowledgeContext} />
-                )}
-
-                {msg.role === 'assistant' && msg.designAgent && (
-                  <DesignAgentCard summary={msg.designAgent} />
-                )}
-
-                {msg.role === 'assistant' && msg.repairAgent && (
-                  <RepairAgentCard summary={msg.repairAgent} />
-                )}
-
-                {msg.role === 'assistant' && msg.consistencyAgent && (
-                  <ConsistencyAgentCard summary={msg.consistencyAgent} />
+                {msg.role === 'assistant' && (
+                  <AgentDetailsDisclosure message={msg} />
                 )}
 
                 {msg.role === 'assistant' && msg.approvalRequest && (
                   <HumanApprovalCard approval={msg.approvalRequest} />
-                )}
-
-                {msg.role === 'assistant' && msg.exportPlan && (
-                  <ExportPlanCard plan={msg.exportPlan} />
                 )}
 
                 {/* Design concept */}
@@ -2674,6 +2828,9 @@ export default function ChatPanel() {
                         if (msg.engineType) setCanvasEngine(msg.engineType);
                         if (msg.diagramId) setCanvasDiagramId(msg.diagramId);
                         if (msg.diagramVersionId) setCanvasDiagramVersionId(msg.diagramVersionId);
+                        if (msg.designConcept) setDesignConcept(msg.designConcept);
+                        setCanvasPhase('done');
+                        setStreamingCode('');
                       }}
                       title={t('chat.viewOnCanvasTitle')}
                     >
@@ -2683,33 +2840,28 @@ export default function ChatPanel() {
 
                     {msg.diagramId && msg.diagramVersionId && (
                       <>
+                        <DiagramTypeSwitchButton
+                          message={msg}
+                          open={typeSwitchMessageId === msg.id}
+                          busy={versionActionBusy}
+                          disabled={isStreaming}
+                          onToggle={() => setTypeSwitchMessageId(typeSwitchMessageId === msg.id ? null : msg.id)}
+                          onClose={() => setTypeSwitchMessageId(null)}
+                          onSelect={(agent) => handleChangeDiagramType(msg, agent)}
+                        />
                         <button
                           type="button"
-                          disabled={versionActionBusy}
-                          onClick={() => handleCompareVersion(msg)}
+                          disabled={isStreaming}
+                          onClick={() => handleRetryRender(msg)}
                           className={`text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 border transition-colors disabled:opacity-50 ${
                             canvasMode === 'light'
                               ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
                               : 'border-slate-700 text-slate-300 hover:bg-slate-800'
                           }`}
-                          title={t('version.compareTitle')}
+                          title={t('version.retryRenderTitle')}
                         >
-                          <FileDiff className="w-3 h-3" />
-                          {t('version.compare')}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={versionActionBusy}
-                          onClick={() => handleCreateBranch(msg)}
-                          className={`text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 border transition-colors disabled:opacity-50 ${
-                            canvasMode === 'light'
-                              ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                              : 'border-slate-700 text-slate-300 hover:bg-slate-800'
-                          }`}
-                          title={t('version.branchTitle')}
-                        >
-                          <GitBranch className="w-3 h-3" />
-                          {t('version.branch')}
+                          <RefreshCw className="w-3 h-3" />
+                          {msg.engineType === 'mermaid' ? t('mermaid.autoRepairRetry') : t('common.retry')}
                         </button>
                         <button
                           type="button"
@@ -2966,7 +3118,7 @@ export default function ChatPanel() {
 
                     <div style={{ height: '1px', background: 'rgba(148,163,184,0.15)', margin: '4px 8px' }} />
 
-                    {DIAGRAM_AGENTS.map((a) => (
+                    {VISIBLE_DIAGRAM_AGENTS.map((a) => (
                       <button
                         key={a.id}
                         onClick={() => {
@@ -3135,7 +3287,9 @@ export default function ChatPanel() {
       {/* Settings Modal */}
       <SettingsModal
         open={settingsOpen}
+        authSession={authSession}
         onClose={() => setSettingsOpen(false)}
+        onLogout={onLogout}
         onClearConversation={() => {
           setSettingsOpen(false);
           setClearDialogOpen(true);

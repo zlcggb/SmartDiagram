@@ -209,6 +209,8 @@ interface ChatStore {
   setCanvasDiagramId: (v: string | null) => void;
   canvasDiagramVersionId: string | null;
   setCanvasDiagramVersionId: (v: string | null) => void;
+  canvasRenderRevision: number;
+  requestCanvasRenderRetry: () => void;
 
   // Design concept
   designConcept: string;
@@ -300,6 +302,8 @@ export const useChatStore = create<ChatStore>((set) => ({
   setCanvasDiagramId: (v) => set({ canvasDiagramId: v }),
   canvasDiagramVersionId: null,
   setCanvasDiagramVersionId: (v) => set({ canvasDiagramVersionId: v }),
+  canvasRenderRevision: 0,
+  requestCanvasRenderRetry: () => set((s) => ({ canvasRenderRevision: s.canvasRenderRevision + 1 })),
 
   designConcept: '',
   setDesignConcept: (v) => set({ designConcept: v }),

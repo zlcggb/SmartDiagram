@@ -95,6 +95,15 @@ npm run worker:once
 npm run db:down
 ```
 
+本地登录页默认提供两种开发账号：
+
+| 角色 | 邮箱 | 密码 | 权限 |
+| --- | --- | --- | --- |
+| 普通用户 | `user@smartdiagram.local` | `user123456` | 生成图表、读取授权知识、基础导出 |
+| 管理员 | `admin@smartdiagram.local` | `admin123456` | 运维看板、审批、预算、高级导出 |
+
+这些账号只用于本地开发，默认邮箱和密码可以在 `backend/.env` 里通过 `AUTH_DEMO_*` 配置覆盖。
+
 ### 4. 分别启动
 
 ```bash
@@ -211,6 +220,11 @@ SmartDiagram/
 | `USAGE_ROLLUP_REFRESH_INTERVAL_SECONDS` | ❌ | rollup 维护任务执行间隔，最小 60 秒 |
 | `WORKER_STALE_JOB_TIMEOUT_SECONDS` | ❌ | worker running job 超时判定阈值，默认 1800 秒 |
 | `WORKER_STALE_JOB_ACTION` | ❌ | stale running job 处理策略：`requeue` 或 `fail` |
+| `AUTH_LOCAL_LOGIN_ENABLED` | ❌ | 是否启用本地账号登录入口 |
+| `AUTH_SESSION_SECRET` | ❌ | 本地登录 session 签名密钥，生产环境必须替换 |
+| `AUTH_SESSION_TTL_SECONDS` | ❌ | 登录 session 有效期 |
+| `AUTH_DEMO_USER_EMAIL` / `AUTH_DEMO_USER_PASSWORD` | ❌ | 普通用户开发账号 |
+| `AUTH_DEMO_ADMIN_EMAIL` / `AUTH_DEMO_ADMIN_PASSWORD` | ❌ | 管理员开发账号 |
 
 ---
 

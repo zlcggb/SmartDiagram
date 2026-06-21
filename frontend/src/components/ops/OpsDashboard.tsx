@@ -18,16 +18,9 @@ import {
 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useT, type Locale } from '../../i18n';
+import { API_BASE, canReadOps, enterpriseHeaders, enterpriseQueryParams } from '../../config/enterpriseContext';
 
-const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '';
 type TranslateFn = (key: string, values?: Record<string, string | number>) => string;
-
-const AUDIT_QUERY = new URLSearchParams({
-  tenant_id: 'local',
-  user_id: 'anonymous',
-  roles: 'owner',
-  scopes: 'audit:read,project:read,diagram:read,approval:read,approval:write',
-});
 
 interface AuditMetrics {
   agent_runs?: {
@@ -261,7 +254,13 @@ export default function OpsDashboard({ open, onClose, embedded = false }: { open
   const [error, setError] = useState('');
 
   const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
-    const response = await fetch(`${API_BASE}${path}`, init);
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        ...enterpriseHeaders(Boolean(init?.body)),
+        ...((init?.headers as Record<string, string> | undefined) || {}),
+      },
+    });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -269,16 +268,25 @@ export default function OpsDashboard({ open, onClose, embedded = false }: { open
   };
 
   const approvalBody = (decision: 'approved' | 'rejected') => ({
-    ...Object.fromEntries(AUDIT_QUERY.entries()),
+    ...Object.fromEntries(enterpriseQueryParams().entries()),
     decision,
     comment: `ops_dashboard_${decision}`,
   });
 
   const loadDashboard = async () => {
+    if (!canReadOps()) {
+      setMetrics(null);
+      setRuns([]);
+      setApprovals([]);
+      setTrace(null);
+      setSteps(null);
+      setError(t('auth.adminRequired'));
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const query = AUDIT_QUERY.toString();
+      const query = enterpriseQueryParams().toString();
       const [metricsPayload, runsPayload, approvalsPayload] = await Promise.all([
         fetchJson<AuditMetrics>(`/api/audit/metrics?${query}`),
         fetchJson<{ agent_runs: AgentRunSummary[] }>(`/api/audit/agent-runs?${query}&limit=8`),
@@ -313,7 +321,6 @@ export default function OpsDashboard({ open, onClose, embedded = false }: { open
     try {
       await fetchJson(`/api/approvals/${approvalId}/decision`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(approvalBody(decision)),
       });
       await loadDashboard();
@@ -326,7 +333,7 @@ export default function OpsDashboard({ open, onClose, embedded = false }: { open
     setRefreshingRollup(true);
     setError('');
     try {
-      await fetchJson(`/api/audit/usage-rollups/refresh?${AUDIT_QUERY.toString()}&scope=tenant`, {
+      await fetchJson(`/api/audit/usage-rollups/refresh?${enterpriseQueryParams().toString()}&scope=tenant`, {
         method: 'POST',
       });
       await loadDashboard();
@@ -345,7 +352,8 @@ export default function OpsDashboard({ open, onClose, embedded = false }: { open
 
   useEffect(() => {
     if (!open || !selectedRunId) return;
-    const query = AUDIT_QUERY.toString();
+    if (!canReadOps()) return;
+    const query = enterpriseQueryParams().toString();
     Promise.all([
       fetchJson<TraceResponse>(`/api/audit/agent-runs/${selectedRunId}/trace?${query}`),
       fetchJson<ExecutionStepsResponse>(`/api/audit/agent-runs/${selectedRunId}/steps?${query}`),

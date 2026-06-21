@@ -24,6 +24,7 @@ export interface DiagramAgentMeta {
   dotClass: string;
   color: string;
   Icon: LucideIcon;
+  hidden?: boolean;
 }
 
 export const DIAGRAM_AGENTS: DiagramAgentMeta[] = [
@@ -114,6 +115,7 @@ export const DIAGRAM_AGENTS: DiagramAgentMeta[] = [
     dotClass: 'bg-teal-400',
     color: '#2dd4bf',
     Icon: Mail,
+    hidden: true,
   },
   {
     id: 'web_report_html',
@@ -125,8 +127,11 @@ export const DIAGRAM_AGENTS: DiagramAgentMeta[] = [
     dotClass: 'bg-orange-400',
     color: '#fb923c',
     Icon: FileText,
+    hidden: true,
   },
 ];
+
+export const VISIBLE_DIAGRAM_AGENTS = DIAGRAM_AGENTS.filter((agent) => !agent.hidden);
 
 export const DIAGRAM_AGENT_MAP = Object.fromEntries(
   DIAGRAM_AGENTS.map((agent) => [agent.id, agent]),

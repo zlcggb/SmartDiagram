@@ -150,10 +150,12 @@ async def _serialize_message(
     session: AsyncSession,
     cache: dict[str, AgentRun | None],
     message: Message,
+    version_snapshots: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     metadata = message.metadata_json or {}
     run_id = str(metadata.get("agent_run_id") or "")
     agent_run = await _load_agent_run(session, cache, message.tenant_id, run_id)
+    snapshot = (version_snapshots or {}).get(message.diagram_version_id or "") if message.diagram_version_id else None
     return {
         "id": message.id,
         "role": message.role,
@@ -163,6 +165,10 @@ async def _serialize_message(
         "diagram_version_id": message.diagram_version_id,
         "created_at": _iso(message.created_at),
         "agent_process": _serialize_agent_process(agent_run) if message.role == "assistant" else None,
+        # Per-message diagram snapshot for restoring historical versions
+        "code": snapshot["code"] if snapshot else None,
+        "design_concept": snapshot.get("design_concept") if snapshot else None,
+        "diagram_id": snapshot["diagram_id"] if snapshot else None,
     }
 
 
@@ -280,8 +286,28 @@ async def search_authorized_conversation_history(
         )
         if not _matches_query(conversation, recent_messages, normalized_query):
             continue
+        # Batch-load diagram version snapshots for all messages with a diagram_version_id
+        version_snapshots: dict[str, dict[str, Any]] = {}
+        if include_messages:
+            version_ids = [
+                m.diagram_version_id
+                for m in recent_messages
+                if m.diagram_version_id and m.role == "assistant"
+            ]
+            if version_ids:
+                stmt = select(DiagramVersion).where(DiagramVersion.id.in_(version_ids))
+                versions = list((await session.execute(stmt)).scalars().all())
+                for v in versions:
+                    if v.tenant_id == tenant_id:
+                        version_snapshots[v.id] = {
+                            "diagram_id": v.diagram_id,
+                            "code": v.code,
+                            "design_concept": v.design_concept,
+                            "engine_type": v.engine_type,
+                            "task_type": v.task_type,
+                        }
         serialized_messages = [
-            await _serialize_message(session, agent_run_cache, message)
+            await _serialize_message(session, agent_run_cache, message, version_snapshots)
             for message in recent_messages
         ] if include_messages else []
         current_diagram = (

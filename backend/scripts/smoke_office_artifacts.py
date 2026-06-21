@@ -165,8 +165,8 @@ EMAIL_TEMPLATE_CODE = json.dumps(
 
 
 def main() -> None:
-    assert detect_task_from_keywords("帮我写一个客户续费 HTML 邮件", "") == "html_email"
-    assert detect_task_from_keywords("生成一个基础 HTML 网页分析稿", "") == "web_report_html"
+    assert detect_task_from_keywords("帮我写一个客户续费 HTML 邮件", "") is None
+    assert detect_task_from_keywords("生成一个基础 HTML 网页分析稿", "") is None
 
     assert ENGINE_OUTPUT_CONTRACTS["html_email"]["validator"] == "html_email_artifact"
     assert ENGINE_OUTPUT_CONTRACTS["web_report_html"]["validator"] == "web_report_artifact"

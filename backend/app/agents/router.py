@@ -56,6 +56,8 @@ ENGINE_DESCRIPTIONS = {
     ),
 }
 
+HIDDEN_ROUTER_ENGINES = {"html_email", "web_report_html"}
+
 TASK_ROUTING_HINTS = {
     "data_chart": [
         "数据图表", "图表", "柱状图", "折线图", "饼图", "面积图", "散点图", "雷达图",
@@ -135,6 +137,8 @@ def detect_task_from_keywords(text: str, current_task: str = "") -> str | None:
 
     scores: dict[str, int] = {}
     for agent, keywords in TASK_ROUTING_HINTS.items():
+        if agent in HIDDEN_ROUTER_ENGINES:
+            continue
         score = sum(1 for keyword in keywords if keyword in lowered)
         if score > 0:
             scores[agent] = score
@@ -175,6 +179,8 @@ async def router_node(state: AgentState) -> dict:
     if text_content:
         content_lower = text_content.lower().strip()
         for tag, agent_name in sorted(EXPLICIT_MAPPINGS.items(), key=lambda x: len(x[0]), reverse=True):
+            if agent_name in HIDDEN_ROUTER_ENGINES:
+                continue
             if tag in content_lower:
                 cleaned = re.sub(
                     rf"{re.escape(tag)}\s*", "", text_content, flags=re.IGNORECASE
@@ -226,7 +232,9 @@ async def router_node(state: AgentState) -> dict:
         return {"task_type": keyword_task, "engine_type": engine_type, "intent": engine_type}
 
     # 3. LLM-based intent classification
-    desc_text = "\n".join(f"- '{k}': {v}" for k, v in ENGINE_DESCRIPTIONS.items())
+    visible_engine_keys = [key for key in ENGINE_DESCRIPTIONS if key not in HIDDEN_ROUTER_ENGINES]
+    desc_text = "\n".join(f"- '{k}': {ENGINE_DESCRIPTIONS[k]}" for k in visible_engine_keys)
+    response_keywords = "', '".join(visible_engine_keys)
 
     context_hint = ""
     if current_engine:
@@ -238,7 +246,7 @@ Analyze the user's request and classify the intent to route to the best agent.
 Available agents:
 {desc_text}
 
-Respond with ONLY one keyword: 'excalidraw', 'mermaid', 'flow', 'mindmap', 'charts', 'drawio', 'infographic', 'html_email', 'web_report_html', or 'general'.
+Respond with ONLY one keyword: '{response_keywords}'.
 """
 
     logger.info(f"⏱️ Router: keyword match failed, calling LLM for classification...")
@@ -251,7 +259,7 @@ Respond with ONLY one keyword: 'excalidraw', 'mermaid', 'flow', 'mindmap', 'char
     ])
     intent = extract_text_content(response.content).strip().lower()
 
-    for engine_key in ENGINE_DESCRIPTIONS:
+    for engine_key in visible_engine_keys:
         if engine_key in intent:
             logger.info(f"⏱️ Router (LLM classification) took {_time.time()-_t0:.1f}s → {engine_key}")
             return {

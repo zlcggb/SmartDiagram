@@ -55,6 +55,7 @@ Output ONLY these two tags, nothing else.
 
 6. **sequenceDiagram**: Only use `participant` and `actor` — do NOT use `database`, `queue`, `boundary`, `entity` or other non-standard types
 7. **Flowchart node labels**: Use quotes inside brackets: `A["signIn(email)"]`
+8. **Flowchart relation text**: Do NOT use edge-label syntax such as `A -->|"Low-Level 检索(具体实体)"| B`. Mermaid's layout engine can fail on labeled edges. Preserve relation text as a relation node instead: `A --> R1["Low-Level 检索(具体实体)"]:::relation` then `R1 --> B`.
 
 ## ⚠️ CRITICAL — sequenceDiagram Text Quoting Rules
 **In sequenceDiagram, NEVER wrap message text, Note text, or alt/else/opt/loop condition text in double quotes.**

@@ -3,16 +3,46 @@
  * All styles use pure Tailwind v4 utilities. Zero inline styles.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import ChatPanel from './components/chat/ChatPanel';
 import CanvasPanel from './components/layout/CanvasPanel';
 import { useChatStore } from './store/chatStore';
+import LoginScreen from './components/auth/LoginScreen';
+import {
+  clearAuthSession,
+  readAuthSession,
+  validateAuthSession,
+  type AuthSession,
+} from './config/auth';
 
 export default function App() {
   const { canvasMode } = useChatStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const [chatWidth, setChatWidth] = useState(420);
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => readAuthSession());
+  const [authChecking, setAuthChecking] = useState(Boolean(authSession));
   const isDragging = useRef(false);
+
+  useEffect(() => {
+    if (!authSession) {
+      setAuthChecking(false);
+      return;
+    }
+    let active = true;
+    validateAuthSession(authSession)
+      .then(() => {
+        if (active) setAuthChecking(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        clearAuthSession();
+        setAuthSession(null);
+        setAuthChecking(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [authSession]);
 
   const handleMouseDown = useCallback(() => {
     isDragging.current = true;
@@ -34,6 +64,23 @@ export default function App() {
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   }, []);
+
+  const handleLogout = () => {
+    clearAuthSession();
+    setAuthSession(null);
+  };
+
+  if (!authSession) {
+    return <LoginScreen onLogin={setAuthSession} />;
+  }
+
+  if (authChecking) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-sm font-medium text-slate-300">
+        正在恢复登录态...
+      </div>
+    );
+  }
 
   return (
     <div 
@@ -60,7 +107,7 @@ export default function App() {
 
       {/* Chat sidebar (right, fixed width) */}
       <div className="h-full shrink-0" style={{ width: chatWidth }}>
-        <ChatPanel />
+        <ChatPanel authSession={authSession} onLogout={handleLogout} />
       </div>
     </div>
   );

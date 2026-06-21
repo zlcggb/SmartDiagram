@@ -17,20 +17,8 @@ import { useChatStore } from '../../store/chatStore';
 import { ConfirmDialog, NoticeDialog } from '../common/AppDialog';
 import { useT } from '../../i18n';
 import { renderHtmlArtifact } from './htmlArtifactRenderer';
-
-const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '';
-const ENTERPRISE_EXPORT_SCOPES = [
-  'diagram:read',
-  'diagram:write',
-  'artifact:read',
-  'artifact:write',
-  'tool:diagram',
-  'tool:office',
-  'knowledge:read',
-  'export:basic',
-  'export:pdf',
-  'export:pptx',
-];
+import { API_BASE, currentEnterpriseContext, enterpriseHeaders } from '../../config/enterpriseContext';
+import { normalizeMermaidCode } from '../../utils/mermaidSanitizer';
 
 /** Download a blob as a file */
 function downloadBlob(blob: Blob, filename: string) {
@@ -188,22 +176,12 @@ export default function ExportButton() {
   const timestamp = () => new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
   const hasVersionedExport = Boolean(canvasDiagramId && canvasDiagramVersionId);
 
-  const enterpriseHeaders = () => ({
-    'Content-Type': 'application/json',
-    'x-tenant-id': 'local',
-    'x-user-id': 'anonymous',
-    'x-scopes': ENTERPRISE_EXPORT_SCOPES.join(','),
-  });
-
   // ── Export handlers per agent ──
 
   const exportMermaid = async (format: ExportFormat) => {
     // Use mermaid.render() to generate SVG from source code, not DOM scraping
     const mermaid = (await import('mermaid')).default;
-    let code = canvasCode.trim();
-    if (code.startsWith('```')) {
-      code = code.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
-    }
+    const code = normalizeMermaidCode(canvasCode);
     const { svg } = await mermaid.render(`export-${Date.now()}`, code);
     if (format === 'svg') {
       downloadText(svg, `Mermaid_${timestamp()}.svg`, 'image/svg+xml');
@@ -435,7 +413,7 @@ export default function ExportButton() {
       body: JSON.stringify({
         format,
         conversation_id: conversationId,
-        scopes: ENTERPRISE_EXPORT_SCOPES,
+        scopes: currentEnterpriseContext().scopes,
         confirmed,
         confirmation_reason: confirmed ? 'frontend_user_confirmed' : '',
       }),

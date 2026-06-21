@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp",
+        "--path",
+        "/Volumes/WorkData/项目app/app/DeepDiagram-Pro/SmartDiagram"
+      ]
+    }
+  }
+}

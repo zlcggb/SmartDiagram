@@ -42,6 +42,7 @@ from app.services.conversation_memory_service import (
 )
 from app.services.long_term_memory_service import load_long_term_preferences
 from app.services.budget_service import evaluate_tenant_budget
+from app.services.mermaid_sanitizer import normalize_mermaid_code
 from app.services.output_validation import validate_output
 from app.services.permission_service import build_permission_context
 from app.services.runtime_guard_service import (
@@ -52,6 +53,17 @@ from app.services.runtime_guard_service import (
 )
 
 router = APIRouter()
+
+
+def normalize_generated_code(engine_type: str | None, content: str) -> str:
+    """Apply deterministic source normalization before streaming or saving."""
+
+    if engine_type == "drawio":
+        return sanitize_drawio_xml(content)
+    if engine_type == "mermaid":
+        normalized, _ = normalize_mermaid_code(content)
+        return normalized
+    return content
 
 
 class StreamingTagParser:
@@ -457,8 +469,48 @@ def _build_messages(body: dict, conversation_memory_prompt: str = "") -> list:
     # If there's existing canvas code and the user wants to edit,
     # inject it so the Agent knows the current state.
     current_code = body.get("current_code", "")
+    current_engine = body.get("current_engine") or ""
+    design_concept = body.get("design_concept") or ""
+
     if current_code:
-        user_message += f"\n\n<existing_code>\n{current_code}\n</existing_code>"
+        # Detect cross-engine type switching via @agent prefix in message
+        target_engine = ""
+        msg_text = body.get("message", "")
+        if msg_text.startswith("@"):
+            at_end = msg_text.find(" ")
+            if at_end > 0:
+                target_engine = msg_text[1:at_end].strip()
+
+        is_cross_engine = bool(
+            current_engine
+            and target_engine
+            and current_engine != target_engine
+        )
+
+        if is_cross_engine and design_concept:
+            # Cross-engine type switch: inject semantic context so the LLM
+            # understands the CONTENT of the original diagram, not its code format.
+            labels = re.findall(r'"label"\s*:\s*"([^"]{2,80})"', current_code)
+            label_summary = "、".join(labels[:20]) if labels else ""
+            user_message += (
+                f"\n\n<source_diagram>"
+                f"\n[IMPORTANT] This is a TYPE CONVERSION. The user wants to PRESERVE the original "
+                f"business content and restructure it into a different diagram format."
+                f"\n\nOriginal diagram engine: {current_engine}"
+                f"\nOriginal design concept:\n{design_concept[:1500]}"
+            )
+            if label_summary:
+                user_message += f"\nOriginal key nodes/labels: {label_summary}"
+            user_message += (
+                f"\n\nYou MUST base your output on the above content. "
+                f"Do NOT invent new business scenarios. "
+                f"Restructure the SAME content into {target_engine} format."
+                f"\n</source_diagram>"
+                f"\n\n<existing_code>\n{current_code}\n</existing_code>"
+            )
+        else:
+            # Same-engine edit: pass code directly
+            user_message += f"\n\n<existing_code>\n{current_code}\n</existing_code>"
 
     # Build multimodal message if images are present
     images = body.get("images") or []
@@ -968,8 +1020,10 @@ async def chat_stream(request: Request):
                                     yield f"data: {json.dumps({'type': 'status', 'step_id': 'generating', 'content': generating_label, 'action': 'start'}, ensure_ascii=False)}\n\n"
                                 elif pe.get("type") == "code_complete":
                                     yield f"data: {json.dumps({'type': 'status', 'step_id': 'generating', 'action': 'end'}, ensure_ascii=False)}\n\n"
-                                    if current_engine_name == "drawio":
-                                        pe["content"] = sanitize_drawio_xml(pe["content"])
+                                    pe["content"] = normalize_generated_code(
+                                        current_engine_name,
+                                        pe.get("content", ""),
+                                    )
                                     latest_code = pe.get("content", "")
                                     validation = validate_output(
                                         current_engine_name,
@@ -1134,8 +1188,10 @@ async def chat_stream(request: Request):
                     assistant_content += pe.get("content", "")
                 if pe.get("type") == "code_complete":
                     yield f"data: {json.dumps({'type': 'status', 'step_id': 'generating', 'action': 'end'}, ensure_ascii=False)}\n\n"
-                    if current_engine_name == "drawio":
-                        pe["content"] = sanitize_drawio_xml(pe["content"])
+                    pe["content"] = normalize_generated_code(
+                        current_engine_name,
+                        pe.get("content", ""),
+                    )
                     latest_code = pe.get("content", "")
                     validation = validate_output(
                         current_engine_name,

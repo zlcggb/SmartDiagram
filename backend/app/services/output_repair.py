@@ -5,6 +5,7 @@ import re
 from typing import Any, TypedDict
 
 from app.artifacts.catalog import is_office_artifact
+from app.services.mermaid_sanitizer import normalize_mermaid_code
 from app.services.output_validation import validate_output
 
 
@@ -180,7 +181,7 @@ def _repair_office_artifact(content: str, engine: str) -> tuple[str, list[str], 
 
 
 def _repair_mermaid(content: str) -> tuple[str, list[str], list[str]]:
-    cleaned, rules = _strip_code_fences(content)
+    cleaned, rules = normalize_mermaid_code(content)
     if not cleaned.strip():
         return cleaned, rules, ["Mermaid repair cannot infer missing diagram content"]
     return cleaned.strip(), rules, []
@@ -211,6 +212,20 @@ def repair_output(engine_type: str | None, content: str) -> RepairResult:
     """Try deterministic repair and validate the repaired output."""
 
     engine = engine_type or "general"
+    if engine == "mermaid":
+        repaired_content, rules, errors = _repair_mermaid(content)
+        validation = validate_output(engine, repaired_content)
+        repaired = repaired_content != content and validation["ok"]
+        return {
+            "ok": bool(validation["ok"]),
+            "repaired": repaired,
+            "engine_type": engine,
+            "content": repaired_content if repaired else content,
+            "applied_rules": rules,
+            "validation": validation,
+            "errors": errors + ([] if validation["ok"] else validation["errors"]),
+        }
+
     original_validation = validate_output(engine, content)
     if original_validation["ok"]:
         return {

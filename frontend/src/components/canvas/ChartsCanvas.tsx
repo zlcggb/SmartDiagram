@@ -145,7 +145,10 @@ export default function ChartsCanvas() {
     // Notify option rendering Effect that the fresh instance is fully mounted
     setInitCounter(prev => prev + 1);
 
-    const handleResize = () => chartInstance.current?.resize();
+    const handleResize = () => {
+      // 用 rAF 推迟 resize，避免在 ECharts 主流程中被 ResizeObserver 同步触发
+      requestAnimationFrame(() => chartInstance.current?.resize());
+    };
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(chartRef.current);
 
@@ -183,7 +186,9 @@ export default function ChartsCanvas() {
           delete parsed.legend;
         }
 
-        chartInstance.current.setOption(parsed, true);
+        // 推迟 setOption 到下一帧，避免在 ECharts init 主流程中同步调用
+        const instance = chartInstance.current;
+        setTimeout(() => instance?.setOption(parsed, true), 0);
       }
     } catch (e: unknown) {
       if (!isStreaming) {

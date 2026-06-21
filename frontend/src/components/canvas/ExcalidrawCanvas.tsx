@@ -105,6 +105,8 @@ function normalizeElement(el: any, idx: number): any {
       endBinding: el.endBinding ?? null,
       startArrowhead: el.startArrowhead ?? null,
       endArrowhead: el.endArrowhead ?? (type === 'arrow' ? 'arrow' : null),
+      // Curved arrows look much better than straight lines
+      roundness: el.roundness ?? { type: 2 },
       // Arrows don't typically have background fill
       fillStyle: 'solid',
       backgroundColor: 'transparent',
@@ -171,6 +173,7 @@ function attemptJSONRecovery(raw: string): any[] | null {
 export default function ExcalidrawCanvas() {
   const { canvasCode, isStreaming, setExcalidrawAPI, pendingElements } = useChatStore();
   const [excalidrawAPI, setLocalAPI] = useState<any>(null);
+  const [readyAPI, setReadyAPI] = useState<any>(null);
   const [ExcalidrawMod, setExcalidrawMod] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -182,9 +185,16 @@ export default function ExcalidrawCanvas() {
   const hasScrolledRef = useRef(false);
 
   // Register excalidraw API to store for toolbar export access
+  // Use requestAnimationFrame to ensure Excalidraw is fully initialized
+  // before we consider the API "ready" for updateScene calls.
   const handleAPIReady = useCallback((api: any) => {
     setLocalAPI(api);
     setExcalidrawAPI(api);
+    // Delay setting readyAPI to next animation frame so Excalidraw's
+    // internal scene manager is fully initialized
+    requestAnimationFrame(() => {
+      setReadyAPI(api);
+    });
   }, [setExcalidrawAPI]);
 
   // Load Excalidraw component asynchronously
@@ -249,8 +259,9 @@ export default function ExcalidrawCanvas() {
   }, [isStreaming, excalidrawAPI]);
 
   // Render canvasCode: parse ExcalidrawElement[] JSON
+  // Uses readyAPI (not excalidrawAPI) to ensure Excalidraw is fully initialized
   useEffect(() => {
-    if (!isStreaming && excalidrawAPI && canvasCode && pendingElements.length === 0) {
+    if (!isStreaming && readyAPI && canvasCode && pendingElements.length === 0) {
       const trimmed = canvasCode.trim();
       try {
         let elements: any[];
@@ -277,19 +288,22 @@ export default function ExcalidrawCanvas() {
         if (Array.isArray(elements) && elements.length > 0) {
           const processed = elements.map((el, idx) => normalizeElement(el, idx));
           sceneElementsRef.current = processed;
-          excalidrawAPI.updateScene({ elements: processed });
+          // Use setTimeout to ensure Excalidraw's scene is fully ready
           setTimeout(() => {
-            excalidrawAPI.scrollToContent(processed, {
-              fitToContent: true,
-              viewportZoomFactor: 0.9,
-            });
-          }, 100);
+            readyAPI.updateScene({ elements: processed });
+            setTimeout(() => {
+              readyAPI.scrollToContent(processed, {
+                fitToContent: true,
+                viewportZoomFactor: 0.9,
+              });
+            }, 100);
+          }, 50);
         }
       } catch (e) {
         console.error('[ExcalidrawCanvas] Failed to parse Excalidraw elements:', e);
       }
     }
-  }, [isStreaming, canvasCode, excalidrawAPI, pendingElements.length]);
+  }, [isStreaming, canvasCode, readyAPI, pendingElements.length]);
 
   if (loading) {
     return (

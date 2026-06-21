@@ -3,7 +3,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router as api_router
+from app.api.routes_admin import router as admin_router
 from app.api.routes_approvals import router as approvals_router
+from app.api.routes_auth import router as auth_router
 from app.api.routes_audit import router as audit_router
 from app.api.routes_conversations import router as conversations_router
 from app.api.routes_diagrams import router as diagrams_router
@@ -25,6 +27,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_PREFIX)
+app.include_router(auth_router, prefix=settings.API_PREFIX)
 app.include_router(knowledge_router, prefix=settings.API_PREFIX)
 app.include_router(preferences_router, prefix=settings.API_PREFIX)
 app.include_router(conversations_router, prefix=settings.API_PREFIX)
@@ -32,6 +35,7 @@ app.include_router(diagrams_router, prefix=settings.API_PREFIX)
 app.include_router(exports_router, prefix=settings.API_PREFIX)
 app.include_router(approvals_router, prefix=settings.API_PREFIX)
 app.include_router(audit_router, prefix=settings.API_PREFIX)
+app.include_router(admin_router, prefix=settings.API_PREFIX)
 
 
 @app.on_event("startup")

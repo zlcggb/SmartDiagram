@@ -12,7 +12,7 @@ import remarkGfm from 'remark-gfm';
 import { ReactFlowProvider } from 'reactflow';
 import ExportButton from '../canvas/ExportButton';
 import {
-  DIAGRAM_AGENTS,
+  VISIBLE_DIAGRAM_AGENTS,
   getTaskDisplayName,
   getAgentEngineName,
   getAgentMeta,
@@ -93,7 +93,7 @@ function EmptyCanvas() {
           {t('canvas.emptyDescription')}
         </p>
         <div className="flex items-center gap-2.5 flex-wrap justify-center max-w-lg px-4">
-          {DIAGRAM_AGENTS.map((agent, i) => (
+          {VISIBLE_DIAGRAM_AGENTS.map((agent, i) => (
             <div key={agent.id}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-md text-xs sd-slide-up backdrop-blur-sm ${
                 canvasMode === 'light'
