@@ -178,6 +178,7 @@ interface ChatStore {
   messages: Message[];
   addMessage: (msg: Message) => void;
   updateLastAssistantMessage: (updates: Partial<Message>) => void;
+  updateMessageById: (id: string, updates: Partial<Message>) => void;
   clearMessages: () => void;
 
   // Enterprise persistence context
@@ -270,6 +271,10 @@ export const useChatStore = create<ChatStore>((set) => ({
       }
       return { messages: msgs };
     }),
+  updateMessageById: (id, updates) =>
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === id ? { ...m, ...updates } : m)),
+    })),
   clearMessages: () => set({
     messages: [],
     conversationId: makeClientId('conv'),

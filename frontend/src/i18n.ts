@@ -281,6 +281,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'drawio.loading': '正在加载 Draw.io 编辑器...',
     'drawio.generating': '正在生成...',
     'drawio.downloadFile': '下载 .drawio 文件',
+    'drawio.sourceLocal': '本地容器',
+    'drawio.sourceOnline': '在线服务',
 
     'charts.themeDark': '暗夜深空',
     'charts.themeLight': '纯白极简',
@@ -830,6 +832,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'drawio.loading': 'Loading Draw.io editor...',
     'drawio.generating': 'Generating...',
     'drawio.downloadFile': 'Download .drawio file',
+    'drawio.sourceLocal': 'Local container',
+    'drawio.sourceOnline': 'Online service',
 
     'charts.themeDark': 'Deep dark',
     'charts.themeLight': 'Minimal white',

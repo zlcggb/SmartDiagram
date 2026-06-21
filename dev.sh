@@ -27,6 +27,7 @@ cleanup() {
   echo -e "${YELLOW}⏹  正在停止所有服务...${NC}"
   kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
   wait $BACKEND_PID $FRONTEND_PID 2>/dev/null
+  docker stop smartdiagram-drawio 2>/dev/null || true
   echo -e "${GREEN}✅ 所有服务已停止${NC}"
   exit 0
 }
@@ -78,6 +79,20 @@ else
 fi
 
 echo ""
+
+# ────────── 启动 Draw.io 自托管容器 ──────────
+if command -v docker &>/dev/null; then
+  if docker ps --format '{{.Names}}' | grep -q 'smartdiagram-drawio'; then
+    echo -e "${GREEN}   ✅ Draw.io 自托管已运行 → http://localhost:9022${NC}"
+  else
+    echo -e "${CYAN}🐳 启动 Draw.io 自托管容器 (端口 9022)...${NC}"
+    docker rm -f smartdiagram-drawio 2>/dev/null || true
+    docker run -d --name smartdiagram-drawio -p 9022:8080 -e DRAWIO_OFFLINE=true --restart always jgraph/drawio:latest >/dev/null 2>&1
+    echo -e "${GREEN}   ✅ Draw.io 就绪 → http://localhost:9022${NC}"
+  fi
+else
+  echo -e "${YELLOW}⚠️  未安装 Docker，Draw.io 编辑器将使用在线版本（可能加载较慢）${NC}"
+fi
 
 # ────────── 启动后端 ──────────
 echo -e "${GREEN}🚀 启动后端  →  http://localhost:8000${NC}"

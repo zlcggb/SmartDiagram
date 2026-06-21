@@ -11,6 +11,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ReactFlowProvider } from 'reactflow';
 import ExportButton from '../canvas/ExportButton';
+import SaveButton from '../canvas/SaveButton';
 import {
   VISIBLE_DIAGRAM_AGENTS,
   getTaskDisplayName,
@@ -195,7 +196,10 @@ function CanvasPanelInner() {
             )}
             {isStreaming && <Loader2 className="w-3.5 h-3.5 animate-spin ml-1 text-indigo-500" />}
           </div>
-          <ExportButton />
+          <div className="flex items-center gap-2">
+            <SaveButton />
+            <ExportButton />
+          </div>
         </div>
       )}
       {/* Canvas area */}

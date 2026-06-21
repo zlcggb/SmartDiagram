@@ -173,3 +173,26 @@ async def rollback_diagram_version(
         )
     except (PermissionError, ValueError) as exc:
         _raise_diagram_error(exc)
+
+
+@router.post("/diagrams/{diagram_id}/versions")
+async def save_manual_diagram_version(
+    diagram_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    """Save manual canvas edits as a new diagram version."""
+    from app.services.diagram_version_service import append_manual_diagram_version
+    
+    body = await request.json()
+    permission_context = build_permission_context(_body_with_headers(request, body))
+    try:
+        return await append_manual_diagram_version(
+            session,
+            permission_context,
+            diagram_id,
+            code=str(body.get("code") or ""),
+            reason=str(body.get("reason") or "Manual canvas edit"),
+        )
+    except (PermissionError, ValueError) as exc:
+        _raise_diagram_error(exc)

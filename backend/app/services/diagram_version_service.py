@@ -573,3 +573,91 @@ async def rollback_diagram_to_version(
         "task_type": rollback_version.task_type,
         "design_concept": rollback_version.design_concept,
     }
+
+
+async def append_manual_diagram_version(
+    session: AsyncSession,
+    permission_context: PermissionContext,
+    diagram_id: str,
+    *,
+    code: str,
+    reason: str = "Manual canvas edit",
+) -> dict[str, Any]:
+    """Append a new version from a manual canvas edit."""
+    if "diagram:write" not in permission_context.get("scopes", []):
+        raise PermissionError("missing_scope")
+
+    diagram = await session.get(Diagram, diagram_id)
+    if not diagram:
+        raise ValueError("diagram_not_found")
+    if diagram.tenant_id != permission_context["tenant_id"]:
+        raise PermissionError("diagram_outside_tenant")
+
+    if diagram.project_id:
+        permission_context["project_id"] = diagram.project_id
+    await ensure_principals(session, permission_context, None)
+    if not await can_access_project(session, permission_context, diagram.project_id, "diagram:write"):
+        raise PermissionError("missing_project_access")
+
+    current_version = None
+    if diagram.current_version_id:
+        current_version = await session.get(DiagramVersion, diagram.current_version_id)
+    
+    tenant_id = permission_context["tenant_id"]
+    user_id = permission_context["user_id"]
+    clean_reason = " ".join((reason or "Manual edit").split())[:240]
+    new_version_number = await next_version_number(session, diagram.id)
+    conversation_id = diagram.conversation_id
+
+    new_version = DiagramVersion(
+        tenant_id=tenant_id,
+        diagram_id=diagram.id,
+        conversation_id=conversation_id,
+        message_id=None,
+        version_number=new_version_number,
+        engine_type=current_version.engine_type if current_version else diagram.engine_type,
+        task_type=current_version.task_type if current_version else diagram.task_type,
+        code=code,
+        design_concept=current_version.design_concept if current_version else None,
+        validation_json={"manual_edit": {"reason": clean_reason}},
+        created_by=user_id,
+    )
+    session.add(new_version)
+    await session.flush()
+
+    diagram.current_version_id = new_version.id
+    diagram.updated_at = utc_now()
+    if diagram.conversation_id:
+        conversation = await session.get(Conversation, diagram.conversation_id)
+        if conversation and conversation.tenant_id == tenant_id:
+            conversation.current_diagram_version_id = new_version.id
+            conversation.updated_at = utc_now()
+
+    session.add(
+        AuditEvent(
+            tenant_id=tenant_id,
+            project_id=diagram.project_id,
+            user_id=user_id,
+            conversation_id=diagram.conversation_id,
+            event_type="diagram.version.manual_edit",
+            severity="info",
+            message="Saved manual diagram edit as new version.",
+            metadata_json={
+                "diagram_id": diagram.id,
+                "version_id": new_version.id,
+                "version_number": new_version.version_number,
+                "reason": clean_reason,
+            },
+        )
+    )
+    await session.commit()
+    return {
+        "saved": True,
+        "diagram_id": diagram.id,
+        "diagram_version_id": new_version.id,
+        "version_number": new_version.version_number,
+        "code": new_version.code,
+        "engine_type": new_version.engine_type,
+        "task_type": new_version.task_type,
+        "design_concept": new_version.design_concept,
+    }

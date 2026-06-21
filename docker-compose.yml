@@ -19,6 +19,15 @@ services:
     ports:
       - "6379:6379"
 
+  drawio:
+    image: jgraph/drawio:latest
+    container_name: smartdiagram-drawio
+    restart: always
+    environment:
+      - DRAWIO_OFFLINE=true
+    ports:
+      - "9022:8080"
+
   qdrant:
     image: qdrant/qdrant:latest
     container_name: smartdiagram-qdrant
