@@ -45,6 +45,7 @@ class Settings:
 
     # Local auth gateway
     AUTH_LOCAL_LOGIN_ENABLED: bool = os.getenv("AUTH_LOCAL_LOGIN_ENABLED", "true").lower() == "true"
+    AUTH_REGISTRATION_ENABLED: bool = os.getenv("AUTH_REGISTRATION_ENABLED", "true").lower() == "true"
     AUTH_SESSION_SECRET: str = os.getenv(
         "AUTH_SESSION_SECRET",
         "smartdiagram-dev-session-secret-change-me",
@@ -54,6 +55,13 @@ class Settings:
     AUTH_DEMO_USER_PASSWORD: str = os.getenv("AUTH_DEMO_USER_PASSWORD", "user123456")
     AUTH_DEMO_ADMIN_EMAIL: str = os.getenv("AUTH_DEMO_ADMIN_EMAIL", "admin@smartdiagram.local")
     AUTH_DEMO_ADMIN_PASSWORD: str = os.getenv("AUTH_DEMO_ADMIN_PASSWORD", "admin123456")
+
+    # Cloudflare Turnstile (human verification)
+    TURNSTILE_SITE_KEY: str = os.getenv("TURNSTILE_SITE_KEY", "1x00000000000000000000AA")
+    TURNSTILE_SECRET_KEY: str = os.getenv("TURNSTILE_SECRET_KEY", "1x0000000000000000000000000000000AA")
+
+    # Show demo user presets on login page (disable for production)
+    AUTH_SHOW_DEMO_PRESETS: bool = os.getenv("AUTH_SHOW_DEMO_PRESETS", "true").lower() == "true"
 
     # Database
     DATABASE_URL: str = os.getenv(

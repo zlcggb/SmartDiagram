@@ -67,15 +67,15 @@ export function isAdminSession(session: AuthSession | null) {
   return roles.has('admin') || roles.has('owner');
 }
 
-export async function loginWithPassword(email: string, password: string): Promise<AuthSession> {
+export async function loginWithPassword(email: string, password: string, turnstileToken?: string): Promise<AuthSession> {
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, turnstile_token: turnstileToken || '' }),
   });
   if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(detail || `HTTP ${res.status}`);
+    const data = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(data.detail || `HTTP ${res.status}`);
   }
   const session = (await res.json()) as AuthSession;
   writeAuthSession(session);
@@ -91,4 +91,38 @@ export async function validateAuthSession(session: AuthSession): Promise<AuthSes
     throw new Error('Session expired');
   }
   return session;
+}
+
+export async function registerWithPassword(
+  email: string,
+  password: string,
+  turnstileToken: string,
+): Promise<AuthSession> {
+  const res = await fetch(`${API_BASE}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, turnstile_token: turnstileToken }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(data.detail || `HTTP ${res.status}`);
+  }
+  const session = (await res.json()) as AuthSession;
+  writeAuthSession(session);
+  return session;
+}
+
+export interface CaptchaConfig {
+  provider: string;
+  site_key: string;
+  enabled: boolean;
+  show_demo_presets: boolean;
+}
+
+export async function fetchCaptchaConfig(): Promise<CaptchaConfig> {
+  const res = await fetch(`${API_BASE}/api/auth/captcha-config`);
+  if (!res.ok) {
+    return { provider: 'turnstile', site_key: '', enabled: false, show_demo_presets: false };
+  }
+  return (await res.json()) as CaptchaConfig;
 }

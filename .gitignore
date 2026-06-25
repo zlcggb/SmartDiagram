@@ -10,9 +10,10 @@ dist/
 build/
 backend/storage/
 
-# Environment
+# Environment (敏感！永不提交)
 .env
 .env.local
+backend/.env
 
 # IDE
 .vscode/
@@ -32,4 +33,9 @@ gcp-credentials.json
 backend/gcp-credentials.json
 test_vertex.py
 backend/test_vertex.py
+backend/test_*.py
 /test/
+
+# Docker volumes (if mounted locally)
+pgdata/
+qdrantdata/

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import {
   AlertCircle,
   FileText,
@@ -6,11 +6,20 @@ import {
   Layers3,
   LockKeyhole,
   Loader2,
+  Mail,
   ShieldCheck,
   Sparkles,
+  UserPlus,
   UserRound,
 } from 'lucide-react';
-import { DEMO_LOGIN_HINTS, loginWithPassword, type AuthSession } from '../../config/auth';
+import {
+  DEMO_LOGIN_HINTS,
+  fetchCaptchaConfig,
+  loginWithPassword,
+  registerWithPassword,
+  type AuthSession,
+  type CaptchaConfig,
+} from '../../config/auth';
 import { useT } from '../../i18n';
 
 interface LoginScreenProps {
@@ -18,14 +27,105 @@ interface LoginScreenProps {
 }
 
 type LoginPreset = 'user' | 'admin';
+type AuthMode = 'login' | 'register';
+
+// ─── Turnstile Widget ───
+
+function TurnstileWidget({
+  siteKey,
+  onToken,
+}: {
+  siteKey: string;
+  onToken: (token: string) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!siteKey || !containerRef.current) return;
+
+    const renderWidget = () => {
+      if (!containerRef.current || widgetIdRef.current !== null) return;
+      const w = window as any;
+      if (!w.turnstile) return;
+      widgetIdRef.current = w.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: (token: string) => onToken(token),
+        'expired-callback': () => onToken(''),
+        theme: 'light',
+        size: 'flexible',
+      });
+    };
+
+    // Load Turnstile script if not already loaded
+    if (!(window as any).turnstile) {
+      const existing = document.querySelector('script[src*="turnstile"]');
+      if (!existing) {
+        const script = document.createElement('script');
+        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        script.async = true;
+        script.onload = () => setTimeout(renderWidget, 100);
+        document.head.appendChild(script);
+      } else {
+        // Script exists but hasn't loaded yet
+        existing.addEventListener('load', () => setTimeout(renderWidget, 100));
+      }
+    } else {
+      renderWidget();
+    }
+
+    return () => {
+      if (widgetIdRef.current !== null) {
+        try { (window as any).turnstile?.remove(widgetIdRef.current); } catch {}
+        widgetIdRef.current = null;
+      }
+    };
+  }, [siteKey, onToken]);
+
+  return <div ref={containerRef} className="w-full" />;
+}
+
+// ─── Main Component ───
 
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
   const { t } = useT();
-  const [email, setEmail] = useState(DEMO_LOGIN_HINTS.user.email);
-  const [password, setPassword] = useState(DEMO_LOGIN_HINTS.user.password);
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [preset, setPreset] = useState<LoginPreset>('user');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [captchaConfig, setCaptchaConfig] = useState<CaptchaConfig | null>(null);
+
+  // Fetch captcha config on mount
+  useEffect(() => {
+    fetchCaptchaConfig().then((config) => {
+      setCaptchaConfig(config);
+      // Auto-fill demo credentials only when demo presets are enabled
+      if (config.show_demo_presets) {
+        setEmail(DEMO_LOGIN_HINTS.user.email);
+        setPassword(DEMO_LOGIN_HINTS.user.password);
+      }
+    });
+  }, []);
+
+  const switchMode = (next: AuthMode) => {
+    setMode(next);
+    setError('');
+    setTurnstileToken('');
+    if (next === 'register') {
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+    } else if (captchaConfig?.show_demo_presets) {
+      applyPreset('user');
+    } else {
+      setEmail('');
+      setPassword('');
+    }
+  };
 
   const applyPreset = (nextPreset: LoginPreset) => {
     const hint = DEMO_LOGIN_HINTS[nextPreset];
@@ -39,11 +139,42 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     event.preventDefault();
     setBusy(true);
     setError('');
+
     try {
-      const session = await loginWithPassword(email, password);
-      onLogin(session);
-    } catch (err) {
-      setError(t('auth.loginFailed'));
+      if (mode === 'register') {
+        // Validate
+        if (!email || !email.includes('@')) {
+          throw new Error(t('auth.invalidEmail'));
+        }
+        if (password.length < 8) {
+          throw new Error(t('auth.passwordTooShort'));
+        }
+        if (password !== confirmPassword) {
+          throw new Error(t('auth.passwordMismatch'));
+        }
+        if (!turnstileToken) {
+          throw new Error(t('auth.captchaRequired'));
+        }
+        const session = await registerWithPassword(email, password, turnstileToken);
+        onLogin(session);
+      } else {
+        if (!turnstileToken) {
+          throw new Error(t('auth.captchaRequired'));
+        }
+        const session = await loginWithPassword(email, password, turnstileToken);
+        onLogin(session);
+      }
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (msg.includes('EMAIL_EXISTS') || msg.includes('already registered')) {
+        setError(t('auth.emailExists'));
+      } else if (msg.includes('CAPTCHA')) {
+        setError(t('auth.captchaFailed'));
+      } else if (mode === 'register') {
+        setError(msg || t('auth.registerFailed'));
+      } else {
+        setError(t('auth.loginFailed'));
+      }
     } finally {
       setBusy(false);
     }
@@ -56,6 +187,13 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         ? 'border-blue-500 bg-blue-50 text-blue-700'
         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
     }`;
+  const tabClass = (active: boolean) =>
+    `flex-1 py-2.5 text-center text-sm font-semibold rounded-lg transition ${
+      active
+        ? 'bg-white text-slate-900 shadow-sm'
+        : 'text-slate-500 hover:text-slate-700'
+    }`;
+
   const showcaseItems = [
     {
       icon: GitBranch,
@@ -117,31 +255,55 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
               <p className="text-xs font-semibold uppercase text-blue-600">
                 {t('auth.console')}
               </p>
-              <h2 className="mt-3 text-2xl font-semibold">{t('auth.title')}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">{t('auth.description')}</p>
+              <h2 className="mt-3 text-2xl font-semibold">
+                {mode === 'login' ? t('auth.title') : t('auth.registerTitle')}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {mode === 'login' ? t('auth.description') : t('auth.registerDescription')}
+              </p>
             </div>
 
-            <div className="mb-5 flex gap-2">
-              <button type="button" className={presetClass(preset === 'user')} onClick={() => applyPreset('user')}>
-                <UserRound className="h-4 w-4" />
-                {t('auth.normalUser')}
+            {/* Login / Register tabs */}
+            <div className="mb-5 flex gap-1 rounded-xl bg-slate-100 p-1">
+              <button type="button" className={tabClass(mode === 'login')} onClick={() => switchMode('login')}>
+                <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" />{t('auth.signIn')}</span>
               </button>
-              <button type="button" className={presetClass(preset === 'admin')} onClick={() => applyPreset('admin')}>
-                <ShieldCheck className="h-4 w-4" />
-                {t('auth.adminUser')}
+              <button type="button" className={tabClass(mode === 'register')} onClick={() => switchMode('register')}>
+                <span className="inline-flex items-center gap-1.5"><UserPlus className="h-3.5 w-3.5" />{t('auth.register')}</span>
               </button>
             </div>
 
+            {/* Demo user presets (login mode only, controlled by env) */}
+            {mode === 'login' && captchaConfig?.show_demo_presets && (
+              <div className="mb-5 flex gap-2">
+                <button type="button" className={presetClass(preset === 'user')} onClick={() => applyPreset('user')}>
+                  <UserRound className="h-4 w-4" />
+                  {t('auth.normalUser')}
+                </button>
+                <button type="button" className={presetClass(preset === 'admin')} onClick={() => applyPreset('admin')}>
+                  <ShieldCheck className="h-4 w-4" />
+                  {t('auth.adminUser')}
+                </button>
+              </div>
+            )}
+
+            {/* Email */}
             <label className="mb-4 block">
               <span className="mb-1.5 block text-xs font-semibold text-slate-700">{t('auth.email')}</span>
-              <input
-                className={inputClass}
-                autoComplete="username"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  className={`${inputClass} pl-9`}
+                  type="email"
+                  autoComplete="username"
+                  placeholder={mode === 'register' ? t('auth.emailPlaceholder') : ''}
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </div>
             </label>
 
+            {/* Password */}
             <label className="mb-4 block">
               <span className="mb-1.5 block text-xs font-semibold text-slate-700">{t('auth.password')}</span>
               <div className="relative">
@@ -149,13 +311,46 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
                 <input
                   className={`${inputClass} pl-9`}
                   type="password"
-                  autoComplete="current-password"
+                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                  placeholder={mode === 'register' ? t('auth.passwordPlaceholder') : ''}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
               </div>
+              {mode === 'register' && (
+                <p className="mt-1 text-xs text-slate-400">{t('auth.passwordHint')}</p>
+              )}
             </label>
 
+            {/* Confirm password (register only) */}
+            {mode === 'register' && (
+              <label className="mb-4 block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-700">{t('auth.confirmPassword')}</span>
+                <div className="relative">
+                  <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    className={`${inputClass} pl-9`}
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                  />
+                </div>
+              </label>
+            )}
+
+            {/* Turnstile CAPTCHA */}
+            {captchaConfig?.site_key && (
+              <div className="mb-4">
+                <TurnstileWidget
+                  key={mode}
+                  siteKey={captchaConfig.site_key}
+                  onToken={setTurnstileToken}
+                />
+              </div>
+            )}
+
+            {/* Error */}
             {error && (
               <div className="mb-4 flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -163,16 +358,22 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
               </div>
             )}
 
+            {/* Submit */}
             <button
               type="submit"
               disabled={busy}
               className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
             >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-              {busy ? t('auth.signingIn') : t('auth.signIn')}
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === 'register' ? <UserPlus className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+              {busy
+                ? (mode === 'register' ? t('auth.registering') : t('auth.signingIn'))
+                : (mode === 'register' ? t('auth.register') : t('auth.signIn'))
+              }
             </button>
 
-            <p className="mt-4 text-center text-xs text-slate-500">{t('auth.localOnly')}</p>
+            <p className="mt-4 text-center text-xs text-slate-500">
+              {mode === 'login' ? t('auth.localOnly') : t('auth.registerNote')}
+            </p>
           </form>
         </main>
       </div>

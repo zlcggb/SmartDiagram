@@ -19,6 +19,11 @@
         "smoke:ops": "cd backend && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/smoke_ops_metrics.py --require-db",
         "worker:once": "cd backend && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/run_enterprise_workers.py",
         "worker": "cd backend && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/run_enterprise_workers.py --loop",
+        "deploy": "bash deploy.sh",
+        "deploy:rebuild": "bash deploy.sh --rebuild",
+        "deploy:down": "bash deploy.sh --down",
+        "deploy:logs": "bash deploy.sh --logs",
+        "deploy:status": "bash deploy.sh --status",
         "docker": "docker compose up --build -d",
         "docker:down": "docker compose down"
     }

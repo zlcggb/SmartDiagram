@@ -31,6 +31,7 @@ class User(SQLModel, table=True):
     id: str = Field(default_factory=new_id, primary_key=True)
     tenant_id: str = Field(foreign_key="tenants.id", index=True)
     email: str = Field(index=True)
+    password_hash: str | None = Field(default=None)
     display_name: str = ""
     role: str = Field(default="member", index=True)
     status: str = Field(default="active", index=True)
