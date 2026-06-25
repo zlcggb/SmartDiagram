@@ -50,7 +50,7 @@
 
 ```bash
 # 检查 .gitignore 是否包含关键排除项
-cat .gitignore | grep -E "\.env|gcp-credentials|uv\.lock"
+cat .gitignore | grep -E "\.env|gcp-credentials"
 ```
 
 应该看到：
@@ -59,8 +59,9 @@ cat .gitignore | grep -E "\.env|gcp-credentials|uv\.lock"
 .env.local
 backend/.env
 gcp-credentials.json
-uv.lock
 ```
+
+> **注意**：`uv.lock` 和 `package-lock.json` 一样是依赖锁文件，**必须提交**到仓库，以确保服务器 Docker 构建时依赖版本一致。
 
 ### 1.2 清理已追踪的敏感文件
 
@@ -165,6 +166,8 @@ cd SmartDiagram
 
 ### 3.2 配置环境变量
 
+`docker-compose.yml` 使用 `env_file` 直接读取 `backend/.env`，**只需配置这一个文件**即可。
+
 ```bash
 # 从模板创建配置文件
 cp backend/.env.example backend/.env
@@ -177,12 +180,11 @@ nano backend/.env
 
 ```bash
 # ── 必填：LLM API 配置 ──
-OPENAI_API_KEY=sk-your-real-api-key      # 替换为真实 API Key
+OPENAI_API_KEY=sk-your-real-api-key        # 替换为真实 API Key
 OPENAI_BASE_URL=https://api.openai.com/v1  # 如果用中转站，改为中转站地址
 MODEL_ID=gpt-4o                            # 或其他兼容模型
 
 # ── 推荐修改：安全配置 ──
-DB_PASSWORD=your-strong-password-here      # 数据库密码
 AUTH_SESSION_SECRET=your-random-secret     # Session 签名密钥（至少 32 字符随机串）
 ```
 
@@ -191,16 +193,10 @@ AUTH_SESSION_SECRET=your-random-secret     # Session 签名密钥（至少 32 �
 > openssl rand -hex 32
 > ```
 
-### 3.3 配置数据库密码（可选）
-
-`docker-compose.yml` 中数据库密码通过环境变量 `DB_PASSWORD` 控制：
-
-```bash
-# 在项目根目录创建 .env 文件，供 docker-compose 读取
-echo "DB_PASSWORD=your-strong-db-password" > .env
-```
-
-如果不创建，默认使用 `smartdiagram_secret`。
+> **关于数据库密码**：`docker-compose.yml` 中数据库密码默认为 `smartdiagram_secret`。如需修改，在项目根目录创建 `.env` 文件：
+> ```bash
+> echo "DB_PASSWORD=your-strong-db-password" > .env
+> ```
 
 ---
 

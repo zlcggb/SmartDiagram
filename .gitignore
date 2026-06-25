@@ -25,9 +25,6 @@ backend/.env
 .DS_Store
 Thumbs.db
 
-# uv
-uv.lock
-
 # GCP Credentials & Test scripts
 gcp-credentials.json
 backend/gcp-credentials.json
