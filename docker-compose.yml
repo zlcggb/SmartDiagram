@@ -58,7 +58,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - LANGCHAIN_TRACING_V2=false
     ports:
-      - "8000:8000"
+      - "9236:8000"
 
   worker:
     build:
