@@ -1,17 +1,20 @@
 /**
  * App — Root layout. Canvas LEFT (65%) | Separator | Chat RIGHT (35%).
  * All styles use pure Tailwind v4 utilities. Zero inline styles.
+ *
+ * Guest mode: unauthenticated users enter the main UI directly.
+ * ChatPanel handles quota enforcement and login prompts.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import ChatPanel from './components/chat/ChatPanel';
 import CanvasPanel from './components/layout/CanvasPanel';
 import { useChatStore } from './store/chatStore';
-import LoginScreen from './components/auth/LoginScreen';
 import {
   clearAuthSession,
   readAuthSession,
   validateAuthSession,
+  writeAuthSession,
   type AuthSession,
 } from './config/auth';
 
@@ -70,10 +73,12 @@ export default function App() {
     setAuthSession(null);
   };
 
-  if (!authSession) {
-    return <LoginScreen onLogin={setAuthSession} />;
-  }
+  const handleLogin = (session: AuthSession) => {
+    writeAuthSession(session);
+    setAuthSession(session);
+  };
 
+  // Session validation in progress — show loading state
   if (authChecking) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-sm font-medium text-slate-300">
@@ -82,6 +87,7 @@ export default function App() {
     );
   }
 
+  // Main layout — works for both authenticated and guest users
   return (
     <div 
       ref={containerRef} 
@@ -107,7 +113,7 @@ export default function App() {
 
       {/* Chat sidebar (right, fixed width) */}
       <div className="h-full shrink-0" style={{ width: chatWidth }}>
-        <ChatPanel authSession={authSession} onLogout={handleLogout} />
+        <ChatPanel authSession={authSession} onLogout={handleLogout} onLogin={handleLogin} />
       </div>
     </div>
   );

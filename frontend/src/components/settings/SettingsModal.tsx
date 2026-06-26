@@ -30,7 +30,7 @@ type SettingsSection = 'appearance' | 'model' | 'preferences' | 'ops' | 'users' 
 
 interface SettingsModalProps {
   open: boolean;
-  authSession: AuthSession;
+  authSession: AuthSession | null;
   onClose: () => void;
   onLogout: () => void;
   onClearConversation: () => void;
@@ -173,9 +173,9 @@ export default function SettingsModal({
       ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
       : 'border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800'
   }`;
-  const isAdmin = isAdminSession(authSession);
+  const isAdmin = authSession ? isAdminSession(authSession) : false;
   const roleLabel = isAdmin ? t('auth.adminUser') : t('auth.normalUser');
-  const userDisplayName = authSession.user.display_name || authSession.user.email;
+  const userDisplayName = authSession ? (authSession.user.display_name || authSession.user.email) : t('guest.tryFree');
   const handleLogout = () => {
     onClose();
     onLogout();
@@ -317,7 +317,50 @@ export default function SettingsModal({
     </div>
   );
 
-  const renderSession = () => (
+  const renderSession = () => {
+    // Guest mode — no session info to display
+    if (!authSession) {
+      return (
+        <div className="space-y-5">
+          {renderSectionHeader(t('settings.sessionTitle'), t('settings.sessionDescription'))}
+          <div className={`rounded-lg border p-5 ${cardClass}`}>
+            <div className="flex items-center gap-4">
+              <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${isLight ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-300'}`}>
+                <UserRound className="h-6 w-6" />
+              </span>
+              <div>
+                <h3 className="text-base font-semibold">{t('guest.tryFree')}</h3>
+                <p className={`mt-1 text-sm ${mutedClass}`}>{t('guest.loginToUnlock')}</p>
+              </div>
+            </div>
+          </div>
+          <div className={`rounded-lg border p-5 ${isLight ? 'border-rose-100 bg-white' : 'border-rose-500/20 bg-rose-500/5'}`}>
+            <div className="flex items-start gap-3">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${isLight ? 'bg-rose-50 text-rose-600' : 'bg-rose-500/10 text-rose-200'}`}>
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className={`text-sm font-semibold ${isLight ? 'text-rose-700' : 'text-rose-100'}`}>{t('settings.clearConversation')}</h3>
+                <p className={`mt-1 text-[12px] leading-relaxed ${isLight ? 'text-rose-500/80' : 'text-rose-200/70'}`}>
+                  {t('settings.clearConversationDescription')}
+                </p>
+                <button
+                  type="button"
+                  onClick={onClearConversation}
+                  className={`mt-4 inline-flex h-9 items-center justify-center rounded-lg px-3 text-[12px] font-semibold transition-colors ${
+                    isLight ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-rose-500/20 text-rose-100 hover:bg-rose-500/30'
+                  }`}
+                >
+                  {t('dialog.clearConversation.confirm')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
     <div className="space-y-5">
       {renderSectionHeader(t('settings.sessionTitle'), t('settings.sessionDescription'))}
       <div className={`rounded-lg border p-5 ${cardClass}`}>
@@ -392,7 +435,8 @@ export default function SettingsModal({
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderActiveSection = () => {
     if (activeSection === 'appearance') return renderAppearance();

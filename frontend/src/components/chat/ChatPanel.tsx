@@ -60,6 +60,8 @@ import {
 } from '../../config/diagramAgents';
 import type { DiagramEngineType, DiagramTaskType } from '../../types/diagram';
 import type { AuthSession } from '../../config/auth';
+import { getGuestQuota, consumeGuestUse, type GuestQuotaStatus } from '../../config/guestQuota';
+import LoginScreen from '../auth/LoginScreen';
 
 type VersionActionPayload = {
   diagram_id: string;
@@ -184,6 +186,16 @@ const formatSeconds = (value: number | undefined) => {
   const seconds = Number(value || 0);
   if (!Number.isFinite(seconds) || seconds <= 0) return '0.0';
   return seconds >= 10 ? seconds.toFixed(0) : seconds.toFixed(1);
+};
+
+/** Format a future epoch timestamp as a human-readable countdown string, e.g. "23h 15m" */
+const formatResetTime = (resetAt: number): string => {
+  const diffMs = Math.max(0, resetAt - Date.now());
+  const hours = Math.floor(diffMs / (60 * 60 * 1000));
+  const minutes = Math.floor((diffMs % (60 * 60 * 1000)) / (60 * 1000));
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return '<1m';
 };
 
 const historyProcessToThinkingSteps = (process: HistoryAgentProcess | null | undefined): ThinkingStep[] => {
@@ -1499,11 +1511,12 @@ function LiveTimer({ startTime }: { startTime: number | null }) {
 
 /* ── Main ChatPanel ── */
 interface ChatPanelProps {
-  authSession: AuthSession;
+  authSession: AuthSession | null;
   onLogout: () => void;
+  onLogin: (session: AuthSession) => void;
 }
 
-export default function ChatPanel({ authSession, onLogout }: ChatPanelProps) {
+export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelProps) {
   const {
     messages, addMessage, updateLastAssistantMessage, clearMessages,
     conversationId, setConversationId,
@@ -1543,6 +1556,10 @@ export default function ChatPanel({ authSession, onLogout }: ChatPanelProps) {
   const [typeSwitchMessageId, setTypeSwitchMessageId] = useState<string | null>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [noticeDialog, setNoticeDialog] = useState<{ title: string; message: string } | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [guestQuota, setGuestQuota] = useState<GuestQuotaStatus>(() => getGuestQuota());
+  const isGuest = !authSession;
+  const guestExhausted = isGuest && guestQuota.exhausted;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const activeAbortControllerRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -1991,6 +2008,12 @@ export default function ChatPanel({ authSession, onLogout }: ChatPanelProps) {
     const imagesToSend = overrides?.images ? [...overrides.images] : [...inputImages];
     if ((!text && imagesToSend.length === 0) || isStreaming) return;
 
+    // Guest quota check — block if exhausted
+    if (isGuest && getGuestQuota().exhausted) {
+      setGuestQuota(getGuestQuota());
+      return;
+    }
+
     // If agent is selected but no @ prefix in text, prepend it
     const agentForSend = overrides?.forcedAgent ?? selectedAgent;
     if (agentForSend && !text.startsWith('@')) {
@@ -2370,6 +2393,11 @@ export default function ChatPanel({ authSession, onLogout }: ChatPanelProps) {
               setStreamingCode('');
               const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
               updateLastAssistantMessage({ code: finalCode || '[]', content: t('chat.status.done', { seconds: elapsed }) });
+              // Consume guest quota on successful diagram generation
+              if (isGuest) {
+                consumeGuestUse();
+                setGuestQuota(getGuestQuota());
+              }
               break;
             }
             case 'text':
@@ -2922,6 +2950,69 @@ export default function ChatPanel({ authSession, onLogout }: ChatPanelProps) {
         <div ref={endRef} />
       </div>
 
+      {/* ── Guest Quota Bar ── */}
+      {isGuest && (
+        <div style={{
+          margin: '0 12px',
+          marginBottom: '4px',
+          padding: '8px 12px',
+          borderRadius: '10px',
+          background: guestExhausted
+            ? (canvasMode === 'light' ? 'linear-gradient(135deg, #fef2f2, #fff1f2)' : 'linear-gradient(135deg, rgba(239,68,68,0.12), rgba(244,63,94,0.10))')
+            : (canvasMode === 'light' ? 'linear-gradient(135deg, #eff6ff, #f0f9ff)' : 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(99,102,241,0.06))'),
+          border: guestExhausted
+            ? (canvasMode === 'light' ? '1px solid #fecaca' : '1px solid rgba(239,68,68,0.25)')
+            : (canvasMode === 'light' ? '1px solid #bfdbfe' : '1px solid rgba(59,130,246,0.2)'),
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
+          fontSize: '12px',
+          transition: 'all 0.3s ease',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+            <span style={{ fontSize: '14px', flexShrink: 0 }}>{guestExhausted ? '⏰' : '🎯'}</span>
+            <span style={{
+              color: guestExhausted
+                ? (canvasMode === 'light' ? '#dc2626' : '#fca5a5')
+                : (canvasMode === 'light' ? '#2563eb' : '#93c5fd'),
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {guestExhausted
+                ? `${t('guest.quotaExhausted')}${guestQuota.resetAt ? ` · ${t('guest.resetIn', { time: formatResetTime(guestQuota.resetAt) })}` : ''}`
+                : t('guest.quotaRemaining', { remaining: guestQuota.remaining, total: guestQuota.total })
+              }
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowLoginModal(true)}
+            style={{
+              flexShrink: 0,
+              padding: '4px 12px',
+              borderRadius: '6px',
+              border: 'none',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              background: guestExhausted
+                ? 'linear-gradient(135deg, #3b82f6, #6366f1)'
+                : (canvasMode === 'light' ? '#e0e7ff' : 'rgba(99,102,241,0.2)'),
+              color: guestExhausted
+                ? '#fff'
+                : (canvasMode === 'light' ? '#4338ca' : '#a5b4fc'),
+              boxShadow: guestExhausted ? '0 2px 8px rgba(99,102,241,0.3)' : 'none',
+            }}
+          >
+            {guestExhausted ? t('guest.loginNow') : t('guest.loginToUnlock')}
+          </button>
+        </div>
+      )}
+
       {/* ── ChatGPT-Style Input Area ── */}
       <div className="px-3 pb-3 pt-1">
         <div style={{
@@ -2983,9 +3074,9 @@ export default function ChatPanel({ authSession, onLogout }: ChatPanelProps) {
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder={inputImages.length > 0 ? t('chat.inputPlaceholderWithImages') : t('chat.inputPlaceholder')}
+              placeholder={guestExhausted ? t('guest.quotaExhausted') : inputImages.length > 0 ? t('chat.inputPlaceholderWithImages') : t('chat.inputPlaceholder')}
               rows={1}
-              disabled={isStreaming}
+              disabled={isStreaming || guestExhausted}
               style={{
                 width: '100%',
                 background: 'transparent',
@@ -3259,19 +3350,19 @@ export default function ChatPanel({ authSession, onLogout }: ChatPanelProps) {
             {/* Right: Send button */}
             <button
               onClick={() => sendMessage()}
-              disabled={(!input.trim() && inputImages.length === 0) || isStreaming}
+              disabled={(!input.trim() && inputImages.length === 0) || isStreaming || guestExhausted}
               style={{
                 width: '32px', height: '32px',
                 borderRadius: '50%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 border: 'none',
-                cursor: ((!input.trim() && inputImages.length === 0) || isStreaming) ? 'not-allowed' : 'pointer',
+                cursor: ((!input.trim() && inputImages.length === 0) || isStreaming || guestExhausted) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
-                background: ((input.trim() || inputImages.length > 0) && !isStreaming)
+                background: ((input.trim() || inputImages.length > 0) && !isStreaming && !guestExhausted)
                   ? 'linear-gradient(135deg, #3b82f6, #6366f1)'
                   : '#334155',
-                opacity: ((!input.trim() && inputImages.length === 0) || isStreaming) ? 0.4 : 1,
-                boxShadow: ((input.trim() || inputImages.length > 0) && !isStreaming)
+                opacity: ((!input.trim() && inputImages.length === 0) || isStreaming || guestExhausted) ? 0.4 : 1,
+                boxShadow: ((input.trim() || inputImages.length > 0) && !isStreaming && !guestExhausted)
                   ? '0 4px 12px rgba(99,102,241,0.3)' : 'none',
               }}
             >
@@ -3298,6 +3389,30 @@ export default function ChatPanel({ authSession, onLogout }: ChatPanelProps) {
           setClearDialogOpen(true);
         }}
       />
+
+      {/* Guest Login Modal */}
+      {showLoginModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 60,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(15,23,42,0.55)',
+          backdropFilter: 'blur(6px)',
+        }}>
+          <LoginScreen
+            displayMode="modal"
+            onLogin={(session) => {
+              setShowLoginModal(false);
+              onLogin(session);
+              setGuestQuota(getGuestQuota());
+            }}
+            onClose={() => setShowLoginModal(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

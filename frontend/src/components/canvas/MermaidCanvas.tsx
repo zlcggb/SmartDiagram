@@ -10,7 +10,7 @@ import mermaid from 'mermaid';
 import { RefreshCw } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useT } from '../../i18n';
-import { normalizeMermaidCode, stabilizeMermaidFlowchartEdgeLabels } from '../../utils/mermaidSanitizer';
+import { normalizeMermaidCode, stabilizeMermaidFlowchartEdgeLabels, balanceBlocks } from '../../utils/mermaidSanitizer';
 
 const THEMES = [
   { id: 'default', labelKey: 'mermaid.theme.default', icon: '🎨' },
@@ -21,33 +21,7 @@ const THEMES = [
 
 type ThemeId = (typeof THEMES)[number]['id'];
 
-// 自动对齐/平衡 Mermaid 流式生成中尚未闭合的 opt/alt/loop 等块，避免中间渲染语法报错
-function balanceSequenceEndBlocks(code: string): string {
-  if (!code.includes('sequenceDiagram') && !code.includes('flowchart') && !code.includes('graph')) {
-    return code;
-  }
-  const lines = code.split('\n');
-  let openBlocks = 0;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^(opt|alt|loop|par|critical|rect|subgraph)(\s|$)/.test(trimmed)) {
-      openBlocks++;
-    } else if (trimmed === 'end') {
-      openBlocks--;
-    }
-  }
-  if (openBlocks > 0) {
-    let balanced = code;
-    if (!balanced.endsWith('\n')) {
-      balanced += '\n';
-    }
-    for (let i = 0; i < openBlocks; i++) {
-      balanced += 'end\n';
-    }
-    return balanced;
-  }
-  return code;
-}
+
 
 export default function MermaidCanvas() {
   const {
@@ -161,7 +135,7 @@ export default function MermaidCanvas() {
             code = lines.slice(0, -1).join('\n').trim();
           }
           // 自动补全残缺的闭合块（如 opt/alt/loop 缺少 end），防止流式解析语法错
-          code = balanceSequenceEndBlocks(code);
+          code = balanceBlocks(code);
         }
 
         if (code.startsWith('[') || code.startsWith('{')) return;

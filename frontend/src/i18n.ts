@@ -589,6 +589,15 @@ const messages: Record<Locale, Record<string, string>> = {
     'users.noUsers': '暂无用户数据',
     'users.neverActive': '从未活跃',
     'users.loadFailed': '加载失败',
+
+    'guest.quotaRemaining': '访客体验 · 剩余 {remaining}/{total} 次',
+    'guest.quotaExhausted': '体验额度已用完',
+    'guest.resetIn': '{time} 后重置',
+    'guest.loginToUnlock': '登录解锁无限使用',
+    'guest.loginNow': '立即登录',
+    'guest.registerNow': '立即注册',
+    'guest.tryFree': '免费体验',
+    'guest.quotaUsed': '已使用 {used}/{total} 次免费体验',
   },
   en: {
     'common.cancel': 'Cancel',
@@ -1155,6 +1164,15 @@ const messages: Record<Locale, Record<string, string>> = {
     'users.noUsers': 'No user data',
     'users.neverActive': 'Never',
     'users.loadFailed': 'Load failed',
+
+    'guest.quotaRemaining': 'Guest · {remaining}/{total} uses left',
+    'guest.quotaExhausted': 'Free quota exhausted',
+    'guest.resetIn': 'Resets in {time}',
+    'guest.loginToUnlock': 'Sign in for unlimited access',
+    'guest.loginNow': 'Sign in',
+    'guest.registerNow': 'Register',
+    'guest.tryFree': 'Try free',
+    'guest.quotaUsed': '{used}/{total} free uses consumed',
   },
 };
 
