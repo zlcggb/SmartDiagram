@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { RefreshCw } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { useT } from '../../i18n';
 import { normalizeMermaidCode, stabilizeMermaidFlowchartEdgeLabels, balanceBlocks } from '../../utils/mermaidSanitizer';
 
@@ -39,6 +40,7 @@ export default function MermaidCanvas() {
     requestCanvasRenderRetry,
   } = useChatStore();
   const { t } = useT();
+  const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const svgWrapperRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -304,15 +306,22 @@ export default function MermaidCanvas() {
 
   return (
     <div className={`w-full h-full relative overflow-hidden flex animate-fade-in transition-colors duration-300 ${canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
-      {/* Left: Code Editor Panel (toggleable) */}
+      {/* Left: Code Editor Panel (toggleable) — on mobile: fullscreen overlay */}
       {showEditor && (
         <div
           style={{
-            width: '380px',
-            minWidth: '300px',
+            ...(isMobile ? {
+              position: 'absolute' as const,
+              inset: 0,
+              zIndex: 30,
+              width: '100%',
+            } : {
+              width: '380px',
+              minWidth: '300px',
+            }),
             display: 'flex',
-            flexDirection: 'column',
-            borderRight: canvasMode === 'light' ? '1px solid #e2e8f0' : '1px solid #1e293b',
+            flexDirection: 'column' as const,
+            borderRight: isMobile ? 'none' : (canvasMode === 'light' ? '1px solid #e2e8f0' : '1px solid #1e293b'),
             background: canvasMode === 'light' ? '#f8fafc' : '#0f172a',
           }}
         >
@@ -325,26 +334,45 @@ export default function MermaidCanvas() {
               padding: '8px 12px',
               borderBottom: canvasMode === 'light' ? '1px solid #e2e8f0' : '1px solid #1e293b',
               background: canvasMode === 'light' ? '#f1f5f9' : '#0b0f19',
+              gap: '8px',
             }}
           >
             <span style={{ color: canvasMode === 'light' ? '#1e293b' : '#e2e8f0', fontSize: '12px', fontWeight: 600 }}>
               {t('mermaid.editorTitle')}
             </span>
-            <button
-              onClick={handleApplyEdit}
-              style={{
-                fontSize: '11px',
-                padding: '4px 12px',
-                background: '#10b981',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              {t('mermaid.renderAction')}
-            </button>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <button
+                onClick={handleApplyEdit}
+                style={{
+                  fontSize: '11px',
+                  padding: '4px 12px',
+                  background: '#10b981',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                {t('mermaid.renderAction')}
+              </button>
+              <button
+                onClick={() => setShowEditor(false)}
+                style={{
+                  fontSize: '11px',
+                  padding: '4px 10px',
+                  background: canvasMode === 'light' ? '#e2e8f0' : '#334155',
+                  color: canvasMode === 'light' ? '#334155' : '#e2e8f0',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+                title={t('mermaid.closeEditor')}
+              >
+                {t('mermaid.closeEditor')}
+              </button>
+            </div>
           </div>
           {/* Editor textarea */}
           <textarea

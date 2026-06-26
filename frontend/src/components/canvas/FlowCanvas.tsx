@@ -17,6 +17,7 @@ import ReactFlow, {
 import type { Node, Edge, NodeProps } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useChatStore } from '../../store/chatStore';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import dagre from 'dagre';
 import { NoticeDialog } from '../common/AppDialog';
 import { useT } from '../../i18n';
@@ -301,6 +302,7 @@ function EditableNode({ id, data, selected }: NodeProps) {
 export default function FlowCanvas() {
   const { canvasCode, streamingCode, isStreaming, setCanvasCode, setSelectedNode, canvasMode } = useChatStore();
   const { t } = useT();
+  const isMobile = useIsMobile();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [error, setError] = useState<string | null>(null);
@@ -563,6 +565,7 @@ export default function FlowCanvas() {
               borderRadius: 8,
               background: canvasMode === 'light' ? '#f8fafc' : '#0b0f19',
               transition: 'all 0.3s ease',
+              ...(isMobile ? { width: 120, height: 80 } : {}),
             }}
             nodeColor={canvasMode === 'light' ? '#3b82f6' : '#60a5fa'}
             maskColor={canvasMode === 'light' ? 'rgba(241, 245, 249, 0.6)' : 'rgba(15, 23, 42, 0.6)'}

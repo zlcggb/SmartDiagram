@@ -255,6 +255,10 @@ interface ChatStore {
   // Canvas background mode ('dark' | 'light')
   canvasMode: 'dark' | 'light';
   setCanvasMode: (v: 'dark' | 'light') => void;
+
+  // Mobile active panel ('chat' | 'canvas')
+  mobileActivePanel: 'chat' | 'canvas';
+  setMobileActivePanel: (v: 'chat' | 'canvas') => void;
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -346,4 +350,7 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   canvasMode: 'light',
   setCanvasMode: (v) => set({ canvasMode: v }),
+
+  mobileActivePanel: 'chat',
+  setMobileActivePanel: (v) => set({ mobileActivePanel: v }),
 }));

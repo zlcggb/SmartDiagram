@@ -1,6 +1,8 @@
 /**
- * App — Root layout. Canvas LEFT (65%) | Separator | Chat RIGHT (35%).
- * All styles use pure Tailwind v4 utilities. Zero inline styles.
+ * App — Root layout.
+ *
+ * Desktop (≥768px): Canvas LEFT (65%) | Separator | Chat RIGHT (35%).
+ * Mobile  (<768px): Full-screen tab switch (Chat / Canvas) + bottom tab bar.
  *
  * Guest mode: unauthenticated users enter the main UI directly.
  * ChatPanel handles quota enforcement and login prompts.
@@ -9,7 +11,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import ChatPanel from './components/chat/ChatPanel';
 import CanvasPanel from './components/layout/CanvasPanel';
+import MobileTabBar from './components/layout/MobileTabBar';
 import { useChatStore } from './store/chatStore';
+import { useIsMobile } from './hooks/useIsMobile';
 import {
   clearAuthSession,
   readAuthSession,
@@ -19,7 +23,8 @@ import {
 } from './config/auth';
 
 export default function App() {
-  const { canvasMode } = useChatStore();
+  const { canvasMode, mobileActivePanel, setMobileActivePanel } = useChatStore();
+  const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const [chatWidth, setChatWidth] = useState(420);
   const [authSession, setAuthSession] = useState<AuthSession | null>(() => readAuthSession());
@@ -87,7 +92,30 @@ export default function App() {
     );
   }
 
-  // Main layout — works for both authenticated and guest users
+  // ── Mobile layout ──
+  if (isMobile) {
+    return (
+      <div
+        className={`h-screen w-screen overflow-hidden flex flex-col transition-colors duration-300 ${canvasMode} ${
+          canvasMode === 'light' ? 'bg-slate-50' : 'bg-slate-950'
+        }`}
+      >
+        {/* Active panel — full screen */}
+        <div className="flex-1 min-h-0 w-full">
+          {mobileActivePanel === 'canvas' ? (
+            <CanvasPanel />
+          ) : (
+            <ChatPanel authSession={authSession} onLogout={handleLogout} onLogin={handleLogin} />
+          )}
+        </div>
+
+        {/* Bottom tab bar */}
+        <MobileTabBar />
+      </div>
+    );
+  }
+
+  // ── Desktop layout (unchanged) ──
   return (
     <div 
       ref={containerRef} 

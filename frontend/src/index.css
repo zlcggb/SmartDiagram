@@ -147,6 +147,10 @@ body {
   0%, 100% { opacity: 0.3; }
   50%      { opacity: 1; }
 }
+@keyframes sd-countdown-pop {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
 
 .sd-fade-in { animation: sd-fade-in 0.3s ease-out both; }
 .sd-slide-up { animation: sd-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
@@ -177,3 +181,100 @@ textarea::placeholder {
   color: #94a3b8 !important; /* Secondary text style (Slate 400), perfectly visible on slate/dark background */
   opacity: 0.65 !important;
 }
+
+/* ══════════════════════════════════════════════════
+   Mobile Responsive
+   ══════════════════════════════════════════════════ */
+
+/* Hide separator on mobile */
+@media (max-width: 767px) {
+  .sd-separator { display: none !important; }
+}
+
+/* ── Mobile Tab Bar ── */
+.sd-mobile-tab-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
+  flex-shrink: 0;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid;
+  padding: 6px 0;
+  padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+}
+.sd-mobile-tab-bar--light {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: #e2e8f0;
+}
+.sd-mobile-tab-bar--dark {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: #1e293b;
+}
+
+.sd-mobile-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 24px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.sd-mobile-tab-icon {
+  width: 22px;
+  height: 22px;
+  color: #94a3b8;
+  transition: color 0.2s ease;
+}
+.sd-mobile-tab-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  transition: color 0.2s ease;
+}
+.sd-mobile-tab--active .sd-mobile-tab-icon {
+  color: #6366f1;
+}
+.sd-mobile-tab--active .sd-mobile-tab-label {
+  color: #6366f1;
+}
+
+/* Canvas dot indicator */
+.sd-mobile-tab-dot {
+  position: absolute;
+  top: -1px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6366f1;
+  box-shadow: 0 0 6px rgba(99, 102, 241, 0.5);
+  animation: sd-pulse 1.5s ease-in-out infinite;
+}
+
+/* ── Mobile safe area bottom padding ── */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .sd-mobile-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Mobile Canvas adjustments */
+@media (max-width: 767px) {
+  /* Empty canvas: smaller title, tighter spacing */
+  .sd-mobile-empty-title {
+    font-size: 1.5rem !important;
+  }
+  .sd-mobile-empty-desc {
+    font-size: 0.8125rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+}
+

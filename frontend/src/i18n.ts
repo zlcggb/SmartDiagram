@@ -598,6 +598,12 @@ const messages: Record<Locale, Record<string, string>> = {
     'guest.registerNow': '立即注册',
     'guest.tryFree': '免费体验',
     'guest.quotaUsed': '已使用 {used}/{total} 次免费体验',
+
+    'mobile.chat': '对话',
+    'mobile.canvas': '画布',
+    'mobile.countdownHint': '即将跳转画布查看图表',
+    'mobile.goNow': '立即查看',
+    'mobile.stayHere': '留在对话',
   },
   en: {
     'common.cancel': 'Cancel',
@@ -1173,6 +1179,12 @@ const messages: Record<Locale, Record<string, string>> = {
     'guest.registerNow': 'Register',
     'guest.tryFree': 'Try free',
     'guest.quotaUsed': '{used}/{total} free uses consumed',
+
+    'mobile.chat': 'Chat',
+    'mobile.canvas': 'Canvas',
+    'mobile.countdownHint': 'Switching to canvas...',
+    'mobile.goNow': 'View now',
+    'mobile.stayHere': 'Stay here',
   },
 };
 

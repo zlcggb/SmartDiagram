@@ -62,6 +62,7 @@ import type { DiagramEngineType, DiagramTaskType } from '../../types/diagram';
 import type { AuthSession } from '../../config/auth';
 import { getGuestQuota, consumeGuestUse, type GuestQuotaStatus } from '../../config/guestQuota';
 import LoginScreen from '../auth/LoginScreen';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 type VersionActionPayload = {
   diagram_id: string;
@@ -1535,8 +1536,10 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     setStreamingCode,
     detailLevel, setDetailLevel,
     canvasMode,
+    setMobileActivePanel,
   } = useChatStore();
   const { t } = useT();
+  const isMobile = useIsMobile();
 
   const [input, setInput] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1564,6 +1567,48 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
   const activeAbortControllerRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Mobile countdown timer for auto-switch to canvas
+  const [mobileCountdown, setMobileCountdown] = useState<number | null>(null);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startMobileCountdown = useCallback(() => {
+    if (!isMobile) return;
+    // Clear any existing countdown
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    setMobileCountdown(3);
+    let remaining = 3;
+    countdownTimerRef.current = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+        setMobileCountdown(null);
+        setMobileActivePanel('canvas');
+      } else {
+        setMobileCountdown(remaining);
+      }
+    }, 1000);
+  }, [isMobile, setMobileActivePanel]);
+
+  // Cleanup countdown on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    };
+  }, []);
+
+  const switchToCanvas = useCallback(() => {
+    if (isMobile) {
+      // Cancel countdown if user manually taps
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+        setMobileCountdown(null);
+      }
+      setMobileActivePanel('canvas');
+    }
+  }, [isMobile, setMobileActivePanel]);
 
   const diagramActionHeaders = () => enterpriseHeaders();
 
@@ -2398,6 +2443,8 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
                 consumeGuestUse();
                 setGuestQuota(getGuestQuota());
               }
+              // Mobile: start 3-2-1 countdown to auto-switch to canvas
+              startMobileCountdown();
               break;
             }
             case 'text':
@@ -2862,6 +2909,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
                         if (msg.designConcept) setDesignConcept(msg.designConcept);
                         setCanvasPhase('done');
                         setStreamingCode('');
+                        switchToCanvas();
                       }}
                       title={t('chat.viewOnCanvasTitle')}
                     >
@@ -2949,6 +2997,72 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
         )}
         <div ref={endRef} />
       </div>
+
+      {/* ── Mobile Countdown Banner ── */}
+      {isMobile && mobileCountdown !== null && (
+        <div
+          style={{
+            margin: '0 12px',
+            marginBottom: '4px',
+            padding: '10px 14px',
+            borderRadius: '10px',
+            background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(59,130,246,0.10))',
+            border: '1px solid rgba(99,102,241,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            animation: 'sd-pulse 1.5s ease-in-out infinite',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              width: '28px', height: '28px', borderRadius: '50%',
+              background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
+              color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '14px', fontWeight: 700,
+              animation: 'sd-countdown-pop 1s ease-in-out infinite',
+            }}>
+              {mobileCountdown}
+            </span>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: canvasMode === 'light' ? '#4338ca' : '#a5b4fc' }}>
+              {t('mobile.countdownHint')}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              type="button"
+              onClick={switchToCanvas}
+              style={{
+                fontSize: '11px', padding: '4px 10px', borderRadius: '6px',
+                background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
+                color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600,
+              }}
+            >
+              {t('mobile.goNow')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (countdownTimerRef.current) {
+                  clearInterval(countdownTimerRef.current);
+                  countdownTimerRef.current = null;
+                }
+                setMobileCountdown(null);
+              }}
+              style={{
+                fontSize: '11px', padding: '4px 8px', borderRadius: '6px',
+                background: 'transparent',
+                color: canvasMode === 'light' ? '#64748b' : '#94a3b8',
+                border: `1px solid ${canvasMode === 'light' ? '#cbd5e1' : '#334155'}`,
+                cursor: 'pointer', fontWeight: 500,
+              }}
+            >
+              {t('mobile.stayHere')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Guest Quota Bar ── */}
       {isGuest && (

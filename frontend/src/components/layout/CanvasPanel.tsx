@@ -6,6 +6,7 @@
 
 import { Suspense, lazy, useRef, useEffect, useState } from 'react';
 import { useChatStore } from '../../store/chatStore';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { PenTool, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -87,10 +88,10 @@ function EmptyCanvas() {
         }`}>
           <PenTool className="w-9 h-9 text-indigo-500" />
         </div>
-        <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-3">
+        <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-3 sd-mobile-empty-title">
           SmartDiagram Pro
         </h1>
-        <p className={`text-sm max-w-sm text-center leading-relaxed mb-10 font-normal px-4 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
+        <p className={`text-sm max-w-sm text-center leading-relaxed mb-10 font-normal px-4 sd-mobile-empty-desc ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
           {t('canvas.emptyDescription')}
         </p>
         <div className="flex items-center gap-2.5 flex-wrap justify-center max-w-lg px-4">
@@ -117,7 +118,8 @@ function EmptyCanvas() {
 function CanvasPanelInner() {
   const { canvasTask, canvasEngine, canvasCode, isStreaming, canvasPhase, designConcept, streamingCode, pendingElements, canvasMode } = useChatStore();
   const { t } = useT();
-  const [conceptOpen, setConceptOpen] = useState(true);
+  const isMobile = useIsMobile();
+  const [conceptOpen, setConceptOpen] = useState(!isMobile);
 
   // No engine selected → welcome screen
   if (!canvasEngine && !canvasCode) {
@@ -225,7 +227,7 @@ function CanvasPanelInner() {
             {designConcept && (
               <div className="absolute bottom-4 left-4 z-30 transition-all duration-300 select-none">
                 {conceptOpen ? (
-                  <div className={`w-80 rounded-xl border p-3.5 shadow-xl transition-all duration-300 ${
+              <div className={`w-80 max-w-[calc(100vw-2rem)] rounded-xl border p-3.5 shadow-xl transition-all duration-300 ${
                     canvasMode === 'light'
                       ? 'border-slate-200 bg-white/95 text-slate-800 shadow-slate-200/50'
                       : 'border-slate-800 bg-slate-900/90 text-slate-100'

@@ -25,6 +25,7 @@ import DiagramPreferencesPanel from './DiagramPreferencesPanel';
 import UserManagementPanel from './UserManagementPanel';
 import { canReadOps } from '../../config/enterpriseContext';
 import { isAdminSession, type AuthSession } from '../../config/auth';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 type SettingsSection = 'appearance' | 'model' | 'preferences' | 'ops' | 'users' | 'session';
 
@@ -52,6 +53,7 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const { modelConfig, setModelConfig, canvasMode, setCanvasMode } = useChatStore();
   const { t, locale, toggleLocale } = useT();
+  const isMobile = useIsMobile();
   const isLight = canvasMode === 'light';
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [apiKey, setApiKey] = useState(modelConfig?.api_key || '');
@@ -453,6 +455,62 @@ export default function SettingsModal({
     return renderSession();
   };
 
+  // ── Mobile layout: full-screen, stacked ──
+  if (isMobile) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col" style={{ background: isLight ? '#f8fafc' : '#0f172a' }}>
+        {/* Mobile header */}
+        <div className={`flex items-center justify-between px-4 py-3 border-b shrink-0 ${
+          isLight ? 'border-slate-200 bg-white' : 'border-slate-800 bg-slate-950'
+        }`}>
+          <div className="min-w-0">
+            <h1 className={`text-sm font-semibold ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>{t('settings.title')}</h1>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+              isLight ? 'text-slate-500 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-800'
+            }`}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Mobile nav — horizontal scrollable tabs */}
+        <div className={`flex items-center gap-1 px-3 py-2 border-b overflow-x-auto shrink-0 ${
+          isLight ? 'border-slate-200 bg-slate-50' : 'border-slate-800 bg-slate-900/60'
+        }`} style={{ WebkitOverflowScrolling: 'touch' }}>
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = activeSection === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveSection(item.id)}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${
+                  active
+                    ? isLight ? 'bg-white text-slate-900 shadow-sm' : 'bg-slate-800 text-white'
+                    : isLight ? 'text-slate-600 hover:bg-white/60' : 'text-slate-400 hover:bg-slate-800/60'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Mobile content area */}
+        <div className={`flex-1 min-h-0 overflow-y-auto px-4 py-5 ${mainClass}`}>
+          {renderActiveSection()}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Desktop layout (unchanged) ──
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
       <div className={`flex h-[88vh] min-h-[620px] w-full max-w-6xl overflow-hidden rounded-[20px] border shadow-2xl ${
