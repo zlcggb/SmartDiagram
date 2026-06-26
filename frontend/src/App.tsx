@@ -23,7 +23,7 @@ import {
 } from './config/auth';
 
 export default function App() {
-  const { canvasMode, mobileActivePanel, setMobileActivePanel } = useChatStore();
+  const { canvasMode, mobileActivePanel } = useChatStore();
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const [chatWidth, setChatWidth] = useState(420);
