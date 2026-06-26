@@ -10,6 +10,8 @@
 #   --down        停止所有服务
 #   --logs        查看实时日志
 #   --status      查看服务状态
+#   --cn          强制启用中国大陆加速
+#   --no-cn       强制禁用中国大陆加速
 
 set -e
 
@@ -28,6 +30,71 @@ info()  { echo -e "${CYAN}ℹ  $1${NC}"; }
 ok()    { echo -e "${GREEN}✅ $1${NC}"; }
 warn()  { echo -e "${YELLOW}⚠️  $1${NC}"; }
 error() { echo -e "${RED}❌ $1${NC}"; exit 1; }
+
+# ── 检测中国大陆网络 ──
+# 通过尝试访问 google.com 判断（超时 3 秒），不通则认为是大陆网络
+CN_MIRROR="auto"
+detect_cn() {
+    if [ "$CN_MIRROR" = "true" ]; then
+        ok "中国大陆加速: 已手动启用 (--cn)"
+        return
+    fi
+    if [ "$CN_MIRROR" = "false" ]; then
+        ok "中国大陆加速: 已手动禁用 (--no-cn)"
+        return
+    fi
+    # 自动检测
+    info "检测网络环境..."
+    if curl -s --connect-timeout 3 https://www.google.com > /dev/null 2>&1; then
+        CN_MIRROR="false"
+        ok "网络环境: 国际网络，使用默认源"
+    else
+        CN_MIRROR="true"
+        ok "网络环境: 中国大陆，自动启用镜像加速"
+    fi
+}
+
+# ── 配置 Docker 镜像加速 ──
+setup_docker_mirror() {
+    if [ "$CN_MIRROR" != "true" ]; then
+        return
+    fi
+
+    local DAEMON_JSON="/etc/docker/daemon.json"
+    local NEED_RESTART=false
+
+    # 检查是否已配置镜像加速
+    if [ -f "$DAEMON_JSON" ] && grep -q "registry-mirrors" "$DAEMON_JSON"; then
+        info "Docker 镜像加速已配置，跳过"
+        return
+    fi
+
+    info "配置 Docker 镜像加速..."
+
+    # 备份已有配置
+    if [ -f "$DAEMON_JSON" ]; then
+        cp "$DAEMON_JSON" "${DAEMON_JSON}.bak"
+    fi
+
+    # 写入镜像加速配置
+    cat > "$DAEMON_JSON" << 'EOF'
+{
+  "registry-mirrors": [
+    "https://docker.1ms.run",
+    "https://docker.xuanyuan.me"
+  ]
+}
+EOF
+
+    # 重启 Docker
+    if systemctl is-active --quiet docker; then
+        info "重启 Docker 使镜像加速生效..."
+        systemctl daemon-reload
+        systemctl restart docker
+        sleep 2
+        ok "Docker 镜像加速已生效"
+    fi
+}
 
 # ── 检查 Docker ──
 check_docker() {
@@ -93,6 +160,15 @@ build_profiles() {
 deploy() {
     check_docker
     check_env
+    detect_cn
+
+    # 配置 Docker 镜像加速（仅中国大陆）
+    if [ "$CN_MIRROR" = "true" ]; then
+        setup_docker_mirror
+    fi
+
+    # 导出 CN_MIRROR 供 docker-compose.yml 的 build args 读取
+    export CN_MIRROR
 
     PROFILES=$(build_profiles)
 
@@ -166,6 +242,12 @@ for arg in "$@"; do
         --with-qdrant)
             WITH_QDRANT=true
             ;;
+        --cn)
+            CN_MIRROR="true"
+            ;;
+        --no-cn)
+            CN_MIRROR="false"
+            ;;
         --down)
             ACTION="stop"
             ;;
@@ -183,6 +265,8 @@ for arg in "$@"; do
             echo "  --rebuild      强制重建所有镜像"
             echo "  --with-worker  同时启动异步 worker"
             echo "  --with-qdrant  同时启动 Qdrant"
+            echo "  --cn           强制启用中国大陆加速"
+            echo "  --no-cn        强制禁用中国大陆加速"
             echo "  --down         停止所有服务"
             echo "  --logs         查看实时日志"
             echo "  --status       查看服务状态"

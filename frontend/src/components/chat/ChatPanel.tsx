@@ -122,6 +122,9 @@ type ConversationHistoryMessage = {
   engine_type?: string;
   task_type?: string;
   diagram_version_id?: string;
+  code?: string;
+  design_concept?: string;
+  diagram_id?: string;
   created_at?: string;
   agent_process?: HistoryAgentProcess;
 };

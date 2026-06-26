@@ -131,6 +131,7 @@ export default function SaveButton() {
           open={true}
           title="Save Failed"
           message={error}
+          closeLabel="OK"
           onClose={() => setError(null)}
         />
       )}

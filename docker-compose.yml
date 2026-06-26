@@ -43,6 +43,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        CN_MIRROR: ${CN_MIRROR:-false}
     container_name: smartdiagram-backend
     restart: always
     depends_on:
@@ -62,6 +64,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        CN_MIRROR: ${CN_MIRROR:-false}
     container_name: smartdiagram-worker
     restart: always
     profiles:
@@ -81,6 +85,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        CN_MIRROR: ${CN_MIRROR:-false}
     container_name: smartdiagram-frontend
     restart: always
     depends_on:

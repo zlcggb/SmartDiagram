@@ -1,6 +1,12 @@
 FROM node:20-slim AS build
 WORKDIR /app
 
+# 中国大陆 npm 加速
+ARG CN_MIRROR=false
+RUN if [ "$CN_MIRROR" = "true" ]; then \
+      npm config set registry https://registry.npmmirror.com; \
+    fi
+
 COPY package*.json ./
 RUN npm ci
 

@@ -62,8 +62,8 @@ function relativeTime(isoString: string, neverLabel: string): string {
 
 export default function UserManagementPanel({
   open,
-  onClose,
-  embedded = false,
+  onClose: _onClose,
+  embedded: _embedded = false,
 }: {
   open: boolean;
   onClose: () => void;
