@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --no-dev
 
-FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.13-slim-bookworm
+FROM python:3.13-slim-bookworm
 WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv

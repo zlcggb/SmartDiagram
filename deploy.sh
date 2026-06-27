@@ -80,8 +80,7 @@ setup_docker_mirror() {
     cat > "$DAEMON_JSON" << 'EOF'
 {
   "registry-mirrors": [
-    "https://docker.1ms.run",
-    "https://docker.xuanyuan.me"
+    "https://ufzlhjz9.mirror.aliyuncs.com"
   ]
 }
 EOF
