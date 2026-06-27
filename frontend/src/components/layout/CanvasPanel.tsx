@@ -121,15 +121,38 @@ function CanvasPanelInner() {
   const isMobile = useIsMobile();
   const [conceptOpen, setConceptOpen] = useState(!isMobile);
 
-  // Persist drawio iframe — mount once, hide with CSS when inactive
+  // Preload drawio iframe in background — users get instant switch later
   const [drawioMounted, setDrawioMounted] = useState(false);
   useEffect(() => {
-    if (canvasEngine === 'drawio') setDrawioMounted(true);
-  }, [canvasEngine]);
+    if (drawioMounted) return;
+    if (canvasEngine === 'drawio') { setDrawioMounted(true); return; }
+    // Background preload: mount hidden iframe 3s after page settles
+    const timer = setTimeout(() => setDrawioMounted(true), 3000);
+    return () => clearTimeout(timer);
+  }, [canvasEngine, drawioMounted]);
 
-  // No engine selected → welcome screen
+  // Compute early — needed by both empty state and main view
+  const hasStreamingContent = !!streamingCode || (canvasEngine === 'excalidraw' && pendingElements.length > 0);
+  const isGenerating = canvasEngine && canvasPhase !== 'done' && !canvasCode && !hasStreamingContent;
+
+  // Shared preloaded drawio element
+  const drawioPreload = drawioMounted ? (
+    <div
+      className="absolute inset-0"
+      style={{ display: canvasEngine === 'drawio' && !isGenerating ? 'block' : 'none', zIndex: 10 }}
+    >
+      <Suspense fallback={<CanvasLoader />}><DrawioCanvas /></Suspense>
+    </div>
+  ) : null;
+
+  // No engine selected → welcome screen (but keep drawio preloading in background)
   if (!canvasEngine && !canvasCode) {
-    return <EmptyCanvas />;
+    return (
+      <div className="w-full h-full relative">
+        <EmptyCanvas />
+        {drawioPreload}
+      </div>
+    );
   }
 
   const agentMeta = getAgentMeta(canvasEngine);
@@ -144,12 +167,6 @@ function CanvasPanelInner() {
       default: return '';
     }
   })();
-
-  // Precision streaming check: if we already have streaming code or pending elements, we should render the actual canvas
-  const hasStreamingContent = !!streamingCode || (canvasEngine === 'excalidraw' && pendingElements.length > 0);
-  
-  // Engine is selected but code not ready → show generating view ONLY if we don't have streaming content yet
-  const isGenerating = canvasEngine && canvasPhase !== 'done' && !canvasCode && !hasStreamingContent;
 
   const renderCanvas = () => {
     switch (canvasEngine) {
@@ -286,15 +303,8 @@ function CanvasPanelInner() {
           </>
         )}
 
-        {/* Persistent drawio iframe — mounted once, hidden when inactive */}
-        {drawioMounted && (
-          <div
-            className="absolute inset-0"
-            style={{ display: canvasEngine === 'drawio' && !isGenerating ? 'block' : 'none', zIndex: 10 }}
-          >
-            <Suspense fallback={<CanvasLoader />}><DrawioCanvas /></Suspense>
-          </div>
-        )}
+        {/* Persistent drawio iframe — preloaded in background */}
+        {drawioPreload}
       </div>
     </div>
   );

@@ -24,7 +24,7 @@ import { useT } from '../../i18n';
 /** DEV → docker direct; PROD → nginx reverse proxy (same domain, no CORS) */
 const PRIMARY_URL = import.meta.env.DEV ? 'http://localhost:9022/' : '/drawio/';
 const FALLBACK_URL = 'https://embed.diagrams.net/';
-const LOAD_TIMEOUT_MS = 10_000; // 10s — nginx proxy should respond much faster
+const LOAD_TIMEOUT_MS = 25_000; // draw.io is a heavy Java+JS app, needs 15-25s to fully init
 
 // ─── XML Sanitizer ───
 
