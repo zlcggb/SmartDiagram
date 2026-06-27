@@ -134,14 +134,13 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def create_altcha_challenge() -> dict[str, Any]:
     """Generate a PoW challenge for the client to solve."""
-    from altcha import ChallengeOptions, create_challenge as _create
+    from altcha import create_challenge as _create
 
-    options = ChallengeOptions(
+    challenge = _create(
         algorithm=settings.ALTCHA_ALGORITHM,
         max_number=settings.ALTCHA_MAX_NUMBER,
         hmac_key=settings.ALTCHA_HMAC_KEY,
     )
-    challenge = _create(options)
     return {
         "algorithm": challenge.algorithm,
         "challenge": challenge.challenge,
@@ -160,10 +159,10 @@ def verify_altcha_payload(payload: str) -> bool:
         logger.warning("ALTCHA: empty payload")
         return False
     try:
-        ok, _ = verify_solution(payload, settings.ALTCHA_HMAC_KEY, check_expires=False)
+        ok = verify_solution(payload, settings.ALTCHA_HMAC_KEY, check_expires=False)
         if not ok:
             logger.warning("ALTCHA: verification failed")
-        return ok
+        return bool(ok)
     except Exception as exc:
         logger.error(f"ALTCHA verification error: {exc}")
         return False
