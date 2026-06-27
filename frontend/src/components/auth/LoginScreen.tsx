@@ -36,181 +36,7 @@ interface LoginScreenProps {
 type LoginPreset = 'user' | 'admin';
 type AuthMode = 'login' | 'register';
 
-// ─── Dual CAPTCHA Widget (Turnstile primary, ALTCHA fallback) ───
-
-function DualCaptchaWidget({
-  turnstileSiteKey,
-  altchaChallengeUrl,
-  onResult,
-}: {
-  turnstileSiteKey: string;
-  altchaChallengeUrl: string;
-  onResult: (result: CaptchaResult | null) => void;
-}) {
-  const [activeProvider, setActiveProvider] = useState<'loading' | 'turnstile' | 'altcha'>('loading');
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  // Fallback: if Turnstile was selected but encounters errors, switch to ALTCHA
-  const fallbackToAltcha = useRef(false);
-  const handleTurnstileError = () => {
-    if (!fallbackToAltcha.current && mountedRef.current) {
-      fallbackToAltcha.current = true;
-      onResult(null);
-      setActiveProvider('altcha');
-    }
-  };
-
-  useEffect(() => {
-
-    // Turnstile cannot work on localhost (requires HTTPS + registered domain)
-    // Skip it entirely in dev to avoid SSL errors and console spam
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (isLocalhost) {
-      setActiveProvider('altcha');
-      return;
-    }
-
-    // If Turnstile site key is available, try loading it with timeout
-    if (turnstileSiteKey) {
-      let resolved = false;
-      const timeout = setTimeout(() => {
-        if (!resolved && mountedRef.current) {
-          resolved = true;
-          setActiveProvider('altcha');
-        }
-      }, 3000);
-
-      const tryTurnstile = () => {
-        if (resolved || !mountedRef.current) return;
-        const w = window as any;
-        if (w.turnstile) {
-          resolved = true;
-          clearTimeout(timeout);
-          setActiveProvider('turnstile');
-        }
-      };
-
-      if ((window as any).turnstile) {
-        resolved = true;
-        clearTimeout(timeout);
-        setActiveProvider('turnstile');
-      } else {
-        const existing = document.querySelector('script[src*="turnstile"]');
-        if (!existing) {
-          const script = document.createElement('script');
-          script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-          script.async = true;
-          script.onload = () => setTimeout(tryTurnstile, 100);
-          script.onerror = () => {
-            if (!resolved && mountedRef.current) {
-              resolved = true;
-              clearTimeout(timeout);
-              setActiveProvider('altcha');
-            }
-          };
-          document.head.appendChild(script);
-        } else {
-          existing.addEventListener('load', () => setTimeout(tryTurnstile, 100));
-        }
-      }
-
-      return () => { clearTimeout(timeout); };
-    } else {
-      // No Turnstile key — use ALTCHA directly
-      setActiveProvider('altcha');
-    }
-  }, [turnstileSiteKey]);
-
-  if (activeProvider === 'loading') {
-    return <div className="flex items-center justify-center py-3 text-xs text-slate-400">正在准备验证...</div>;
-  }
-
-  if (activeProvider === 'turnstile') {
-    return (
-      <TurnstileWidget
-        siteKey={turnstileSiteKey}
-        onToken={(token) => onResult(token ? { provider: 'turnstile', token } : null)}
-        onError={handleTurnstileError}
-      />
-    );
-  }
-
-  return (
-    <AltchaWidget
-      challengeUrl={altchaChallengeUrl}
-      onPayload={(payload) => onResult(payload ? { provider: 'altcha', token: payload } : null)}
-    />
-  );
-}
-
-// ─── Turnstile Widget ───
-
-function TurnstileWidget({
-  siteKey,
-  onToken,
-  onError,
-}: {
-  siteKey: string;
-  onToken: (token: string) => void;
-  onError?: () => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | null>(null);
-  const onTokenRef = useRef(onToken);
-  onTokenRef.current = onToken;
-  const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
-
-  useEffect(() => {
-    if (!siteKey || !containerRef.current) return;
-    const w = window as any;
-    if (!w.turnstile) return;
-
-    let errorCount = 0;
-    let succeeded = false;
-
-    widgetIdRef.current = w.turnstile.render(containerRef.current, {
-      sitekey: siteKey,
-      callback: (token: string) => {
-        succeeded = true;
-        clearTimeout(safetyTimeout);
-        onTokenRef.current(token);
-      },
-      'expired-callback': () => onTokenRef.current(''),
-      'error-callback': () => {
-        errorCount++;
-        if (errorCount >= 2 && onErrorRef.current) {
-          clearTimeout(safetyTimeout);
-          onErrorRef.current();
-        }
-      },
-      theme: 'light',
-      size: 'flexible',
-    });
-
-    // Safety net: if no token received within 8s after render, fall back
-    const safetyTimeout = setTimeout(() => {
-      if (!succeeded && onErrorRef.current) onErrorRef.current();
-    }, 8000);
-
-    return () => {
-      clearTimeout(safetyTimeout);
-      if (widgetIdRef.current !== null) {
-        try { (window as any).turnstile?.remove(widgetIdRef.current); } catch {}
-        widgetIdRef.current = null;
-      }
-    };
-  }, [siteKey]);
-
-  return <div ref={containerRef} className="w-full" />;
-}
-
-// ─── Custom CAPTCHA Widget (Turnstile-style UI, ALTCHA PoW backend) ───
+// ─── Custom CAPTCHA Widget (ALTCHA PoW) ───
 
 type CaptchaState = 'idle' | 'verifying' | 'verified' | 'error';
 
@@ -384,10 +210,7 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
         const session = await registerWithPassword(email, password, captchaResult);
         onLogin(session);
       } else {
-        if (!captchaResult) {
-          throw new Error(t('auth.captchaRequired'));
-        }
-        const session = await loginWithPassword(email, password, captchaResult);
+        const session = await loginWithPassword(email, password, captchaResult!);
         onLogin(session);
       }
     } catch (err: any) {
@@ -579,14 +402,13 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
               </label>
             )}
 
-            {/* Dual CAPTCHA: Turnstile (primary) + ALTCHA (fallback) */}
+            {/* CAPTCHA: Custom PoW verification */}
             {captchaConfig && (
               <div className="mb-4">
-                <DualCaptchaWidget
+                <AltchaWidget
                   key={mode}
-                  turnstileSiteKey={captchaConfig.turnstile_site_key || ''}
-                  altchaChallengeUrl={captchaConfig.challenge_url ? `${API_BASE}${captchaConfig.challenge_url}` : ''}
-                  onResult={setCaptchaResult}
+                  challengeUrl={captchaConfig.challenge_url ? `${API_BASE}${captchaConfig.challenge_url}` : ''}
+                  onPayload={(payload) => setCaptchaResult(payload ? { provider: 'altcha', token: payload } : null)}
                 />
               </div>
             )}
@@ -602,13 +424,24 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
             {/* Submit */}
             <button
               type="submit"
-              disabled={busy}
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+              disabled={busy || !captchaResult}
+              className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold shadow-lg transition ${
+                !captchaResult
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                  : 'bg-slate-950 text-white shadow-slate-900/10 hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70'
+              }`}
             >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === 'register' ? <UserPlus className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+              {busy
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : !captchaResult
+                  ? <LockKeyhole className="h-4 w-4" />
+                  : mode === 'register' ? <UserPlus className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />
+              }
               {busy
                 ? (mode === 'register' ? t('auth.registering') : t('auth.signingIn'))
-                : (mode === 'register' ? t('auth.register') : t('auth.signIn'))
+                : !captchaResult
+                  ? '请先完成安全验证'
+                  : (mode === 'register' ? t('auth.register') : t('auth.signIn'))
               }
             </button>
 

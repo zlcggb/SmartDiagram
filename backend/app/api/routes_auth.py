@@ -137,9 +137,9 @@ async def captcha_challenge():
 async def captcha_config():
     """Return public auth config — frontend auto-selects provider."""
     return {
-        "provider": "dual",
+        "provider": "altcha",
         "challenge_url": "/api/auth/captcha-challenge",
-        "turnstile_site_key": settings.TURNSTILE_SITE_KEY,
+        "turnstile_site_key": "",
         "enabled": settings.AUTH_REGISTRATION_ENABLED,
         "show_demo_presets": settings.AUTH_SHOW_DEMO_PRESETS,
     }

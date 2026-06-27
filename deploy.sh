@@ -180,6 +180,11 @@ deploy() {
     info "启动所有服务..."
     docker compose $PROFILES up --build -d
 
+    # 自动清理：删除旧镜像、悬空层和构建缓存（不影响正在运行的容器）
+    info "清理旧镜像和构建缓存..."
+    docker image prune -f > /dev/null 2>&1 || true
+    docker builder prune -f --filter "until=24h" > /dev/null 2>&1 || true
+
     echo ""
     ok "部署完成！"
     echo ""
@@ -197,6 +202,7 @@ deploy() {
     echo "  ./deploy.sh --status     查看服务状态"
     echo "  ./deploy.sh --down       停止所有服务"
     echo "  ./deploy.sh --rebuild    强制重建并部署"
+    echo "  ./deploy.sh --clean      深度清理 Docker 磁盘空间"
 }
 
 # ── 停止 ──
@@ -219,6 +225,35 @@ show_status() {
     echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
     echo ""
     docker compose ps
+}
+
+# ── 深度清理 ──
+deep_clean() {
+    echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║    Docker 磁盘空间清理               ║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
+    echo ""
+
+    info "清理前磁盘使用:"
+    docker system df
+    echo ""
+
+    info "清理悬空镜像 (dangling images)..."
+    docker image prune -f
+
+    info "清理超过 24 小时的构建缓存..."
+    docker builder prune -f --filter "until=24h"
+
+    info "清理已停止的容器..."
+    docker container prune -f
+
+    echo ""
+    ok "清理完成！"
+    info "清理后磁盘使用:"
+    docker system df
+    echo ""
+    echo -e "${YELLOW}提示: 如需更激进清理（删除所有未使用镜像），运行:${NC}"
+    echo "  docker system prune -a -f"
 }
 
 # ── 参数解析 ──
@@ -257,6 +292,9 @@ for arg in "$@"; do
         --status)
             ACTION="status"
             ;;
+        --clean)
+            ACTION="clean"
+            ;;
         --help|-h)
             echo "用法: ./deploy.sh [选项]"
             echo ""
@@ -270,6 +308,7 @@ for arg in "$@"; do
             echo "  --down         停止所有服务"
             echo "  --logs         查看实时日志"
             echo "  --status       查看服务状态"
+            echo "  --clean        深度清理 Docker 磁盘空间"
             exit 0
             ;;
         *)
@@ -279,8 +318,9 @@ for arg in "$@"; do
 done
 
 case $ACTION in
-    deploy)  deploy   ;;
-    stop)    stop_all ;;
-    logs)    show_logs ;;
+    deploy)  deploy     ;;
+    stop)    stop_all   ;;
+    logs)    show_logs  ;;
     status)  show_status ;;
+    clean)   deep_clean ;;
 esac
