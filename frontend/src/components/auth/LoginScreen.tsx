@@ -213,7 +213,6 @@ async function solveChallenge(challengeUrl: string): Promise<string> {
   const { algorithm, challenge, salt, signature, maxnumber } = data;
 
   // Brute-force PoW: find the number whose hash matches
-  const hashName = (algorithm as string).replace('-', '').toLowerCase(); // "sha256"
   for (let i = 0; i <= (maxnumber || 100000); i++) {
     const input = salt + String(i);
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
