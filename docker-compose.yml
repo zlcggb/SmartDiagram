@@ -91,6 +91,7 @@ services:
     restart: always
     depends_on:
       - backend
+      - drawio
     ports:
       - "9237:80"
 

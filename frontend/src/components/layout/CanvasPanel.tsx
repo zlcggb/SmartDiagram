@@ -121,6 +121,12 @@ function CanvasPanelInner() {
   const isMobile = useIsMobile();
   const [conceptOpen, setConceptOpen] = useState(!isMobile);
 
+  // Persist drawio iframe — mount once, hide with CSS when inactive
+  const [drawioMounted, setDrawioMounted] = useState(false);
+  useEffect(() => {
+    if (canvasEngine === 'drawio') setDrawioMounted(true);
+  }, [canvasEngine]);
+
   // No engine selected → welcome screen
   if (!canvasEngine && !canvasCode) {
     return <EmptyCanvas />;
@@ -164,7 +170,7 @@ function CanvasPanelInner() {
       case 'charts':
         return <Suspense fallback={<CanvasLoader />}><ChartsCanvas /></Suspense>;
       case 'drawio':
-        return <Suspense fallback={<CanvasLoader />}><DrawioCanvas /></Suspense>;
+        return null; // rendered persistently below — see drawioMounted
       case 'infographic':
         return <Suspense fallback={<CanvasLoader />}><InfographicCanvas /></Suspense>;
       case 'html_email':
@@ -278,6 +284,16 @@ function CanvasPanelInner() {
               </div>
             )}
           </>
+        )}
+
+        {/* Persistent drawio iframe — mounted once, hidden when inactive */}
+        {drawioMounted && (
+          <div
+            className="absolute inset-0"
+            style={{ display: canvasEngine === 'drawio' && !isGenerating ? 'block' : 'none', zIndex: 10 }}
+          >
+            <Suspense fallback={<CanvasLoader />}><DrawioCanvas /></Suspense>
+          </div>
         )}
       </div>
     </div>

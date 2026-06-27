@@ -1,10 +1,10 @@
 /**
- * DrawioCanvas — Renders Draw.io diagrams with dual-source fallback.
+ * DrawioCanvas — Renders Draw.io diagrams via same-domain reverse proxy.
  *
  * Loading strategy:
- *  1. First try local self-hosted instance (localhost:9022) — fast, offline-capable
- *  2. If local fails after 30s, auto-fallback to online embed.diagrams.net
- *  3. If online also fails after 30s, show error with manual retry
+ *  - DEV:  direct to localhost:9022 (docker container)
+ *  - PROD: /drawio/ path via nginx reverse proxy to drawio container
+ *  - If primary fails after 10s, fallback to online embed.diagrams.net
  *
  * Features:
  *  - Perfect rendering of ALL draw.io shapes, styles, and edge routing
@@ -16,16 +16,15 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useChatStore } from '../../store/chatStore';
-import { AlertCircle, Download, Loader2, Globe, Server } from 'lucide-react';
+import { AlertCircle, Download, Loader2 } from 'lucide-react';
 import { useT } from '../../i18n';
 
 // ─── Constants ───
 
-const LOCAL_URL = 'http://localhost:9022/';
-const REMOTE_URL = 'https://embed.diagrams.net/';
-const LOAD_TIMEOUT_MS = 30_000;
-
-type DrawioSource = 'local' | 'remote';
+/** DEV → docker direct; PROD → nginx reverse proxy (same domain, no CORS) */
+const PRIMARY_URL = import.meta.env.DEV ? 'http://localhost:9022/' : '/drawio/';
+const FALLBACK_URL = 'https://embed.diagrams.net/';
+const LOAD_TIMEOUT_MS = 10_000; // 10s — nginx proxy should respond much faster
 
 // ─── XML Sanitizer ───
 
@@ -48,7 +47,7 @@ function cleanXml(code: string): string {
   return sanitizeDrawioXml(xml);
 }
 
-function buildDrawioUrl(base: string, offline: boolean): string {
+function buildDrawioUrl(base: string): string {
   const params = new URLSearchParams({
     embed: '1',
     ui: 'atlas',
@@ -58,7 +57,6 @@ function buildDrawioUrl(base: string, offline: boolean): string {
     configure: '1',
     noSaveBtn: '1',
     noExitBtn: '1',
-    ...(offline ? { offline: '1' } : {}),
   });
   return base + '?' + params.toString();
 }
@@ -72,18 +70,13 @@ export default function DrawioCanvas() {
   const [iframeReady, setIframeReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [source, setSource] = useState<DrawioSource>('local');
+  const [useFallback, setUseFallback] = useState(false);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoadedXml = useRef(false);
-  // Track iframe key to force remount on source switch
-  const [iframeKey, setIframeKey] = useState(0);
 
   const drawioUrl = useMemo(
-    () => buildDrawioUrl(
-      source === 'local' ? LOCAL_URL : REMOTE_URL,
-      source === 'local'
-    ),
-    [source]
+    () => buildDrawioUrl(useFallback ? FALLBACK_URL : PRIMARY_URL),
+    [useFallback]
   );
 
   // Handle messages from draw.io iframe
@@ -123,30 +116,29 @@ export default function DrawioCanvas() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  // Loading timeout with auto-fallback: local → remote → error
+  // Loading timeout: primary → fallback → error
   useEffect(() => {
-    if (iframeReady) return; // already loaded, no timer needed
+    if (iframeReady) return;
 
     loadTimeoutRef.current = setTimeout(() => {
       if (iframeReady) return;
 
-      if (source === 'local') {
-        // Local failed → auto-switch to remote
-        console.warn('[DrawioCanvas] Local instance timeout, falling back to online...');
-        setSource('remote');
+      if (!useFallback) {
+        // Primary URL failed → switch to online fallback
+        console.warn('[DrawioCanvas] Primary URL timeout, falling back to embed.diagrams.net...');
+        setUseFallback(true);
         setIframeReady(false);
         setIsLoading(true);
         setLoadError(null);
-        setIframeKey(k => k + 1);
       } else {
-        // Remote also failed → show error
+        // Fallback also failed → show error
         setLoadError(t('drawio.loadTimeout'));
         setIsLoading(false);
       }
     }, LOAD_TIMEOUT_MS);
 
     return () => { if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current); };
-  }, [source, iframeReady, t]);
+  }, [useFallback, iframeReady, t]);
 
   // Load XML into iframe when ready
   useEffect(() => {
@@ -186,18 +178,13 @@ export default function DrawioCanvas() {
     URL.revokeObjectURL(url);
   }, [canvasCode]);
 
-  // Retry handler — restart from local
+  // Retry handler — restart from primary
   const handleRetry = useCallback(() => {
     setLoadError(null);
     setIsLoading(true);
     setIframeReady(false);
-    setSource('local');
-    setIframeKey(k => k + 1);
+    setUseFallback(false);
   }, []);
-
-  // ─── Source indicator badge ───
-  const sourceLabel = source === 'local' ? t('drawio.sourceLocal') : t('drawio.sourceOnline');
-  const SourceIcon = source === 'local' ? Server : Globe;
 
   // Error state
   if (loadError) {
@@ -225,10 +212,9 @@ export default function DrawioCanvas() {
         <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-slate-50/90">
           <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-3" />
           <p className="text-sm text-slate-500">{t('drawio.loading')}</p>
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-400">
-            <SourceIcon className="w-3 h-3" />
-            {sourceLabel}
-          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            {useFallback ? t('drawio.sourceOnline') : t('drawio.sourceLocal')}
+          </p>
         </div>
       )}
 
@@ -240,34 +226,21 @@ export default function DrawioCanvas() {
         </div>
       )}
 
-      {/* Source badge + Download button */}
-      {!isLoading && (
-        <div className="absolute top-3 right-3 z-50 flex items-center gap-2">
-          {/* Source indicator */}
-          <div className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] ${
-            source === 'local'
-              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-              : 'bg-amber-50 text-amber-600 border border-amber-200'
-          }`}>
-            <SourceIcon className="w-2.5 h-2.5" />
-            {sourceLabel}
-          </div>
-          {/* Download .drawio */}
-          {hasLoadedXml.current && (
-            <button
-              onClick={handleDownload}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] rounded-lg bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors text-slate-600 shadow-sm"
-              title={t('drawio.downloadFile')}
-            >
-              <Download className="w-3 h-3" /> .drawio
-            </button>
-          )}
+      {/* Download button */}
+      {!isLoading && hasLoadedXml.current && (
+        <div className="absolute top-3 right-3 z-50">
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] rounded-lg bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors text-slate-600 shadow-sm"
+            title={t('drawio.downloadFile')}
+          >
+            <Download className="w-3 h-3" /> .drawio
+          </button>
         </div>
       )}
 
       {/* draw.io iframe */}
       <iframe
-        key={iframeKey}
         ref={iframeRef}
         src={drawioUrl}
         className="w-full h-full border-none"
