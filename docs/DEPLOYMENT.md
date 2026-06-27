@@ -186,12 +186,31 @@ MODEL_ID=gpt-4o                            # 或其他兼容模型
 
 # ── 推荐修改：安全配置 ──
 AUTH_SESSION_SECRET=your-random-secret     # Session 签名密钥（至少 32 字符随机串）
+ALTCHA_HMAC_KEY=your-random-hmac-key       # CAPTCHA 验证密钥（至少 32 字符随机串）
 ```
 
 > **生成随机密钥：**
 > ```bash
-> openssl rand -hex 32
+> # 一次生成两个密钥
+> echo "AUTH_SESSION_SECRET=$(openssl rand -hex 32)"
+> echo "ALTCHA_HMAC_KEY=$(openssl rand -hex 32)"
 > ```
+
+**生产环境推荐配置：**
+
+```bash
+# 关闭演示账号预设
+AUTH_SHOW_DEMO_PRESETS=false
+
+# 安全验证（ALTCHA 自部署 PoW，无需外部服务）
+ALTCHA_HMAC_KEY=<openssl rand -hex 32 生成>  # CAPTCHA 签名密钥
+ALTCHA_ALGORITHM=SHA-256                     # 哈希算法
+ALTCHA_MAX_NUMBER=100000                     # PoW 难度（越大越难，100000 约 1 秒）
+
+# Auth 限速（每 IP 每分钟最多 5 次登录/注册）
+AUTH_RATE_LIMIT_MAX=5
+AUTH_RATE_LIMIT_WINDOW_SECONDS=60
+```
 
 > **关于数据库密码**：`docker-compose.yml` 中数据库密码默认为 `smartdiagram_secret`。如需修改，在项目根目录创建 `.env` 文件：
 > ```bash
@@ -458,9 +477,12 @@ docker system df
 - [ ] 已创建 `backend/.env` 并填入真实 API Key
 - [ ] 已修改数据库密码（生产环境）
 - [ ] 已修改 `AUTH_SESSION_SECRET`（生产环境）
+- [ ] 已修改 `ALTCHA_HMAC_KEY`（生产环境）
+- [ ] 已关闭 `AUTH_SHOW_DEMO_PRESETS=false`（生产环境）
 - [ ] 运行 `./deploy.sh` 成功
 - [ ] 所有容器处于 running 状态
 - [ ] 浏览器可以正常访问
 - [ ] AI 对话可以正常生成图表
+- [ ] 注册/登录 CAPTCHA 验证正常（应在 1-2 秒内自动完成）
 - [ ] 配置了域名和 HTTPS（可选）
 - [ ] 配置了数据库定期备份（可选）

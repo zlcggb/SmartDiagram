@@ -122,7 +122,7 @@ export interface CaptchaConfig {
 export async function fetchCaptchaConfig(): Promise<CaptchaConfig> {
   const res = await fetch(`${API_BASE}/api/auth/captcha-config`);
   if (!res.ok) {
-    return { provider: 'turnstile', site_key: '', enabled: false, show_demo_presets: false };
+    return { provider: 'altcha', challenge_url: '', enabled: false, show_demo_presets: false };
   }
   return (await res.json()) as CaptchaConfig;
 }
