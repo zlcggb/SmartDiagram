@@ -250,6 +250,13 @@ async def search_authorized_diagram_history(
     if "diagram:read" not in permission_context.get("scopes", []):
         raise PermissionError("missing_scope")
 
+    # ── Security: reject anonymous/guest history queries ──
+    user_id = permission_context.get("user_id") or "anonymous"
+    if user_id == "anonymous":
+        return {"status": "ok", "tenant_id": "", "project_id": None,
+                "query": query, "engine_type": engine_type,
+                "task_type": task_type, "count": 0, "diagrams": []}
+
     tenant_id = permission_context.get("tenant_id") or "local"
     user_id = permission_context.get("user_id") or "anonymous"
     resolved_project_id = project_id or permission_context.get("project_id")
