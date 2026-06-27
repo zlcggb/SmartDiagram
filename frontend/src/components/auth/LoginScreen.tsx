@@ -33,58 +33,70 @@ interface LoginScreenProps {
 type LoginPreset = 'user' | 'admin';
 type AuthMode = 'login' | 'register';
 
-// ─── Turnstile Widget ───
+// ─── ALTCHA Widget (self-hosted PoW CAPTCHA) ───
 
-function TurnstileWidget({
-  siteKey,
-  onToken,
+function AltchaWidget({
+  challengeUrl,
+  onPayload,
 }: {
-  siteKey: string;
-  onToken: (token: string) => void;
+  challengeUrl: string;
+  onPayload: (payload: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | null>(null);
+  const scriptLoaded = useRef(false);
 
   useEffect(() => {
-    if (!siteKey || !containerRef.current) return;
+    if (!challengeUrl || !containerRef.current) return;
 
-    const renderWidget = () => {
-      if (!containerRef.current || widgetIdRef.current !== null) return;
-      const w = window as any;
-      if (!w.turnstile) return;
-      widgetIdRef.current = w.turnstile.render(containerRef.current, {
-        sitekey: siteKey,
-        callback: (token: string) => onToken(token),
-        'expired-callback': () => onToken(''),
-        theme: 'light',
-        size: 'flexible',
-      });
+    const loadAndRender = () => {
+      if (!containerRef.current) return;
+      // Clear any previous widget
+      containerRef.current.innerHTML = '';
+
+      const widget = document.createElement('altcha-widget');
+      widget.setAttribute('challengeurl', challengeUrl);
+      widget.setAttribute('hidefooter', '');
+      widget.setAttribute('hidelogo', '');
+      widget.setAttribute('strings', JSON.stringify({
+        label: '安全验证',
+        verifying: '验证中...',
+        verified: '验证通过',
+        error: '验证失败，请重试',
+        expired: '已过期，请重试',
+      }));
+      widget.addEventListener('statechange', ((e: CustomEvent) => {
+        if (e.detail?.state === 'verified' && e.detail?.payload) {
+          onPayload(e.detail.payload);
+        }
+      }) as EventListener);
+      containerRef.current.appendChild(widget);
     };
 
-    // Load Turnstile script if not already loaded
-    if (!(window as any).turnstile) {
-      const existing = document.querySelector('script[src*="turnstile"]');
+    // Load ALTCHA widget script once
+    if (!scriptLoaded.current) {
+      const existing = document.querySelector('script[src*="altcha"]');
       if (!existing) {
         const script = document.createElement('script');
-        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        script.src = 'https://cdn.jsdelivr.net/npm/altcha/dist/altcha.min.js';
+        script.type = 'module';
         script.async = true;
-        script.onload = () => setTimeout(renderWidget, 100);
+        script.onload = () => {
+          scriptLoaded.current = true;
+          loadAndRender();
+        };
         document.head.appendChild(script);
       } else {
-        // Script exists but hasn't loaded yet
-        existing.addEventListener('load', () => setTimeout(renderWidget, 100));
+        scriptLoaded.current = true;
+        loadAndRender();
       }
     } else {
-      renderWidget();
+      loadAndRender();
     }
 
     return () => {
-      if (widgetIdRef.current !== null) {
-        try { (window as any).turnstile?.remove(widgetIdRef.current); } catch {}
-        widgetIdRef.current = null;
-      }
+      if (containerRef.current) containerRef.current.innerHTML = '';
     };
-  }, [siteKey, onToken]);
+  }, [challengeUrl, onPayload]);
 
   return <div ref={containerRef} className="w-full" />;
 }
@@ -100,7 +112,7 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
   const [preset, setPreset] = useState<LoginPreset>('user');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [turnstileToken, setTurnstileToken] = useState('');
+  const [captchaPayload, setCaptchaPayload] = useState('');
   const [captchaConfig, setCaptchaConfig] = useState<CaptchaConfig | null>(null);
 
   // Fetch captcha config on mount
@@ -118,7 +130,7 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
   const switchMode = (next: AuthMode) => {
     setMode(next);
     setError('');
-    setTurnstileToken('');
+    setCaptchaPayload('');
     if (next === 'register') {
       setEmail('');
       setPassword('');
@@ -156,16 +168,16 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
         if (password !== confirmPassword) {
           throw new Error(t('auth.passwordMismatch'));
         }
-        if (!turnstileToken) {
+        if (!captchaPayload) {
           throw new Error(t('auth.captchaRequired'));
         }
-        const session = await registerWithPassword(email, password, turnstileToken);
+        const session = await registerWithPassword(email, password, captchaPayload);
         onLogin(session);
       } else {
-        if (!turnstileToken) {
+        if (!captchaPayload) {
           throw new Error(t('auth.captchaRequired'));
         }
-        const session = await loginWithPassword(email, password, turnstileToken);
+        const session = await loginWithPassword(email, password, captchaPayload);
         onLogin(session);
       }
     } catch (err: any) {
@@ -357,13 +369,13 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
               </label>
             )}
 
-            {/* Turnstile CAPTCHA */}
-            {captchaConfig?.site_key && (
+            {/* ALTCHA PoW CAPTCHA */}
+            {captchaConfig?.challenge_url && (
               <div className="mb-4">
-                <TurnstileWidget
+                <AltchaWidget
                   key={mode}
-                  siteKey={captchaConfig.site_key}
-                  onToken={setTurnstileToken}
+                  challengeUrl={captchaConfig.challenge_url}
+                  onPayload={setCaptchaPayload}
                 />
               </div>
             )}

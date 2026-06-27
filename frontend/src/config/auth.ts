@@ -67,11 +67,11 @@ export function isAdminSession(session: AuthSession | null) {
   return roles.has('admin') || roles.has('owner');
 }
 
-export async function loginWithPassword(email: string, password: string, turnstileToken?: string): Promise<AuthSession> {
+export async function loginWithPassword(email: string, password: string, captchaPayload?: string): Promise<AuthSession> {
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, turnstile_token: turnstileToken || '' }),
+    body: JSON.stringify({ email, password, captcha_payload: captchaPayload || '' }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
@@ -96,12 +96,12 @@ export async function validateAuthSession(session: AuthSession): Promise<AuthSes
 export async function registerWithPassword(
   email: string,
   password: string,
-  turnstileToken: string,
+  captchaPayload: string,
 ): Promise<AuthSession> {
   const res = await fetch(`${API_BASE}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, turnstile_token: turnstileToken }),
+    body: JSON.stringify({ email, password, captcha_payload: captchaPayload }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
@@ -114,7 +114,7 @@ export async function registerWithPassword(
 
 export interface CaptchaConfig {
   provider: string;
-  site_key: string;
+  challenge_url: string;
   enabled: boolean;
   show_demo_presets: boolean;
 }

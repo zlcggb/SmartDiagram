@@ -56,9 +56,14 @@ class Settings:
     AUTH_DEMO_ADMIN_EMAIL: str = os.getenv("AUTH_DEMO_ADMIN_EMAIL", "admin@smartdiagram.local")
     AUTH_DEMO_ADMIN_PASSWORD: str = os.getenv("AUTH_DEMO_ADMIN_PASSWORD", "admin123456")
 
-    # Cloudflare Turnstile (human verification)
-    TURNSTILE_SITE_KEY: str = os.getenv("TURNSTILE_SITE_KEY", "1x00000000000000000000AA")
-    TURNSTILE_SECRET_KEY: str = os.getenv("TURNSTILE_SECRET_KEY", "1x0000000000000000000000000000000AA")
+    # ALTCHA (self-hosted Proof-of-Work CAPTCHA)
+    ALTCHA_HMAC_KEY: str = os.getenv("ALTCHA_HMAC_KEY", "smartdiagram-dev-altcha-hmac-key-change-me")
+    ALTCHA_ALGORITHM: str = os.getenv("ALTCHA_ALGORITHM", "SHA-256")
+    ALTCHA_MAX_NUMBER: int = int(os.getenv("ALTCHA_MAX_NUMBER", "100000"))
+
+    # Auth rate limiting (per IP)
+    AUTH_RATE_LIMIT_MAX: int = int(os.getenv("AUTH_RATE_LIMIT_MAX", "5"))
+    AUTH_RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60"))
 
     # Show demo user presets on login page (disable for production)
     AUTH_SHOW_DEMO_PRESETS: bool = os.getenv("AUTH_SHOW_DEMO_PRESETS", "true").lower() == "true"

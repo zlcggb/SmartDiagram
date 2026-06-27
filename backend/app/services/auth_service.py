@@ -130,34 +130,42 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-# ─── Cloudflare Turnstile Verification ───
+# ─── ALTCHA Proof-of-Work CAPTCHA ───
 
-def verify_turnstile_token(token: str) -> bool:
-    """Verify a Cloudflare Turnstile token via their siteverify API."""
-    import httpx
+def create_altcha_challenge() -> dict[str, Any]:
+    """Generate a PoW challenge for the client to solve."""
+    from altcha import ChallengeOptions, create_challenge as _create
+
+    options = ChallengeOptions(
+        algorithm=settings.ALTCHA_ALGORITHM,
+        max_number=settings.ALTCHA_MAX_NUMBER,
+        hmac_key=settings.ALTCHA_HMAC_KEY,
+    )
+    challenge = _create(options)
+    return {
+        "algorithm": challenge.algorithm,
+        "challenge": challenge.challenge,
+        "maxnumber": challenge.maxnumber,
+        "salt": challenge.salt,
+        "signature": challenge.signature,
+    }
+
+
+def verify_altcha_payload(payload: str) -> bool:
+    """Verify a Base64-encoded ALTCHA solution payload."""
+    from altcha import verify_solution
     from app.core.logger import logger
 
-    if not token:
-        logger.warning("Turnstile: empty token")
-        return False
-    secret = settings.TURNSTILE_SECRET_KEY
-    if not secret:
-        logger.warning("Turnstile: no secret key configured")
+    if not payload:
+        logger.warning("ALTCHA: empty payload")
         return False
     try:
-        # Use httpx with no_proxy to bypass any system/SOCKS proxy
-        with httpx.Client(timeout=10, proxy=None) as client:
-            resp = client.post(
-                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-                data={"secret": secret, "response": token},
-            )
-            result = resp.json()
-        if result.get("success"):
-            return True
-        logger.warning(f"Turnstile verification failed: {result}")
-        return False
+        ok, _ = verify_solution(payload, settings.ALTCHA_HMAC_KEY, check_expires=False)
+        if not ok:
+            logger.warning("ALTCHA: verification failed")
+        return ok
     except Exception as exc:
-        logger.error(f"Turnstile request error: {exc}")
+        logger.error(f"ALTCHA verification error: {exc}")
         return False
 
 

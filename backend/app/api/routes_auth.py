@@ -13,28 +13,37 @@ from app.services.auth_service import (
     authenticate_db_user,
     authenticate_local_user,
     bearer_token_from_header,
+    create_altcha_challenge,
     issue_auth_session,
     register_db_user,
     serialize_user,
     user_to_permission_context,
+    verify_altcha_payload,
     verify_auth_token,
-    verify_turnstile_token,
 )
+from app.services.rate_limit import check_auth_rate_limit
 
 router = APIRouter(tags=["auth"])
 
 
 @router.post("/auth/login")
 async def login(
+    request: Request,
     body: dict[str, Any],
     session: AsyncSession = Depends(get_session),
 ):
+    # Rate limit
+    ip = request.client.host if request.client else "unknown"
+    rl = await check_auth_rate_limit(ip)
+    if not rl["allowed"]:
+        raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
+
     email = str(body.get("email") or "")
     password = str(body.get("password") or "")
-    turnstile_token = str(body.get("turnstile_token") or "")
+    captcha_payload = str(body.get("captcha_payload") or "")
 
-    # Verify Turnstile CAPTCHA
-    if not verify_turnstile_token(turnstile_token):
+    # Verify ALTCHA PoW
+    if not verify_altcha_payload(captcha_payload):
         raise HTTPException(status_code=400, detail="CAPTCHA verification failed")
 
     # 1. Try .env demo users first
@@ -63,15 +72,22 @@ async def login(
 
 @router.post("/auth/register")
 async def register(
+    request: Request,
     body: dict[str, Any],
     session: AsyncSession = Depends(get_session),
 ):
     if not settings.AUTH_REGISTRATION_ENABLED:
         raise HTTPException(status_code=403, detail="Registration is disabled")
 
+    # Rate limit
+    ip = request.client.host if request.client else "unknown"
+    rl = await check_auth_rate_limit(ip)
+    if not rl["allowed"]:
+        raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
+
     email = str(body.get("email") or "").strip()
     password = str(body.get("password") or "")
-    turnstile_token = str(body.get("turnstile_token") or "")
+    captcha_payload = str(body.get("captcha_payload") or "")
 
     # Validate inputs
     if not email or "@" not in email:
@@ -79,8 +95,8 @@ async def register(
     if len(password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
-    # Verify Turnstile CAPTCHA
-    if not verify_turnstile_token(turnstile_token):
+    # Verify ALTCHA PoW
+    if not verify_altcha_payload(captcha_payload):
         raise HTTPException(status_code=400, detail="CAPTCHA verification failed")
 
     # Register user
@@ -109,12 +125,18 @@ async def current_user(request: Request):
     return {"user": serialize_user(user)}
 
 
+@router.get("/auth/captcha-challenge")
+async def captcha_challenge():
+    """Return a fresh ALTCHA PoW challenge."""
+    return create_altcha_challenge()
+
+
 @router.get("/auth/captcha-config")
 async def captcha_config():
     """Return public auth config for frontend integration."""
     return {
-        "provider": "turnstile",
-        "site_key": settings.TURNSTILE_SITE_KEY,
+        "provider": "altcha",
+        "challenge_url": "/api/auth/captcha-challenge",
         "enabled": settings.AUTH_REGISTRATION_ENABLED,
         "show_demo_presets": settings.AUTH_SHOW_DEMO_PRESETS,
     }
