@@ -18,8 +18,8 @@ from app.services.auth_service import (
     register_db_user,
     serialize_user,
     user_to_permission_context,
-    verify_altcha_payload,
     verify_auth_token,
+    verify_captcha,
 )
 from app.services.rate_limit import check_auth_rate_limit
 
@@ -40,10 +40,11 @@ async def login(
 
     email = str(body.get("email") or "")
     password = str(body.get("password") or "")
+    turnstile_token = str(body.get("turnstile_token") or "")
     captcha_payload = str(body.get("captcha_payload") or "")
 
-    # Verify ALTCHA PoW
-    if not verify_altcha_payload(captcha_payload):
+    # Verify CAPTCHA (Turnstile or ALTCHA — whichever the frontend used)
+    if not verify_captcha(turnstile_token=turnstile_token, altcha_payload=captcha_payload):
         raise HTTPException(status_code=400, detail="CAPTCHA verification failed")
 
     # 1. Try .env demo users first
@@ -87,6 +88,7 @@ async def register(
 
     email = str(body.get("email") or "").strip()
     password = str(body.get("password") or "")
+    turnstile_token = str(body.get("turnstile_token") or "")
     captcha_payload = str(body.get("captcha_payload") or "")
 
     # Validate inputs
@@ -95,8 +97,8 @@ async def register(
     if len(password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
-    # Verify ALTCHA PoW
-    if not verify_altcha_payload(captcha_payload):
+    # Verify CAPTCHA (Turnstile or ALTCHA)
+    if not verify_captcha(turnstile_token=turnstile_token, altcha_payload=captcha_payload):
         raise HTTPException(status_code=400, detail="CAPTCHA verification failed")
 
     # Register user
@@ -133,10 +135,11 @@ async def captcha_challenge():
 
 @router.get("/auth/captcha-config")
 async def captcha_config():
-    """Return public auth config for frontend integration."""
+    """Return public auth config — frontend auto-selects provider."""
     return {
-        "provider": "altcha",
+        "provider": "dual",
         "challenge_url": "/api/auth/captcha-challenge",
+        "turnstile_site_key": settings.TURNSTILE_SITE_KEY,
         "enabled": settings.AUTH_REGISTRATION_ENABLED,
         "show_demo_presets": settings.AUTH_SHOW_DEMO_PRESETS,
     }

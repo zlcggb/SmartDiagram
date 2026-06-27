@@ -67,11 +67,21 @@ export function isAdminSession(session: AuthSession | null) {
   return roles.has('admin') || roles.has('owner');
 }
 
-export async function loginWithPassword(email: string, password: string, captchaPayload?: string): Promise<AuthSession> {
+export interface CaptchaResult {
+  provider: 'turnstile' | 'altcha';
+  token: string;  // turnstile_token or altcha base64 payload
+}
+
+export async function loginWithPassword(email: string, password: string, captcha?: CaptchaResult): Promise<AuthSession> {
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, captcha_payload: captchaPayload || '' }),
+    body: JSON.stringify({
+      email,
+      password,
+      turnstile_token: captcha?.provider === 'turnstile' ? captcha.token : '',
+      captcha_payload: captcha?.provider === 'altcha' ? captcha.token : '',
+    }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
@@ -96,12 +106,17 @@ export async function validateAuthSession(session: AuthSession): Promise<AuthSes
 export async function registerWithPassword(
   email: string,
   password: string,
-  captchaPayload: string,
+  captcha: CaptchaResult,
 ): Promise<AuthSession> {
   const res = await fetch(`${API_BASE}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, captcha_payload: captchaPayload }),
+    body: JSON.stringify({
+      email,
+      password,
+      turnstile_token: captcha.provider === 'turnstile' ? captcha.token : '',
+      captcha_payload: captcha.provider === 'altcha' ? captcha.token : '',
+    }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
@@ -113,8 +128,9 @@ export async function registerWithPassword(
 }
 
 export interface CaptchaConfig {
-  provider: string;
-  challenge_url: string;
+  provider: string;          // "dual" | "altcha" | "turnstile"
+  challenge_url: string;     // ALTCHA challenge endpoint
+  turnstile_site_key: string; // Turnstile site key (empty = disabled)
   enabled: boolean;
   show_demo_presets: boolean;
 }
@@ -122,7 +138,7 @@ export interface CaptchaConfig {
 export async function fetchCaptchaConfig(): Promise<CaptchaConfig> {
   const res = await fetch(`${API_BASE}/api/auth/captcha-config`);
   if (!res.ok) {
-    return { provider: 'altcha', challenge_url: '', enabled: false, show_demo_presets: false };
+    return { provider: 'altcha', challenge_url: '', turnstile_site_key: '', enabled: false, show_demo_presets: false };
   }
   return (await res.json()) as CaptchaConfig;
 }

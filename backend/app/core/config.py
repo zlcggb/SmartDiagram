@@ -56,10 +56,14 @@ class Settings:
     AUTH_DEMO_ADMIN_EMAIL: str = os.getenv("AUTH_DEMO_ADMIN_EMAIL", "admin@smartdiagram.local")
     AUTH_DEMO_ADMIN_PASSWORD: str = os.getenv("AUTH_DEMO_ADMIN_PASSWORD", "admin123456")
 
-    # ALTCHA (self-hosted Proof-of-Work CAPTCHA)
+    # ALTCHA (self-hosted Proof-of-Work CAPTCHA — fallback for restricted regions)
     ALTCHA_HMAC_KEY: str = os.getenv("ALTCHA_HMAC_KEY", "smartdiagram-dev-altcha-hmac-key-change-me")
     ALTCHA_ALGORITHM: str = os.getenv("ALTCHA_ALGORITHM", "SHA-256")
     ALTCHA_MAX_NUMBER: int = int(os.getenv("ALTCHA_MAX_NUMBER", "100000"))
+
+    # Cloudflare Turnstile (primary CAPTCHA for non-restricted regions)
+    TURNSTILE_SITE_KEY: str = os.getenv("TURNSTILE_SITE_KEY", "")
+    TURNSTILE_SECRET_KEY: str = os.getenv("TURNSTILE_SECRET_KEY", "")
 
     # Auth rate limiting (per IP)
     AUTH_RATE_LIMIT_MAX: int = int(os.getenv("AUTH_RATE_LIMIT_MAX", "5"))

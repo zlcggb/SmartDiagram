@@ -24,6 +24,5 @@ dependencies = [
     "python-multipart>=0.0.12",
     "langchain-google-vertexai>=2.0.0",
     "langchain-google-genai>=4.2.2",
-    "altcha>=1.0.0",
     "redis>=5.0.0",
 ]

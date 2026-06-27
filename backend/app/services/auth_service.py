@@ -130,43 +130,107 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-# ─── ALTCHA Proof-of-Work CAPTCHA (V1 API — compatible with altcha-widget) ───
+# ─── ALTCHA Proof-of-Work CAPTCHA (V1 protocol, no external dependency) ───
 
 def create_altcha_challenge() -> dict[str, Any]:
-    """Generate a PoW challenge for the client to solve."""
-    from altcha import ChallengeOptionsV1, create_challenge_v1
+    """Generate a PoW challenge for the client to solve.
 
-    options = ChallengeOptionsV1(
-        algorithm=settings.ALTCHA_ALGORITHM,
-        max_number=settings.ALTCHA_MAX_NUMBER,
-        hmac_key=settings.ALTCHA_HMAC_KEY,
-    )
-    challenge = create_challenge_v1(options)
+    V1 protocol: challenge = SHA-256(salt + number), signature = HMAC(challenge, key).
+    """
+    import secrets as _secrets
+
+    algorithm = settings.ALTCHA_ALGORITHM  # "SHA-256"
+    max_number = settings.ALTCHA_MAX_NUMBER
+    hmac_key = settings.ALTCHA_HMAC_KEY
+
+    salt = _secrets.token_hex(12)
+    number = _secrets.randbelow(max_number + 1)
+
+    hash_name = algorithm.lower().replace("-", "")  # "sha256"
+    challenge = hashlib.new(hash_name, (salt + str(number)).encode()).hexdigest()
+    signature = hmac.new(
+        hmac_key.encode(), challenge.encode(), getattr(hashlib, hash_name)
+    ).hexdigest()
+
     return {
-        "algorithm": challenge.algorithm,
-        "challenge": challenge.challenge,
-        "maxnumber": challenge.max_number,
-        "salt": challenge.salt,
-        "signature": challenge.signature,
+        "algorithm": algorithm,
+        "challenge": challenge,
+        "maxnumber": max_number,
+        "salt": salt,
+        "signature": signature,
     }
 
 
 def verify_altcha_payload(payload: str) -> bool:
-    """Verify a Base64-encoded ALTCHA solution payload."""
-    from altcha import verify_solution_v1
+    """Verify a Base64-encoded ALTCHA V1 solution payload."""
+    import json as _json
     from app.core.logger import logger
 
     if not payload:
         logger.warning("ALTCHA: empty payload")
         return False
     try:
-        ok, err = verify_solution_v1(payload, settings.ALTCHA_HMAC_KEY, check_expires=False)
-        if not ok:
-            logger.warning(f"ALTCHA: verification failed — {err}")
-        return ok
+        data = _json.loads(base64.b64decode(payload).decode())
+        alg = data.get("algorithm", "SHA-256")
+        challenge = data.get("challenge", "")
+        number = data.get("number", 0)
+        salt = data.get("salt", "")
+        sig = data.get("signature", "")
+
+        hash_name = alg.lower().replace("-", "")
+        hmac_key = settings.ALTCHA_HMAC_KEY
+
+        expected_challenge = hashlib.new(hash_name, (salt + str(number)).encode()).hexdigest()
+        expected_sig = hmac.new(
+            hmac_key.encode(), expected_challenge.encode(), getattr(hashlib, hash_name)
+        ).hexdigest()
+
+        if expected_challenge == challenge and hmac.compare_digest(expected_sig, sig):
+            return True
+        logger.warning("ALTCHA: verification failed")
+        return False
     except Exception as exc:
         logger.error(f"ALTCHA verification error: {exc}")
         return False
+
+
+# ─── Cloudflare Turnstile Verification ───
+
+def verify_turnstile_token(token: str) -> bool:
+    """Verify a Cloudflare Turnstile token via their siteverify API."""
+    import httpx
+    from app.core.logger import logger
+
+    if not token:
+        return False
+    secret = settings.TURNSTILE_SECRET_KEY
+    if not secret:
+        return False
+    try:
+        with httpx.Client(timeout=10, proxy=None) as client:
+            resp = client.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={"secret": secret, "response": token},
+            )
+            result = resp.json()
+        if result.get("success"):
+            return True
+        logger.warning(f"Turnstile verification failed: {result}")
+        return False
+    except Exception as exc:
+        logger.error(f"Turnstile request error: {exc}")
+        return False
+
+
+# ─── Unified CAPTCHA Verification ───
+
+def verify_captcha(*, turnstile_token: str = "", altcha_payload: str = "") -> bool:
+    """Verify CAPTCHA from either provider. Frontend sends whichever it used."""
+    if turnstile_token:
+        return verify_turnstile_token(turnstile_token)
+    if altcha_payload:
+        return verify_altcha_payload(altcha_payload)
+    return False
 
 
 # ─── Token Encoding ───
