@@ -161,6 +161,10 @@ function TurnstileWidget({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const onTokenRef = useRef(onToken);
+  onTokenRef.current = onToken;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   useEffect(() => {
     if (!siteKey || !containerRef.current) return;
@@ -171,14 +175,12 @@ function TurnstileWidget({
 
     widgetIdRef.current = w.turnstile.render(containerRef.current, {
       sitekey: siteKey,
-      callback: (token: string) => onToken(token),
-      'expired-callback': () => onToken(''),
+      callback: (token: string) => onTokenRef.current(token),
+      'expired-callback': () => onTokenRef.current(''),
       'error-callback': () => {
-        // Turnstile reports an error (e.g. SSL failures on localhost)
-        // After 2 errors, give up and fall back to ALTCHA
         errorCount++;
-        if (errorCount >= 2 && onError) {
-          onError();
+        if (errorCount >= 2 && onErrorRef.current) {
+          onErrorRef.current();
         }
       },
       theme: 'light',
@@ -187,7 +189,7 @@ function TurnstileWidget({
 
     // Safety net: if no token received within 8s after render, fall back
     const safetyTimeout = setTimeout(() => {
-      if (onError) onError();
+      if (onErrorRef.current) onErrorRef.current();
     }, 8000);
 
     return () => {
@@ -197,7 +199,7 @@ function TurnstileWidget({
         widgetIdRef.current = null;
       }
     };
-  }, [siteKey, onToken, onError]);
+  }, [siteKey]);
 
   return <div ref={containerRef} className="w-full" />;
 }
