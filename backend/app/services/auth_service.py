@@ -301,7 +301,7 @@ async def register_db_user(email: str, password: str, session) -> dict[str, Any]
     # Extract display name from email
     display_name = normalized_email.split("@")[0]
 
-    # Flush in FK dependency order: Tenant → User → Team → Project
+    # Flush in FK dependency order: Tenant → User → Team → Project → Memberships
     session.add(Tenant(id=tenant_id, name=f"{display_name}'s workspace", slug=tenant_id))
     await session.flush()
     session.add(User(
@@ -316,6 +316,19 @@ async def register_db_user(email: str, password: str, session) -> dict[str, Any]
     session.add(Team(id=team_id, tenant_id=tenant_id, name="Default Team", created_by=user_id))
     await session.flush()
     session.add(Project(id=project_id, tenant_id=tenant_id, team_id=team_id, name="Default Project", created_by=user_id))
+    await session.flush()
+
+    # Grant membership so access control checks pass (e.g. preferences, history)
+    from app.models.tenant import TeamMember
+    from app.models.project import ProjectMember
+    session.add(TeamMember(tenant_id=tenant_id, team_id=team_id, user_id=user_id, role="owner"))
+    session.add(ProjectMember(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        user_id=user_id,
+        role="owner",
+        scopes_json=MEMBER_SCOPES,
+    ))
     await session.flush()
 
     return {
