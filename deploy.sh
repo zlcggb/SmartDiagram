@@ -180,10 +180,9 @@ deploy() {
     info "启动所有服务..."
     docker compose $PROFILES up --build -d
 
-    # 自动清理：删除旧镜像、悬空层和构建缓存（不影响正在运行的容器）
-    info "清理旧镜像和构建缓存..."
+    # 自动清理：只删除悬空镜像（旧构建残留），保留构建缓存供下次复用
+    info "清理悬空镜像..."
     docker image prune -f > /dev/null 2>&1 || true
-    docker builder prune -f --filter "until=24h" > /dev/null 2>&1 || true
 
     echo ""
     ok "部署完成！"
