@@ -243,6 +243,15 @@ async def search_authorized_conversation_history(
 ) -> dict[str, Any]:
     """Search conversations visible to the current permission context."""
 
+    # ── Security: reject anonymous/guest history queries ──
+    # All guests share the same identity, so allowing queries would
+    # expose other visitors' conversations.
+    querying_user = permission_context.get("user_id") or "anonymous"
+    if querying_user == "anonymous":
+        return {"conversations": [], "count": 0, "limit": limit,
+                "include_messages": include_messages,
+                "include_current_diagram": include_current_diagram}
+
     scopes = set(permission_context.get("scopes") or [])
     if "diagram:read" not in scopes and not is_tenant_admin(permission_context):
         raise PermissionError("missing_diagram_read_scope")

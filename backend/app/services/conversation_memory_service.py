@@ -148,6 +148,12 @@ async def load_conversation_memory(
     if not conversation_id:
         return {"status": "empty", "reason": "missing_conversation_id", "recent_messages": []}
 
+    # Anonymous/guest users must not load persisted memory — it may
+    # belong to a different visitor who shares the same tenant_id.
+    user_id = permission_context.get("user_id") or "anonymous"
+    if user_id == "anonymous":
+        return {"status": "empty", "reason": "anonymous_user", "recent_messages": []}
+
     tenant_id = permission_context.get("tenant_id") or "local"
     conversation = await session.get(Conversation, conversation_id)
     if not conversation:

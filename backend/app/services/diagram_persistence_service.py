@@ -256,6 +256,12 @@ async def persist_generated_diagram(
 
     if not diagram_code.strip() or not engine_type:
         return None
+    # ── Security: never persist conversations for anonymous/guest users ──
+    # All guests share tenant_id="anonymous-local" + user_id="anonymous",
+    # so persisting would leak data between unrelated visitors.
+    user_id = permission_context.get("user_id") or "anonymous"
+    if user_id == "anonymous":
+        return None
     try:
         return await asyncio.wait_for(
             _persist_generated_diagram(
