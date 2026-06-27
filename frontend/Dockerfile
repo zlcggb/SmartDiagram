@@ -1,9 +1,11 @@
 FROM node:20-slim AS build
 WORKDIR /app
 
-# 阿里云内网 npm 镜像（阿里云 ECS 专用，内网带宽，极速）
+# 中国大陆 npm 加速
 ARG CN_MIRROR=false
-RUN npm config set registry https://registry.npmmirror.com
+RUN if [ "$CN_MIRROR" = "true" ]; then \
+      npm config set registry https://registry.npmmirror.com; \
+    fi
 
 COPY package*.json ./
 RUN npm ci
