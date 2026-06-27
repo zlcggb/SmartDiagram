@@ -130,21 +130,22 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-# ─── ALTCHA Proof-of-Work CAPTCHA ───
+# ─── ALTCHA Proof-of-Work CAPTCHA (V1 API — compatible with altcha-widget) ───
 
 def create_altcha_challenge() -> dict[str, Any]:
     """Generate a PoW challenge for the client to solve."""
-    from altcha import create_challenge as _create
+    from altcha import ChallengeOptionsV1, create_challenge_v1
 
-    challenge = _create(
+    options = ChallengeOptionsV1(
         algorithm=settings.ALTCHA_ALGORITHM,
         max_number=settings.ALTCHA_MAX_NUMBER,
         hmac_key=settings.ALTCHA_HMAC_KEY,
     )
+    challenge = create_challenge_v1(options)
     return {
         "algorithm": challenge.algorithm,
         "challenge": challenge.challenge,
-        "maxnumber": challenge.maxnumber,
+        "maxnumber": challenge.max_number,
         "salt": challenge.salt,
         "signature": challenge.signature,
     }
@@ -152,17 +153,17 @@ def create_altcha_challenge() -> dict[str, Any]:
 
 def verify_altcha_payload(payload: str) -> bool:
     """Verify a Base64-encoded ALTCHA solution payload."""
-    from altcha import verify_solution
+    from altcha import verify_solution_v1
     from app.core.logger import logger
 
     if not payload:
         logger.warning("ALTCHA: empty payload")
         return False
     try:
-        ok = verify_solution(payload, settings.ALTCHA_HMAC_KEY, check_expires=False)
+        ok, err = verify_solution_v1(payload, settings.ALTCHA_HMAC_KEY, check_expires=False)
         if not ok:
-            logger.warning("ALTCHA: verification failed")
-        return bool(ok)
+            logger.warning(f"ALTCHA: verification failed — {err}")
+        return ok
     except Exception as exc:
         logger.error(f"ALTCHA verification error: {exc}")
         return False
