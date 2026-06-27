@@ -1,6 +1,6 @@
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
 
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_HTTP_TIMEOUT=300
 # 中国大陆 PyPI 加速（uv 使用 UV_INDEX_URL）
 ARG CN_MIRROR=false
 ENV UV_INDEX_URL=${CN_MIRROR:+https://mirrors.aliyun.com/pypi/simple}
