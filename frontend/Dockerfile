@@ -1,12 +1,17 @@
 # Build stage: ghcr.io 基础镜像 + NodeSource 安装 Node.js（避开被墙的 docker.io）
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS build
+ARG CN_MIRROR=false
+RUN if [ "$CN_MIRROR" = "true" ]; then \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null; \
+    fi
+
 RUN apt-get update && apt-get install -y curl gnupg && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
-ARG CN_MIRROR=false
 RUN if [ "$CN_MIRROR" = "true" ]; then npm config set registry https://registry.npmmirror.com; fi
 
 COPY package*.json ./
@@ -17,6 +22,12 @@ RUN npm run build
 
 # Runtime: ghcr.io 基础镜像 + apt 安装 nginx（避开被墙的 docker.io）
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+ARG CN_MIRROR=false
+RUN if [ "$CN_MIRROR" = "true" ]; then \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null; \
+    fi
+
 RUN apt-get update && apt-get install -y nginx && \
     rm -rf /var/lib/apt/lists/* && \
     rm -f /etc/nginx/sites-enabled/default
