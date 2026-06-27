@@ -1,4 +1,4 @@
-FROM node:20-slim AS build
+FROM registry.cn-hangzhou.aliyuncs.com/library/node:20-slim AS build
 WORKDIR /app
 
 # 阿里云内网 npm 镜像（阿里云 ECS 专用，内网带宽，极速）
@@ -11,7 +11,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:stable-alpine
+FROM registry.cn-hangzhou.aliyuncs.com/library/nginx:stable-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
