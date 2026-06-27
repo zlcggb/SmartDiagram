@@ -75,7 +75,8 @@ export default function App() {
 
   const handleLogout = () => {
     clearAuthSession();
-    setAuthSession(null);
+    // Full page reload to clear all in-memory state (chat, diagrams, stores)
+    window.location.reload();
   };
 
   const handleLogin = (session: AuthSession) => {
