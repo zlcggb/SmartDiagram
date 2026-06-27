@@ -172,14 +172,20 @@ function TurnstileWidget({
     if (!w.turnstile) return;
 
     let errorCount = 0;
+    let succeeded = false;
 
     widgetIdRef.current = w.turnstile.render(containerRef.current, {
       sitekey: siteKey,
-      callback: (token: string) => onTokenRef.current(token),
+      callback: (token: string) => {
+        succeeded = true;
+        clearTimeout(safetyTimeout);
+        onTokenRef.current(token);
+      },
       'expired-callback': () => onTokenRef.current(''),
       'error-callback': () => {
         errorCount++;
         if (errorCount >= 2 && onErrorRef.current) {
+          clearTimeout(safetyTimeout);
           onErrorRef.current();
         }
       },
@@ -189,7 +195,7 @@ function TurnstileWidget({
 
     // Safety net: if no token received within 8s after render, fall back
     const safetyTimeout = setTimeout(() => {
-      if (onErrorRef.current) onErrorRef.current();
+      if (!succeeded && onErrorRef.current) onErrorRef.current();
     }, 8000);
 
     return () => {
