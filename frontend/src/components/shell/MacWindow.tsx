@@ -82,7 +82,7 @@ export function MacWindow({
 
   return createPortal(
     <div
-      className="mac-window-backdrop"
+      className="mac-window-backdrop mac-shell"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}

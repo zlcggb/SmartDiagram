@@ -16,7 +16,13 @@ export type ShellAction =
   | "diagram-focus-chat"
   | "diagram-focus-canvas"
   | "ppt-new"
-  | "ppt-projects";
+  | "ppt-projects"
+  | "edit-undo"
+  | "edit-redo"
+  | "edit-cut"
+  | "edit-copy"
+  | "edit-paste"
+  | "edit-select-all";
 
 export interface ShellContext {
   area: ShellArea;
@@ -48,6 +54,39 @@ export interface ShellMenuState {
   widgetsVisible?: boolean;
   desktopIconsVisible?: boolean;
   canvasMode?: "light" | "dark";
+}
+
+export type SpotlightResultKind = "app" | "ppt" | "diagram" | "conversation" | "login";
+
+export interface SpotlightResult {
+  id: string;
+  kind: SpotlightResultKind;
+  title: string;
+  subtitle: string;
+  href?: string;
+  updatedAt?: string;
+}
+
+export interface SpotlightSources {
+  authenticated: boolean;
+  projects?: Array<{
+    id: string;
+    name: string;
+    topic?: string | null;
+    updatedAt?: string;
+  }>;
+  diagrams?: Array<{
+    diagram_id: string;
+    title: string;
+    updated_at?: string;
+    conversation?: { summary?: string };
+  }>;
+  conversations?: Array<{
+    conversation_id: string;
+    title?: string;
+    summary?: string;
+    updated_at?: string;
+  }>;
 }
 
 const separator = (id: string): ShellMenuItem => ({ id, separator: true });
@@ -99,6 +138,38 @@ function goMenu(context: ShellContext): ShellMenu {
   };
 }
 
+function editMenu(): ShellMenu {
+  return {
+    id: "edit",
+    label: "编辑",
+    items: [
+      { id: "edit-undo", label: "撤销", shortcut: "⌘Z", action: "edit-undo" },
+      { id: "edit-redo", label: "重做", shortcut: "⇧⌘Z", action: "edit-redo" },
+      separator("edit-history-separator"),
+      { id: "edit-cut", label: "剪切", shortcut: "⌘X", action: "edit-cut" },
+      { id: "edit-copy", label: "拷贝", shortcut: "⌘C", action: "edit-copy" },
+      { id: "edit-paste", label: "粘贴", shortcut: "⌘V", action: "edit-paste" },
+      separator("edit-select-separator"),
+      { id: "edit-select-all", label: "全选", shortcut: "⌘A", action: "edit-select-all" }
+    ]
+  };
+}
+
+function windowMenu(context: ShellContext): ShellMenu {
+  return {
+    id: "window",
+    label: "窗口",
+    items: [
+      { id: "window-recents", label: "最近项目…", action: "open-recents" },
+      separator("window-navigation-separator"),
+      {
+        ...navigateItem("window-desktop", "DeepDiagram 桌面", "/"),
+        disabled: context.area === "desktop"
+      }
+    ]
+  };
+}
+
 function fullscreenItem(state: ShellMenuState): ShellMenuItem {
   return {
     id: "fullscreen",
@@ -130,6 +201,7 @@ function desktopMenus(context: ShellContext, state: ShellMenuState): ShellMenu[]
         { id: "open-recents", label: "最近项目", action: "open-recents", shortcut: "⌘R" }
       ]
     },
+    editMenu(),
     {
       id: "view",
       label: "显示",
@@ -151,6 +223,7 @@ function desktopMenus(context: ShellContext, state: ShellMenuState): ShellMenu[]
       ]
     },
     goMenu(context),
+    windowMenu(context),
     helpMenu("键盘操作")
   ];
 }
@@ -176,6 +249,7 @@ function diagramMenus(context: ShellContext, state: ShellMenuState): ShellMenu[]
         }
       ]
     },
+    editMenu(),
     {
       id: "view",
       label: "显示",
@@ -202,6 +276,7 @@ function diagramMenus(context: ShellContext, state: ShellMenuState): ShellMenu[]
       ]
     },
     goMenu(context),
+    windowMenu(context),
     helpMenu("绘图操作说明")
   ];
 }
@@ -227,7 +302,8 @@ function pptMenus(context: ShellContext, state: ShellMenuState): ShellMenu[] {
           action: "ppt-projects"
         }
       ]
-    }
+    },
+    editMenu()
   ];
 
   if (context.area === "ppt-project" && context.projectId) {
@@ -251,6 +327,7 @@ function pptMenus(context: ShellContext, state: ShellMenuState): ShellMenu[] {
       items: [fullscreenItem(state)]
     },
     goMenu(context),
+    windowMenu(context),
     helpMenu("PPT 工作流说明")
   );
   return menus;
@@ -348,4 +425,90 @@ export function buildCalendarCells(date: Date): Array<number | null> {
   const cells: Array<number | null> = Array.from({ length: firstWeekday }, () => null);
   for (let day = 1; day <= dayCount; day += 1) cells.push(day);
   return cells;
+}
+
+function includesSpotlightQuery(result: SpotlightResult, query: string): boolean {
+  if (!query) return true;
+  return (result.title + " " + result.subtitle).toLocaleLowerCase().includes(query);
+}
+
+function historyHref(title: string, mode?: "conversations"): string {
+  const params = new URLSearchParams();
+  if (mode) params.set("historyMode", mode);
+  params.set("history", title);
+  return "/diagram?" + params.toString();
+}
+
+export function buildSpotlightResults(
+  rawQuery: string,
+  sources: SpotlightSources
+): SpotlightResult[] {
+  const query = rawQuery.trim().toLocaleLowerCase();
+  const apps: SpotlightResult[] = [
+    {
+      id: "app-diagram",
+      kind: "app",
+      title: "思维导图",
+      subtitle: "AI 对话生成、编辑与导出图表",
+      href: "/diagram"
+    },
+    {
+      id: "app-ppt",
+      kind: "app",
+      title: "PPT 制作",
+      subtitle: "从资料到演示文稿的一体化工作台",
+      href: "/ppt"
+    }
+  ];
+
+  if (!sources.authenticated) {
+    const guestResults = [
+      ...apps,
+      {
+        id: "command-login",
+        kind: "login" as const,
+        title: "登录 DeepDiagram Pro",
+        subtitle: "同步项目、绘图历史与对话记录"
+      }
+    ];
+    return guestResults.filter((result) => includesSpotlightQuery(result, query));
+  }
+
+  const recent: SpotlightResult[] = [
+    ...(sources.projects ?? []).map((project): SpotlightResult => ({
+      id: "ppt-" + project.id,
+      kind: "ppt",
+      title: project.name,
+      subtitle: project.topic?.trim() || "PPT 项目",
+      href: "/ppt/p/" + encodeURIComponent(project.id) + "/studio",
+      updatedAt: project.updatedAt
+    })),
+    ...(sources.diagrams ?? []).map((diagram): SpotlightResult => ({
+      id: "diagram-" + diagram.diagram_id,
+      kind: "diagram",
+      title: diagram.title || "未命名绘图",
+      subtitle: diagram.conversation?.summary?.trim() || "思维导图历史",
+      href: historyHref(diagram.title || "未命名绘图"),
+      updatedAt: diagram.updated_at
+    })),
+    ...(sources.conversations ?? []).map((conversation): SpotlightResult => {
+      const title = conversation.title?.trim() || "未命名对话";
+      return {
+        id: "conversation-" + conversation.conversation_id,
+        kind: "conversation",
+        title,
+        subtitle: conversation.summary?.trim() || "历史对话",
+        href: historyHref(title, "conversations"),
+        updatedAt: conversation.updated_at
+      };
+    })
+  ].sort((left, right) => {
+    const leftTime = Date.parse(left.updatedAt ?? "") || 0;
+    const rightTime = Date.parse(right.updatedAt ?? "") || 0;
+    return rightTime - leftTime;
+  });
+
+  const matchingApps = apps.filter((result) => includesSpotlightQuery(result, query));
+  const matchingRecent = recent.filter((result) => includesSpotlightQuery(result, query));
+  return [...matchingApps, ...matchingRecent].slice(0, 12);
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildCalendarCells,
+  buildSpotlightResults,
   buildShellMenus,
   nextEnabledMenuIndex,
   parseShellContext,
@@ -38,8 +39,10 @@ test("桌面菜单只包含可执行命令或分隔符", () => {
   assert.deepEqual(menus.map((menu) => menu.label), [
     "DeepDiagram Pro",
     "文件",
+    "编辑",
     "显示",
     "前往",
+    "窗口",
     "帮助"
   ]);
   assert.ok(
@@ -51,6 +54,26 @@ test("桌面菜单只包含可执行命令或分隔符", () => {
     menus.flatMap((menu) => menu.items).find((item) => item.id === "auth")?.label,
     "登录"
   );
+});
+
+test("标准编辑与窗口菜单在不同模块保持稳定且都有真实命令", () => {
+  for (const pathname of ["/", "/diagram", "/ppt", "/ppt/p/p-1/studio"]) {
+    const menus = buildShellMenus(parseShellContext(pathname), {
+      authenticated: true,
+      fullscreen: false
+    });
+    const edit = menus.find((menu) => menu.label === "编辑");
+    const windowMenu = menus.find((menu) => menu.label === "窗口");
+    assert.deepEqual(edit?.items.filter((item) => !item.separator).map((item) => item.action), [
+      "edit-undo",
+      "edit-redo",
+      "edit-cut",
+      "edit-copy",
+      "edit-paste",
+      "edit-select-all"
+    ]);
+    assert.equal(windowMenu?.items.every((item) => item.separator || Boolean(item.action)), true);
+  }
 });
 
 test("登录后的应用菜单提供退出登录而不是登录", () => {
@@ -132,4 +155,65 @@ test("真实月历保留月初空位并支持闰年", () => {
   const cells = buildCalendarCells(new Date(2024, 1, 15));
   assert.equal(cells.filter((cell) => cell === null).length, 4);
   assert.equal(cells.at(-1), 29);
+});
+
+test("Spotlight 将查询匹配到真实 PPT、绘图与对话记录", () => {
+  const results = buildSpotlightResults("年度", {
+    authenticated: true,
+    projects: [
+      {
+        id: "ppt-1",
+        name: "年度经营复盘",
+        topic: "董事会汇报",
+        updatedAt: "2026-07-21T10:00:00Z"
+      }
+    ],
+    diagrams: [
+      {
+        diagram_id: "diagram-1",
+        title: "年度战略地图",
+        updated_at: "2026-07-21T11:00:00Z"
+      }
+    ],
+    conversations: [
+      {
+        conversation_id: "conversation-1",
+        title: "年度方案讨论",
+        summary: "继续完善方案",
+        updated_at: "2026-07-21T12:00:00Z"
+      }
+    ]
+  });
+
+  assert.deepEqual(results.map((result) => result.kind), [
+    "conversation",
+    "diagram",
+    "ppt"
+  ]);
+  assert.equal(results[1]?.href, "/diagram?history=%E5%B9%B4%E5%BA%A6%E6%88%98%E7%95%A5%E5%9C%B0%E5%9B%BE");
+  assert.equal(results[0]?.href.includes("historyMode=conversations"), true);
+});
+
+test("访客 Spotlight 只展示应用入口与登录命令", () => {
+  const results = buildSpotlightResults("", {
+    authenticated: false,
+    projects: [{ id: "private", name: "不应泄露", updatedAt: "2026-07-21T10:00:00Z" }],
+    diagrams: [{ diagram_id: "private", title: "不应泄露" }],
+    conversations: [{ conversation_id: "private", title: "不应泄露" }]
+  });
+
+  assert.deepEqual(results.map((result) => result.kind), ["app", "app", "login"]);
+  assert.equal(results.some((result) => result.title === "不应泄露"), false);
+});
+
+test("空查询时应用在前，最近工作按更新时间排序", () => {
+  const results = buildSpotlightResults("", {
+    authenticated: true,
+    projects: [{ id: "ppt-1", name: "旧项目", updatedAt: "2026-07-20T10:00:00Z" }],
+    diagrams: [{ diagram_id: "diagram-1", title: "新绘图", updated_at: "2026-07-21T10:00:00Z" }],
+    conversations: []
+  });
+
+  assert.deepEqual(results.slice(0, 2).map((result) => result.title), ["思维导图", "PPT 制作"]);
+  assert.deepEqual(results.slice(2).map((result) => result.title), ["新绘图", "旧项目"]);
 });

@@ -14,6 +14,7 @@
 
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import {
   Send, Loader2, Settings, SquarePen,
   ChevronDown, ChevronUp, ChevronRight,
@@ -1438,6 +1439,7 @@ interface ChatPanelProps {
 }
 
 export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelProps) {
+  const location = useLocation();
   const {
     messages, addMessage, updateLastAssistantMessage, clearMessages,
     conversationId, setConversationId,
@@ -1591,6 +1593,20 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     setHistoryOpen(true);
     loadCurrentHistory(historyQuery);
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const query = params.get('history')?.trim();
+    if (!query) return;
+    const mode: HistoryMode = params.get('historyMode') === 'conversations'
+      ? 'conversations'
+      : 'diagrams';
+    setHistoryQuery(query);
+    setHistoryMode(mode);
+    setHistoryOpen(true);
+    if (mode === 'conversations') void loadConversationHistory(query);
+    else void loadDiagramHistory(query);
+  }, [location.search]);
 
   const startNewConversation = () => {
     if (isStreaming) return;
