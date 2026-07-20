@@ -314,3 +314,38 @@ export function buildShellMenus(context: ShellContext, state: ShellMenuState): S
   }
   return desktopMenus(context, state);
 }
+
+export function nextEnabledMenuIndex(
+  items: ShellMenuItem[],
+  currentIndex: number,
+  direction: 1 | -1
+): number {
+  if (items.length === 0) return -1;
+  for (let offset = 1; offset <= items.length; offset += 1) {
+    const candidate = (currentIndex + direction * offset + items.length) % items.length;
+    const item = items[candidate];
+    if (item && !item.separator && !item.disabled && item.action) return candidate;
+  }
+  return -1;
+}
+
+export function windowControlAvailability(options: {
+  minimizable?: boolean;
+  resizable?: boolean;
+}): { close: true; minimize: boolean; resize: boolean } {
+  return {
+    close: true,
+    minimize: options.minimizable === true,
+    resize: options.resizable === true
+  };
+}
+
+export function buildCalendarCells(date: Date): Array<number | null> {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const dayCount = new Date(year, month + 1, 0).getDate();
+  const cells: Array<number | null> = Array.from({ length: firstWeekday }, () => null);
+  for (let day = 1; day <= dayCount; day += 1) cells.push(day);
+  return cells;
+}

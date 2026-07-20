@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildShellMenus, parseShellContext } from "./shellModel.ts";
+import {
+  buildCalendarCells,
+  buildShellMenus,
+  nextEnabledMenuIndex,
+  parseShellContext,
+  windowControlAvailability
+} from "./shellModel.ts";
 
 test("识别桌面、绘图、PPT 首页和 PPT 项目上下文", () => {
   assert.deepEqual(parseShellContext("/"), {
@@ -95,4 +101,35 @@ test("PPT 首页不生成缺少项目 ID 的项目菜单", () => {
     { authenticated: false, fullscreen: false }
   );
   assert.equal(menus.some((menu) => menu.label === "项目"), false);
+});
+
+test("键盘菜单跳过分隔符与禁用项目并循环", () => {
+  const items = [
+    { id: "a", label: "A", action: "open-help" as const },
+    { id: "separator", separator: true },
+    { id: "disabled", label: "Disabled", action: "open-help" as const, disabled: true },
+    { id: "b", label: "B", action: "open-help" as const }
+  ];
+  assert.equal(nextEnabledMenuIndex(items, 0, 1), 3);
+  assert.equal(nextEnabledMenuIndex(items, 3, 1), 0);
+  assert.equal(nextEnabledMenuIndex(items, 0, -1), 3);
+});
+
+test("窗口控制点只启用真实支持的能力", () => {
+  assert.deepEqual(windowControlAvailability({}), {
+    close: true,
+    minimize: false,
+    resize: false
+  });
+  assert.deepEqual(windowControlAvailability({ minimizable: true, resizable: true }), {
+    close: true,
+    minimize: true,
+    resize: true
+  });
+});
+
+test("真实月历保留月初空位并支持闰年", () => {
+  const cells = buildCalendarCells(new Date(2024, 1, 15));
+  assert.equal(cells.filter((cell) => cell === null).length, 4);
+  assert.equal(cells.at(-1), 29);
 });
