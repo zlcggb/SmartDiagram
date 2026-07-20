@@ -63,6 +63,18 @@ import type { AuthSession } from '../../config/auth';
 import { getGuestQuota, consumeGuestUse, type GuestQuotaStatus } from '../../config/guestQuota';
 import LoginScreen from '../auth/LoginScreen';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import {
+  listConversationHistory,
+  listDiagramHistory,
+  type ConversationHistoryItem,
+  type DiagramHistoryItem,
+  type HistoryAgentProcess,
+} from '../../lib/diagramHistory';
+import {
+  DIAGRAM_SHELL_EVENT,
+  type DiagramShellCommand,
+  type DiagramShellEventDetail,
+} from '../shell/shellEvents';
 
 type VersionActionPayload = {
   diagram_id: string;
@@ -72,98 +84,6 @@ type VersionActionPayload = {
   task_type?: DiagramTaskType;
   design_concept?: string;
   version_number?: number;
-};
-
-type HistoryAgentProcess = {
-  run_id?: string;
-  status?: string;
-  duration_ms?: number;
-  duration_seconds?: number;
-  step_count?: number;
-  assistant_content?: string;
-  token_usage?: {
-    estimated_total_tokens?: number;
-    stream_event_count?: number;
-  };
-  steps?: {
-    id?: string;
-    label?: string;
-    status?: string;
-    duration_ms?: number;
-    duration_seconds?: number;
-  }[];
-} | null;
-
-type DiagramHistoryItem = {
-  diagram_id: string;
-  title: string;
-  engine_type?: DiagramEngineType;
-  task_type?: DiagramTaskType;
-  current_version_id?: string;
-  updated_at?: string;
-  conversation?: {
-    summary?: string;
-  };
-  current_version?: {
-    diagram_version_id: string;
-    version_number?: number;
-    engine_type?: DiagramEngineType;
-    task_type?: DiagramTaskType;
-    design_concept?: string;
-    code?: string;
-    code_preview?: string;
-    code_hash?: string;
-    created_at?: string;
-    agent_process?: HistoryAgentProcess;
-  } | null;
-};
-
-type ConversationHistoryMessage = {
-  id: string;
-  role: string;
-  content?: string;
-  engine_type?: string;
-  task_type?: string;
-  diagram_version_id?: string;
-  code?: string;
-  design_concept?: string;
-  diagram_id?: string;
-  created_at?: string;
-  agent_process?: HistoryAgentProcess;
-};
-
-type ConversationHistoryDiagram = {
-  diagram_id: string;
-  diagram_version_id: string;
-  version_number?: number;
-  title?: string;
-  engine_type?: DiagramEngineType;
-  task_type?: DiagramTaskType;
-  design_concept?: string;
-  code?: string;
-  created_at?: string;
-  updated_at?: string;
-};
-
-type ConversationHistoryItem = {
-  conversation_id: string;
-  title?: string;
-  status?: string;
-  summary?: string;
-  current_diagram_version_id?: string;
-  message_count?: number;
-  updated_at?: string;
-  context?: {
-    last_engine_type?: string;
-    last_task_type?: string;
-    short_term_memory?: {
-      turn_count?: number;
-      last_user_message?: string;
-      last_assistant_outcome?: string;
-    };
-  };
-  messages?: ConversationHistoryMessage[];
-  current_diagram?: ConversationHistoryDiagram | null;
 };
 
 type HistoryMode = 'diagrams' | 'conversations';
@@ -1567,6 +1487,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
   const activeAbortControllerRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const diagramShellHandlersRef = useRef<Record<DiagramShellCommand, () => void> | null>(null);
 
   // Mobile countdown timer for auto-switch to canvas
   const [mobileCountdown, setMobileCountdown] = useState<number | null>(null);
@@ -1630,19 +1551,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     setHistoryLoading(true);
     setHistoryError('');
     try {
-      const params = new URLSearchParams({
-        include_code: 'true',
-        limit: '20',
-      });
-      const trimmedQuery = searchText.trim();
-      if (trimmedQuery) params.set('query', trimmedQuery);
-      const res = await fetch(`${API_BASE}/api/diagrams/history?${params.toString()}`, {
-        method: 'GET',
-        headers: diagramActionHeaders(),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const payload = await res.json() as { diagrams?: DiagramHistoryItem[] };
-      setHistoryItems(Array.isArray(payload.diagrams) ? payload.diagrams : []);
+      setHistoryItems(await listDiagramHistory(searchText));
     } catch (err) {
       console.error('[History] Load failed:', err);
       setHistoryError((err as Error).message);
@@ -1655,20 +1564,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     setHistoryLoading(true);
     setHistoryError('');
     try {
-      const params = new URLSearchParams({
-        include_messages: 'true',
-        include_current_diagram: 'true',
-        limit: '20',
-      });
-      const trimmedQuery = searchText.trim();
-      if (trimmedQuery) params.set('query', trimmedQuery);
-      const res = await fetch(`${API_BASE}/api/conversations/history?${params.toString()}`, {
-        method: 'GET',
-        headers: diagramActionHeaders(),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const payload = await res.json() as { conversations?: ConversationHistoryItem[] };
-      setConversationHistoryItems(Array.isArray(payload.conversations) ? payload.conversations : []);
+      setConversationHistoryItems(await listConversationHistory(searchText));
     } catch (err) {
       console.error('[ConversationHistory] Load failed:', err);
       setHistoryError((err as Error).message);
@@ -1727,6 +1623,30 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     setCanvasPhase('idle');
     setStreamingCode('');
   };
+
+  diagramShellHandlersRef.current = {
+    'new-conversation': startNewConversation,
+    'open-history': openDiagramHistory,
+    'focus-chat': () => {
+      setMobileActivePanel('chat');
+      window.requestAnimationFrame(() => textareaRef.current?.focus());
+    },
+    'focus-canvas': () => {
+      setMobileActivePanel('canvas');
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>('[data-shell-region="canvas"]')?.focus();
+      });
+    },
+  };
+
+  useEffect(() => {
+    const handleDiagramShellCommand = (event: Event) => {
+      const command = (event as CustomEvent<DiagramShellEventDetail>).detail?.command;
+      if (command) diagramShellHandlersRef.current?.[command]?.();
+    };
+    window.addEventListener(DIAGRAM_SHELL_EVENT, handleDiagramShellCommand);
+    return () => window.removeEventListener(DIAGRAM_SHELL_EVENT, handleDiagramShellCommand);
+  }, []);
 
   const useHistoricalDiagram = (item: DiagramHistoryItem) => {
     const version = item.current_version;

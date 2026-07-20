@@ -1,6 +1,6 @@
-import { readAuthSession } from './auth';
+import { readAuthSession } from './auth.ts';
 
-export const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '';
+export const API_BASE = import.meta.env?.DEV ? 'http://localhost:8000' : '';
 
 export const FALLBACK_ENTERPRISE_CONTEXT = {
   tenantId: 'anonymous-local',
