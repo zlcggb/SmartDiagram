@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:shell": "node --experimental-strip-types --test src/components/shell/*.test.ts src/lib/diagramHistory.test.ts src/store/desktopStore.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
