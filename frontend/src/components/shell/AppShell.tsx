@@ -1,11 +1,13 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
   type ComponentType,
-  type ReactNode
+  type ReactNode,
+  type RefObject
 } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -20,14 +22,16 @@ import {
   type LucideIcon
 } from "lucide-react";
 import LoginScreen from "../auth/LoginScreen";
-import { FinderIcon, MODULE_ICONS } from "../macos/MacOSIcons";
+import { FinderIcon } from "../macos/MacOSIcons";
+import { MODULE_ICONS } from "../macos/moduleIcons";
 import { moduleRegistry } from "../../modules/registry";
 import { usePlatformAuth } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
-import { useDesktopStore } from "../../store/desktopStore";
+import { useDesktopStore, type ShellPanel } from "../../store/desktopStore";
 import { dispatchDiagramShellCommand, type DiagramShellCommand } from "./shellEvents";
 import {
   buildShellMenus,
+  dockScaleForDistance,
   parseShellContext,
   type ShellMenuItem
 } from "./shellModel";
@@ -36,9 +40,9 @@ import { MacWindow } from "./MacWindow";
 import {
   CalendarPanel,
   ControlCenterPanel,
-  NetworkPanel,
-  useOnlineStatus
+  NetworkPanel
 } from "./SystemPanels";
+import { useOnlineStatus } from "./useOnlineStatus";
 import { Spotlight } from "./Spotlight";
 import { RecentProjectsWindow } from "./RecentProjectsWindow";
 import "./macShell.css";
@@ -75,15 +79,16 @@ function MenuBarClock({ active, onClick }: { active: boolean; onClick: () => voi
 }
 
 function DeepDiagramMark({ size = 18 }: { size?: number }) {
+  const gradientId = useId();
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
       <defs>
-        <linearGradient id="deepdiagram-mark-gradient" x1="2" y1="2" x2="22" y2="22">
+        <linearGradient id={gradientId} x1="2" y1="2" x2="22" y2="22">
           <stop stopColor="#7b80ff" />
           <stop offset="1" stopColor="#30bdeb" />
         </linearGradient>
       </defs>
-      <rect x="1" y="1" width="22" height="22" rx="6.5" fill="url(#deepdiagram-mark-gradient)" />
+      <rect x="1" y="1" width="22" height="22" rx="6.5" fill={`url(#${gradientId})`} />
       <path d="M7.2 12 12 7.2 16.8 12 12 16.8 7.2 12Z" fill="none" stroke="white" strokeWidth="1.7" />
       <circle cx="12" cy="12" r="1.8" fill="white" />
     </svg>
@@ -146,15 +151,27 @@ interface DockItem {
   tileBackground: string;
 }
 
-const DOCK_RANGE_PX = 132;
-const DOCK_MAX_SCALE = 1.56;
-
 function Dock({ alwaysVisible }: { alwaysVisible: boolean }) {
   const location = useLocation();
-  const [mouseX, setMouseX] = useState<number | null>(null);
   const [peekVisible, setPeekVisible] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [dockScales, setDockScales] = useState<Record<string, number>>({});
+  const [dockTracking, setDockTracking] = useState(false);
   const iconRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
+  const hideTimerRef = useRef<number | null>(null);
+
+  const cancelHide = useCallback(() => {
+    if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = null;
+  }, []);
+
+  const scheduleHide = useCallback((delay: number) => {
+    cancelHide();
+    hideTimerRef.current = window.setTimeout(() => {
+      setPeekVisible(false);
+      hideTimerRef.current = null;
+    }, delay);
+  }, [cancelHide]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -166,10 +183,18 @@ function Dock({ alwaysVisible }: { alwaysVisible: boolean }) {
 
   useEffect(() => {
     if (alwaysVisible) return;
-    const handleMouseMove = (event: MouseEvent) => setPeekVisible(event.clientY > window.innerHeight - 14);
+    const handleMouseMove = (event: MouseEvent) => {
+      if (event.clientY <= window.innerHeight - 10) return;
+      cancelHide();
+      setPeekVisible(true);
+      scheduleHide(900);
+    };
     window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, [alwaysVisible]);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      cancelHide();
+    };
+  }, [alwaysVisible, cancelHide, scheduleHide]);
 
   const items: DockItem[] = [
     {
@@ -193,65 +218,101 @@ function Dock({ alwaysVisible }: { alwaysVisible: boolean }) {
     })
   ];
 
-  const scaleFor = (key: string) => {
-    if (reduceMotion || mouseX === null) return 1;
-    const element = iconRefs.current[key];
-    if (!element) return 1;
-    const dockLeft = (element.offsetParent as HTMLElement | null)?.getBoundingClientRect().left ?? 0;
-    const centerX = dockLeft + element.offsetLeft + element.offsetWidth / 2;
-    const distance = Math.abs(mouseX - centerX);
-    if (distance > DOCK_RANGE_PX) return 1;
-    return 1 + Math.cos((distance / DOCK_RANGE_PX) * (Math.PI / 2)) * (DOCK_MAX_SCALE - 1);
+  const updateDockScales = (pointerX: number) => {
+    if (reduceMotion) return;
+    const nextScales: Record<string, number> = {};
+    for (const item of items) {
+      const element = iconRefs.current[item.key];
+      if (!element) continue;
+      const centerX = element.getBoundingClientRect().left + element.offsetWidth / 2;
+      nextScales[item.key] = dockScaleForDistance(Math.abs(pointerX - centerX));
+    }
+    setDockScales(nextScales);
   };
 
   const visible = alwaysVisible || peekVisible;
   return (
-    <div className="mac-dock-stage" data-visible={visible || undefined}>
-      <nav
-        className="mac-dock"
-        aria-label="程序坞"
-        onMouseMove={(event) => setMouseX(event.clientX)}
-        onMouseLeave={() => {
-          setMouseX(null);
-          if (!alwaysVisible) setPeekVisible(false);
-        }}
-      >
-        {items.map((item) => {
-          const active = item.path === "/"
-            ? location.pathname === "/"
-            : location.pathname.startsWith(item.path);
-          const Artwork = item.artwork;
-          const FallbackIcon = item.icon;
-          const scale = scaleFor(item.key);
-          return (
-            <NavLink
-              key={item.key}
-              ref={(element) => { iconRefs.current[item.key] = element; }}
-              to={item.path}
-              className="mac-dock-item"
-              data-active={active || undefined}
-              aria-label={item.label}
-            >
-              <span className="mac-dock-tooltip" role="tooltip">{item.label}</span>
-              <span
-                className="mac-dock-artwork"
-                style={{
-                  transform: `scale(${scale}) translateY(${(scale - 1) * -15}px)`,
-                  transitionDuration: mouseX === null ? "220ms" : "60ms"
-                }}
+    <>
+      {!alwaysVisible ? (
+        <button
+          type="button"
+          className="mac-dock-reveal-zone"
+          aria-label="显示程序坞"
+          aria-expanded={visible}
+          onFocus={() => {
+            cancelHide();
+            setPeekVisible(true);
+          }}
+          onBlur={() => scheduleHide(900)}
+          onPointerEnter={() => {
+            cancelHide();
+            setPeekVisible(true);
+          }}
+          onPointerDown={() => {
+            cancelHide();
+            setPeekVisible(true);
+          }}
+          onPointerLeave={() => scheduleHide(300)}
+        />
+      ) : null}
+      <div className="mac-dock-stage" data-visible={visible || undefined} aria-hidden={!visible || undefined}>
+        <nav
+          className="mac-dock"
+          aria-label="程序坞"
+          onMouseEnter={cancelHide}
+          onFocusCapture={cancelHide}
+          onBlurCapture={(event) => {
+            const nextFocus = event.relatedTarget as Node | null;
+            if (!event.currentTarget.contains(nextFocus) && !alwaysVisible) scheduleHide(240);
+          }}
+          onMouseMove={(event) => {
+            setDockTracking(true);
+            updateDockScales(event.clientX);
+          }}
+          onMouseLeave={() => {
+            setDockTracking(false);
+            setDockScales({});
+            if (!alwaysVisible) scheduleHide(240);
+          }}
+        >
+          {items.map((item) => {
+            const active = item.path === "/"
+              ? location.pathname === "/"
+              : location.pathname.startsWith(item.path);
+            const Artwork = item.artwork;
+            const FallbackIcon = item.icon;
+            const scale = dockScales[item.key] ?? 1;
+            return (
+              <NavLink
+                key={item.key}
+                ref={(element) => { iconRefs.current[item.key] = element; }}
+                to={item.path}
+                className="mac-dock-item"
+                data-active={active || undefined}
+                aria-label={item.label}
+                tabIndex={visible ? undefined : -1}
               >
-                {Artwork ? <Artwork size={50} /> : FallbackIcon ? (
-                  <span className="mac-dock-fallback" style={{ background: item.tileBackground }}>
-                    <FallbackIcon />
-                  </span>
-                ) : null}
-              </span>
-              <i className="mac-dock-indicator" aria-hidden="true" />
-            </NavLink>
-          );
-        })}
-      </nav>
-    </div>
+                <span className="mac-dock-tooltip" role="tooltip">{item.label}</span>
+                <span
+                  className="mac-dock-artwork"
+                  style={{
+                    transform: `scale(${scale}) translateY(${Math.min((scale - 1) * -32, 0)}px)`,
+                    transitionDuration: dockTracking ? "60ms" : "220ms"
+                  }}
+                >
+                  {Artwork ? <Artwork size={46} /> : FallbackIcon ? (
+                    <span className="mac-dock-fallback" style={{ background: item.tileBackground }}>
+                      <FallbackIcon />
+                    </span>
+                  ) : null}
+                </span>
+                <i className="mac-dock-indicator" aria-hidden="true" />
+              </NavLink>
+            );
+          })}
+        </nav>
+      </div>
+    </>
   );
 }
 
@@ -269,9 +330,20 @@ function LoginWindow() {
   );
 }
 
-function AboutWindow({ onClose }: { onClose: () => void }) {
+function AboutWindow({
+  onClose,
+  triggerRef
+}: {
+  onClose: () => void;
+  triggerRef?: RefObject<HTMLElement | null>;
+}) {
   return (
-    <MacWindow title="关于 DeepDiagram Pro" onClose={onClose}>
+    <MacWindow
+      title="关于 DeepDiagram Pro"
+      onClose={onClose}
+      modal={false}
+      triggerRef={triggerRef}
+    >
       <div className="mac-about-window">
         <DeepDiagramMark size={76} />
         <h3>DeepDiagram Pro</h3>
@@ -290,9 +362,22 @@ function ShortcutRow({ keys, children }: { keys: string; children: ReactNode }) 
   return <div className="mac-shortcut-row"><span>{children}</span><kbd>{keys}</kbd></div>;
 }
 
-function HelpWindow({ area, onClose }: { area: ReturnType<typeof parseShellContext>["area"]; onClose: () => void }) {
+function HelpWindow({
+  area,
+  onClose,
+  triggerRef
+}: {
+  area: ReturnType<typeof parseShellContext>["area"];
+  onClose: () => void;
+  triggerRef?: RefObject<HTMLElement | null>;
+}) {
   return (
-    <MacWindow title="DeepDiagram 帮助" onClose={onClose}>
+    <MacWindow
+      title="DeepDiagram 帮助"
+      onClose={onClose}
+      modal={false}
+      triggerRef={triggerRef}
+    >
       <div className="mac-help-window">
         <div className="mac-help-heading">
           <span><HelpCircle /></span>
@@ -321,13 +406,56 @@ const EDIT_COMMANDS: Partial<Record<NonNullable<ShellMenuItem["action"]>, string
   "edit-select-all": "selectAll"
 };
 
+const INPUT_SELECTION_TYPES = new Set(["text", "search", "tel", "url", "password"]);
+const EDITABLE_INPUT_TYPES = new Set([...INPUT_SELECTION_TYPES, "email"]);
+
+function editableSurfaceFor(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof HTMLElement)) return null;
+  if (target instanceof HTMLTextAreaElement) {
+    return target.disabled || target.readOnly ? null : target;
+  }
+  if (target instanceof HTMLInputElement) {
+    return target.disabled || target.readOnly || !EDITABLE_INPUT_TYPES.has(target.type) ? null : target;
+  }
+  if (!target.isContentEditable) return null;
+  return target.closest<HTMLElement>("[contenteditable='true']") ?? target;
+}
+
+function rangeBelongsTo(target: HTMLElement, range: Range): boolean {
+  return target === range.commonAncestorContainer || target.contains(range.commonAncestorContainer);
+}
+
+function emitEditableInput(target: HTMLElement) {
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function updateInputValue(target: HTMLInputElement, value: string) {
+  const nativeSetter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value"
+  )?.set;
+  if (nativeSetter) nativeSetter.call(target, value);
+  else target.value = value;
+  emitEditableInput(target);
+}
+
+function supportsDirectSelection(
+  target: HTMLElement
+): target is HTMLInputElement | HTMLTextAreaElement {
+  return target instanceof HTMLTextAreaElement || (
+    target instanceof HTMLInputElement && INPUT_SELECTION_TYPES.has(target.type)
+  );
+}
+
 function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const session = usePlatformAuth((state) => state.session);
   const bootstrapAuth = usePlatformAuth((state) => state.bootstrapAuth);
   const logout = usePlatformAuth((state) => state.logout);
+  const loginOpen = usePlatformAuth((state) => state.loginOpen);
   const openLogin = usePlatformAuth((state) => state.openLogin);
+  const closeLogin = usePlatformAuth((state) => state.closeLogin);
   const activePanel = useDesktopStore((state) => state.activePanel);
   const activeWindow = useDesktopStore((state) => state.activeWindow);
   const widgetsVisible = useDesktopStore((state) => state.widgetsVisible);
@@ -343,6 +471,10 @@ function AppShell() {
   const online = useOnlineStatus();
   const [fullscreen, setFullscreen] = useState(() => Boolean(document.fullscreenElement));
   const [notice, setNotice] = useState("");
+  const panelRef = useRef<HTMLDivElement>(null);
+  const windowOpenerRef = useRef<HTMLElement | null>(null);
+  const lastEditableRef = useRef<HTMLElement | null>(null);
+  const lastEditableRangeRef = useRef<Range | null>(null);
 
   const context = useMemo(() => parseShellContext(location.pathname), [location.pathname]);
   const menus = useMemo(() => buildShellMenus(context, {
@@ -355,16 +487,58 @@ function AppShell() {
 
   useEffect(() => { void bootstrapAuth(); }, [bootstrapAuth]);
   useEffect(() => {
+    const rememberEditable = (event: FocusEvent) => {
+      const editable = editableSurfaceFor(event.target);
+      if (editable) lastEditableRef.current = editable;
+    };
+    const rememberSelection = () => {
+      const editable = lastEditableRef.current;
+      if (!editable || editable instanceof HTMLInputElement || editable instanceof HTMLTextAreaElement) return;
+      const selection = window.getSelection();
+      if (!selection?.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      if (rangeBelongsTo(editable, range)) lastEditableRangeRef.current = range.cloneRange();
+    };
+    document.addEventListener("focusin", rememberEditable);
+    document.addEventListener("selectionchange", rememberSelection);
+    return () => {
+      document.removeEventListener("focusin", rememberEditable);
+      document.removeEventListener("selectionchange", rememberSelection);
+    };
+  }, []);
+  useEffect(() => {
     const update = () => setFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", update);
     return () => document.removeEventListener("fullscreenchange", update);
   }, []);
   useEffect(() => { closeOverlay(); }, [closeOverlay, location.pathname]);
   useEffect(() => {
+    if (loginOpen) closeOverlay();
+  }, [closeOverlay, loginOpen]);
+  useEffect(() => {
+    if (!activeWindow) windowOpenerRef.current = null;
+  }, [activeWindow]);
+  useEffect(() => {
+    if (!activePanel || activePanel === "spotlight") return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (panelRef.current?.contains(target)) return;
+      if (target?.closest(".mac-menu-trailing")) return;
+      closeOverlay();
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [activePanel, closeOverlay]);
+  useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 3200);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  const closeShellWindow = useCallback(() => {
+    windowOpenerRef.current = null;
+    closeOverlay();
+  }, [closeOverlay]);
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -395,19 +569,172 @@ function AppShell() {
     }, 120);
   }, [navigate]);
 
-  const handleMenuAction = useCallback((item: ShellMenuItem) => {
+  const runEditCommand = useCallback(async (item: ShellMenuItem) => {
+    const action = item.action;
+    const command = action ? EDIT_COMMANDS[action] : undefined;
+    const target = lastEditableRef.current;
+    if (!action || !command || !target?.isConnected) {
+      setNotice("请先在可编辑文本区域中放置光标");
+      return;
+    }
+
+    target.focus({ preventScroll: true });
+
+    try {
+      if (supportsDirectSelection(target)) {
+        const start = target.selectionStart ?? 0;
+        const end = target.selectionEnd ?? start;
+        const selectedText = target.value.slice(start, end);
+
+        if (action === "edit-select-all") {
+          target.select();
+          return;
+        }
+        if (action === "edit-copy" || action === "edit-cut") {
+          if (!selectedText) {
+            setNotice("请先选中要处理的文本");
+            return;
+          }
+          if (!navigator.clipboard?.writeText) throw new Error("clipboard-write-unavailable");
+          await navigator.clipboard.writeText(selectedText);
+          if (action === "edit-cut") {
+            target.setRangeText("", start, end, "end");
+            emitEditableInput(target);
+          }
+          setNotice(action === "edit-cut" ? "已剪切到剪贴板" : "已拷贝到剪贴板");
+          return;
+        }
+        if (action === "edit-paste") {
+          if (!navigator.clipboard?.readText) throw new Error("clipboard-read-unavailable");
+          const text = await navigator.clipboard.readText();
+          target.setRangeText(text, start, end, "end");
+          emitEditableInput(target);
+          setNotice("已从剪贴板粘贴");
+          return;
+        }
+      } else if (target instanceof HTMLInputElement) {
+        if (action === "edit-paste") {
+          if (!navigator.clipboard?.readText) throw new Error("clipboard-read-unavailable");
+          const text = await navigator.clipboard.readText();
+          const insertedAtCaret = document.execCommand("insertText", false, text);
+          if (!insertedAtCaret) {
+            updateInputValue(target, target.value + text);
+          }
+          setNotice("已从剪贴板粘贴");
+          return;
+        }
+        const supported = typeof document.queryCommandSupported !== "function" || document.queryCommandSupported(command);
+        const completed = supported && document.execCommand(command);
+        if (!completed) {
+          setNotice("当前输入框不支持“" + item.label + "”");
+        } else if (action === "edit-copy" || action === "edit-cut") {
+          setNotice(action === "edit-cut" ? "已剪切到剪贴板" : "已拷贝到剪贴板");
+        }
+        return;
+      } else {
+        const selection = window.getSelection();
+        const savedRange = lastEditableRangeRef.current;
+        if (selection && savedRange && rangeBelongsTo(target, savedRange)) {
+          selection.removeAllRanges();
+          selection.addRange(savedRange.cloneRange());
+        }
+
+        if (action === "edit-select-all") {
+          const range = document.createRange();
+          range.selectNodeContents(target);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          lastEditableRangeRef.current = range.cloneRange();
+          return;
+        }
+
+        const activeRange = selection?.rangeCount ? selection.getRangeAt(0) : null;
+        if (action === "edit-copy" || action === "edit-cut") {
+          const selectedText = activeRange && rangeBelongsTo(target, activeRange)
+            ? activeRange.toString()
+            : "";
+          if (!selectedText) {
+            setNotice("请先选中要处理的文本");
+            return;
+          }
+          if (!navigator.clipboard?.writeText) throw new Error("clipboard-write-unavailable");
+          await navigator.clipboard.writeText(selectedText);
+          if (action === "edit-cut" && activeRange) {
+            activeRange.deleteContents();
+            activeRange.collapse(true);
+            emitEditableInput(target);
+          }
+          setNotice(action === "edit-cut" ? "已剪切到剪贴板" : "已拷贝到剪贴板");
+          return;
+        }
+        if (action === "edit-paste") {
+          if (!navigator.clipboard?.readText) throw new Error("clipboard-read-unavailable");
+          const text = await navigator.clipboard.readText();
+          const range = activeRange && rangeBelongsTo(target, activeRange)
+            ? activeRange
+            : document.createRange();
+          if (!activeRange || !rangeBelongsTo(target, range)) {
+            range.selectNodeContents(target);
+            range.collapse(false);
+          }
+          range.deleteContents();
+          const textNode = document.createTextNode(text);
+          range.insertNode(textNode);
+          range.setStartAfter(textNode);
+          range.collapse(true);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          lastEditableRangeRef.current = range.cloneRange();
+          emitEditableInput(target);
+          setNotice("已从剪贴板粘贴");
+          return;
+        }
+      }
+
+      const supported = typeof document.queryCommandSupported !== "function" || document.queryCommandSupported(command);
+      if (!supported || !document.execCommand(command)) {
+        setNotice("当前编辑器不支持“" + item.label + "”");
+      }
+    } catch (reason) {
+      const clipboardUnavailable = (
+        reason instanceof DOMException && ["NotAllowedError", "SecurityError"].includes(reason.name)
+      ) || (
+        reason instanceof Error && reason.message.startsWith("clipboard-")
+      );
+      if (clipboardUnavailable) {
+        setNotice(action === "edit-paste"
+          ? "浏览器未授权读取剪贴板"
+          : "浏览器未授权写入剪贴板");
+      } else {
+        setNotice("当前编辑器未能完成“" + item.label + "”");
+      }
+    }
+  }, []);
+
+  const handleMenuAction = useCallback((
+    item: ShellMenuItem,
+    opener: HTMLButtonElement | null
+  ) => {
     if (!item.action || item.disabled) return;
     const editCommand = EDIT_COMMANDS[item.action];
     if (editCommand) {
-      const supported = typeof document.queryCommandSupported !== "function" || document.queryCommandSupported(editCommand);
-      if (!supported || !document.execCommand(editCommand)) setNotice("当前焦点不支持“" + item.label + "”");
-      return;
+      void runEditCommand(item);
+      return true;
     }
     switch (item.action) {
       case "navigate": if (item.href) navigate(item.href); break;
-      case "open-about": openWindow("about"); break;
-      case "open-help": openWindow("help"); break;
-      case "open-recents": openWindow("recents"); break;
+      case "open-about":
+        windowOpenerRef.current = opener;
+        openWindow("about");
+        return true;
+      case "open-help":
+        windowOpenerRef.current = opener;
+        openWindow("help");
+        return true;
+      case "open-recents":
+        windowOpenerRef.current = opener;
+        openWindow("recents");
+        return true;
       case "open-login": closeOverlay(); openLogin(); break;
       case "logout": logout(); break;
       case "toggle-widgets": toggleWidgets(); break;
@@ -421,16 +748,25 @@ function AppShell() {
       case "ppt-new": navigateAndReveal(item.href || "/ppt#ppt-create-project"); break;
       case "ppt-projects": navigateAndReveal(item.href || "/ppt#recent-projects"); break;
     }
-  }, [canvasMode, closeOverlay, logout, navigate, navigateAndReveal, openLogin, openWindow, runDiagramCommand, setCanvasMode, toggleDesktopIcons, toggleFullscreen, toggleWidgets]);
+  }, [canvasMode, closeOverlay, logout, navigate, navigateAndReveal, openLogin, openWindow, runDiagramCommand, runEditCommand, setCanvasMode, toggleDesktopIcons, toggleFullscreen, toggleWidgets]);
+
+  const openShellPanel = useCallback((panel: Exclude<ShellPanel, null>) => {
+    if (!loginOpen) openPanel(panel);
+  }, [loginOpen, openPanel]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       const target = event.target as HTMLElement | null;
       const editable = target?.matches("input, textarea, [contenteditable='true']");
       const key = event.key.toLowerCase();
+      if (loginOpen) {
+        if (event.key === "Escape") closeLogin();
+        return;
+      }
       if ((event.metaKey || event.ctrlKey) && key === "k") {
         event.preventDefault();
-        openPanel("spotlight");
+        openShellPanel("spotlight");
         return;
       }
       if (editable) return;
@@ -444,16 +780,18 @@ function AppShell() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activePanel, activeWindow, closeOverlay, context.area, navigate, openPanel, openWindow, runDiagramCommand, toggleFullscreen]);
+  }, [activePanel, activeWindow, closeLogin, closeOverlay, context.area, loginOpen, navigate, openShellPanel, openWindow, runDiagramCommand, toggleFullscreen]);
 
   const userLabel = session?.user.display_name?.trim() || session?.user.email || "登录";
-  const showDock = location.pathname === "/" || !dockAutoHide;
+  const showDock = !dockAutoHide;
 
   return (
     <div className="mac-shell mac-app-shell">
       <MacMenuBar
         menus={menus}
         onAction={handleMenuAction}
+        closeSignal={location.key}
+        overlayActive={Boolean(activePanel || activeWindow || loginOpen)}
         homeControl={(
           <NavLink to="/" className="mac-brand-control" aria-label="DeepDiagram 桌面" title="DeepDiagram 桌面">
             <DeepDiagramMark />
@@ -467,7 +805,7 @@ function AppShell() {
               data-active={activePanel === "network" || undefined}
               aria-label={online ? "网络已连接" : "网络已断开"}
               aria-expanded={activePanel === "network"}
-              onClick={() => openPanel("network")}
+              onClick={() => openShellPanel("network")}
             >
               {online ? <Wifi /> : <WifiOff />}
             </button>
@@ -477,7 +815,7 @@ function AppShell() {
               data-active={activePanel === "control-center" || undefined}
               aria-label="控制中心"
               aria-expanded={activePanel === "control-center"}
-              onClick={() => openPanel("control-center")}
+              onClick={() => openShellPanel("control-center")}
             >
               <SlidersHorizontal />
             </button>
@@ -487,18 +825,18 @@ function AppShell() {
               data-active={activePanel === "spotlight" || undefined}
               aria-label="Spotlight 搜索"
               aria-expanded={activePanel === "spotlight"}
-              onClick={() => openPanel("spotlight")}
+              onClick={() => openShellPanel("spotlight")}
             >
               <Search />
             </button>
-            <MenuBarClock active={activePanel === "calendar"} onClick={() => openPanel("calendar")} />
+            <MenuBarClock active={activePanel === "calendar"} onClick={() => openShellPanel("calendar")} />
             <button
               type="button"
               className="mac-menu-user-button"
               data-active={activePanel === "user" || undefined}
               aria-label={session ? `账户：${userLabel}` : "登录"}
               aria-expanded={activePanel === "user"}
-              onClick={() => openPanel("user")}
+              onClick={() => openShellPanel("user")}
             >
               {session ? userLabel.charAt(0).toUpperCase() : "登录"}
             </button>
@@ -509,7 +847,7 @@ function AppShell() {
       <main className="mac-app-content"><Outlet /></main>
 
       {activePanel && activePanel !== "spotlight" ? (
-        <div className="mac-system-popover" data-panel={activePanel}>
+        <div ref={panelRef} className="mac-system-popover" data-panel={activePanel}>
           {activePanel === "network" ? <NetworkPanel /> : null}
           {activePanel === "control-center" ? <ControlCenterPanel onError={setNotice} /> : null}
           {activePanel === "calendar" ? <CalendarPanel /> : null}
@@ -518,20 +856,27 @@ function AppShell() {
       ) : null}
 
       <Dock alwaysVisible={showDock} />
-      <Spotlight
-        open={activePanel === "spotlight"}
-        authenticated={Boolean(session)}
-        onClose={closeOverlay}
-        onLogin={openLogin}
-      />
+      {activePanel === "spotlight" ? (
+        <Spotlight
+          open
+          authenticated={Boolean(session)}
+          onClose={closeOverlay}
+          onLogin={openLogin}
+        />
+      ) : null}
       <RecentProjectsWindow
         open={activeWindow === "recents"}
         authenticated={Boolean(session)}
-        onClose={closeOverlay}
+        onClose={closeShellWindow}
         onLogin={openLogin}
+        triggerRef={windowOpenerRef}
       />
-      {activeWindow === "about" ? <AboutWindow onClose={closeOverlay} /> : null}
-      {activeWindow === "help" ? <HelpWindow area={context.area} onClose={closeOverlay} /> : null}
+      {activeWindow === "about" ? (
+        <AboutWindow onClose={closeShellWindow} triggerRef={windowOpenerRef} />
+      ) : null}
+      {activeWindow === "help" ? (
+        <HelpWindow area={context.area} onClose={closeShellWindow} triggerRef={windowOpenerRef} />
+      ) : null}
       <LoginWindow />
 
       {notice ? <div className="mac-shell-notice" role="status"><Command />{notice}</div> : null}

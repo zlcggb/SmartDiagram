@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -26,6 +27,14 @@ interface SpotlightProps {
   onLogin: () => void;
 }
 
+function focusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+}
+
 function resultIcon(result: SpotlightResult) {
   if (result.kind === "ppt") return <Presentation />;
   if (result.kind === "diagram") return <Workflow />;
@@ -48,7 +57,11 @@ function formatRecentTime(value?: string): string {
 
 export function Spotlight({ open, authenticated, onClose, onLogin }: SpotlightProps) {
   const navigate = useNavigate();
+  const listboxId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const recent = useRecentWork(open && authenticated);
@@ -61,18 +74,28 @@ export function Spotlight({ open, authenticated, onClose, onLogin }: SpotlightPr
     }),
     [authenticated, query, recent.projects, recent.diagrams, recent.conversations]
   );
+  const resolvedActiveIndex = Math.min(activeIndex, Math.max(results.length - 1, 0));
 
   useEffect(() => {
-    if (!open) return;
-    setQuery("");
-    setActiveIndex(0);
+    if (!open || typeof document === "undefined") return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const restoreTarget = previousFocusRef.current;
     const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      previousFocusRef.current = null;
+      window.requestAnimationFrame(() => {
+        if (restoreTarget?.isConnected) restoreTarget.focus({ preventScroll: true });
+      });
+    };
   }, [open]);
 
   useEffect(() => {
-    setActiveIndex((current) => Math.min(current, Math.max(results.length - 1, 0)));
-  }, [results.length]);
+    if (!open || results.length === 0) return;
+    optionRefs.current[resolvedActiveIndex]?.scrollIntoView?.({ block: "nearest" });
+  }, [open, resolvedActiveIndex, results.length]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -87,18 +110,36 @@ export function Spotlight({ open, authenticated, onClose, onLogin }: SpotlightPr
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Tab") {
+      const focusable = dialogRef.current ? focusableElements(dialogRef.current) : [];
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      const nextIndex = event.shiftKey
+        ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+        : (currentIndex < 0 || currentIndex >= focusable.length - 1 ? 0 : currentIndex + 1);
+      event.preventDefault();
+      focusable[nextIndex]?.focus();
+      return;
+    }
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
       event.preventDefault();
       onClose();
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((current) => results.length ? (current + 1) % results.length : 0);
+      setActiveIndex(results.length ? (resolvedActiveIndex + 1) % results.length : 0);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((current) => results.length ? (current - 1 + results.length) % results.length : 0);
+      setActiveIndex(results.length
+        ? (resolvedActiveIndex - 1 + results.length) % results.length
+        : 0);
     } else if (event.key === "Enter") {
       event.preventDefault();
-      activate(results[activeIndex]);
+      activate(results[resolvedActiveIndex]);
     }
   };
 
@@ -112,10 +153,12 @@ export function Spotlight({ open, authenticated, onClose, onLogin }: SpotlightPr
       }}
     >
       <div
+        ref={dialogRef}
         className="mac-spotlight"
         role="dialog"
         aria-modal="true"
         aria-label="Spotlight 搜索"
+        tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
         <label className="mac-spotlight-search">
@@ -129,6 +172,13 @@ export function Spotlight({ open, authenticated, onClose, onLogin }: SpotlightPr
             }}
             placeholder="搜索应用、项目、绘图和对话"
             aria-label="搜索"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="true"
+            aria-controls={listboxId}
+            aria-activedescendant={results.length
+              ? `${listboxId}-option-${resolvedActiveIndex}`
+              : undefined}
             autoComplete="off"
           />
           <kbd>⌘ K</kbd>
@@ -139,15 +189,20 @@ export function Spotlight({ open, authenticated, onClose, onLogin }: SpotlightPr
           {recent.loading ? <span><Clock3 /> 正在同步…</span> : null}
         </div>
 
-        <div className="mac-spotlight-results" role="listbox" aria-label="搜索结果">
+        <div id={listboxId} className="mac-spotlight-results" role="listbox" aria-label="搜索结果">
           {results.map((result, index) => (
             <button
               key={result.id}
+              ref={(element) => {
+                optionRefs.current[index] = element;
+              }}
+              id={`${listboxId}-option-${index}`}
               type="button"
               role="option"
-              aria-selected={activeIndex === index}
+              aria-selected={resolvedActiveIndex === index}
               className="mac-spotlight-result"
-              data-active={activeIndex === index || undefined}
+              data-active={resolvedActiveIndex === index || undefined}
+              onFocus={() => setActiveIndex(index)}
               onPointerMove={() => setActiveIndex(index)}
               onClick={() => activate(result)}
             >

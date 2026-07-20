@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useDesktopStore } from "../../store/desktopStore";
 import { buildCalendarCells } from "./shellModel";
+import { useOnlineStatus } from "./useOnlineStatus";
 
 function PanelShell({
   icon,
@@ -35,22 +36,6 @@ function PanelShell({
       {children}
     </section>
   );
-}
-
-export function useOnlineStatus() {
-  const [online, setOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine
-  );
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-    };
-  }, []);
-  return online;
 }
 
 export function NetworkPanel() {

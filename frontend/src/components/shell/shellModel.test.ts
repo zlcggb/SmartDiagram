@@ -4,6 +4,8 @@ import {
   buildCalendarCells,
   buildSpotlightResults,
   buildShellMenus,
+  dockScaleForDistance,
+  findMenuItemByPrefix,
   nextEnabledMenuIndex,
   parseShellContext,
   windowControlAvailability
@@ -216,4 +218,27 @@ test("空查询时应用在前，最近工作按更新时间排序", () => {
 
   assert.deepEqual(results.slice(0, 2).map((result) => result.title), ["思维导图", "PPT 制作"]);
   assert.deepEqual(results.slice(2).map((result) => result.title), ["新绘图", "旧项目"]);
+});
+
+test("Dock 缩放曲线克制、平滑并始终落在安全范围", () => {
+  assert.equal(dockScaleForDistance(0), 1.25);
+  assert.equal(dockScaleForDistance(110), 1);
+  assert.equal(dockScaleForDistance(500), 1);
+  assert.equal(dockScaleForDistance(Number.NaN), 1);
+  for (const distance of [-50, 20, 55, 90, 109]) {
+    const scale = dockScaleForDistance(distance);
+    assert.ok(scale >= 1 && scale <= 1.25);
+  }
+});
+
+test("菜单前缀检索跳过禁用项并从当前位置循环查找", () => {
+  const items = [
+    { id: "copy", label: "拷贝", action: "edit-copy" as const },
+    { id: "disabled", label: "粘贴旧版", action: "edit-paste" as const, disabled: true },
+    { id: "paste", label: "粘贴", action: "edit-paste" as const },
+    { id: "select", label: "全选", action: "edit-select-all" as const }
+  ];
+  assert.equal(findMenuItemByPrefix(items, "粘", 0), 2);
+  assert.equal(findMenuItemByPrefix(items, "拷", 2), 0);
+  assert.equal(findMenuItemByPrefix(items, "不存在", 0), -1);
 });

@@ -21,7 +21,7 @@ export interface DesktopPreferences {
 export const DEFAULT_DESKTOP_PREFERENCES: DesktopPreferences = {
   widgetsVisible: true,
   desktopIconsVisible: true,
-  dockAutoHide: true
+  dockAutoHide: false
 };
 
 export function parseDesktopPreferences(raw: string | null): DesktopPreferences {

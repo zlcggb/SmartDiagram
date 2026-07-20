@@ -22,9 +22,9 @@ import {
 import {
   FolderIcon,
   MindmapAppIcon,
-  MODULE_ICONS,
   SlidesAppIcon
 } from "../components/macos/MacOSIcons";
+import { MODULE_ICONS } from "../components/macos/moduleIcons";
 import { useRecentWork } from "../components/shell/useRecentWork";
 import { moduleRegistry } from "../modules/registry";
 import { usePlatformAuth } from "../store/authStore";

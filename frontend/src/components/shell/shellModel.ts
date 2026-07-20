@@ -406,6 +406,27 @@ export function nextEnabledMenuIndex(
   return -1;
 }
 
+export function findMenuItemByPrefix(
+  items: ShellMenuItem[],
+  rawPrefix: string,
+  startIndex: number
+): number {
+  const prefix = rawPrefix.trim().toLocaleLowerCase();
+  if (!prefix || items.length === 0) return -1;
+  for (let offset = 1; offset <= items.length; offset += 1) {
+    const candidate = (startIndex + offset + items.length) % items.length;
+    const item = items[candidate];
+    if (
+      item &&
+      !item.separator &&
+      !item.disabled &&
+      item.action &&
+      item.label?.toLocaleLowerCase().startsWith(prefix)
+    ) return candidate;
+  }
+  return -1;
+}
+
 export function windowControlAvailability(options: {
   minimizable?: boolean;
   resizable?: boolean;
@@ -511,4 +532,12 @@ export function buildSpotlightResults(
   const matchingApps = apps.filter((result) => includesSpotlightQuery(result, query));
   const matchingRecent = recent.filter((result) => includesSpotlightQuery(result, query));
   return [...matchingApps, ...matchingRecent].slice(0, 12);
+}
+
+export function dockScaleForDistance(rawDistance: number): number {
+  if (!Number.isFinite(rawDistance)) return 1;
+  const distance = Math.abs(rawDistance);
+  if (distance >= 110) return 1;
+  const falloff = Math.cos((distance / 110) * (Math.PI / 2));
+  return Math.min(1.25, Math.max(1, 1 + falloff * 0.25));
 }

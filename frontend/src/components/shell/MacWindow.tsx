@@ -18,6 +18,7 @@ interface MacWindowProps {
   minimizable?: boolean;
   resizable?: boolean;
   wide?: boolean;
+  modal?: boolean;
   triggerRef?: RefObject<HTMLElement | null>;
 }
 
@@ -38,6 +39,7 @@ export function MacWindow({
   minimizable,
   resizable,
   wide,
+  modal = true,
   triggerRef
 }: MacWindowProps) {
   const titleId = useId();
@@ -46,6 +48,7 @@ export function MacWindow({
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
+    const triggerElement = triggerRef?.current;
     const frame = window.requestAnimationFrame(() => {
       const preferred = dialogRef.current?.querySelector<HTMLElement>("[data-autofocus]");
       const first = dialogRef.current ? focusableElements(dialogRef.current)[0] : null;
@@ -53,7 +56,7 @@ export function MacWindow({
     });
     return () => {
       window.cancelAnimationFrame(frame);
-      window.requestAnimationFrame(() => (triggerRef?.current ?? previousFocus)?.focus());
+      window.requestAnimationFrame(() => (triggerElement ?? previousFocus)?.focus());
     };
   }, [triggerRef]);
 
@@ -63,7 +66,7 @@ export function MacWindow({
       onClose();
       return;
     }
-    if (event.key !== "Tab" || !dialogRef.current) return;
+    if (!modal || event.key !== "Tab" || !dialogRef.current) return;
     const focusable = focusableElements(dialogRef.current);
     if (focusable.length === 0) {
       event.preventDefault();
@@ -83,8 +86,9 @@ export function MacWindow({
   return createPortal(
     <div
       className="mac-window-backdrop mac-shell"
+      data-modal={modal}
       onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (modal && event.target === event.currentTarget) onClose();
       }}
     >
       <div
@@ -92,7 +96,7 @@ export function MacWindow({
         className="mac-window"
         data-wide={wide || undefined}
         role="dialog"
-        aria-modal="true"
+        aria-modal={modal || undefined}
         aria-labelledby={titleId}
         tabIndex={-1}
         onKeyDown={handleKeyDown}

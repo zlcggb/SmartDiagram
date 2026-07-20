@@ -33,7 +33,7 @@ test("部分合法偏好与默认值合并", () => {
     {
       widgetsVisible: true,
       desktopIconsVisible: false,
-      dockAutoHide: true
+      dockAutoHide: false
     }
   );
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
@@ -18,6 +18,7 @@ interface RecentProjectsWindowProps {
   authenticated: boolean;
   onClose: () => void;
   onLogin: () => void;
+  triggerRef?: RefObject<HTMLElement | null>;
 }
 
 function historyHref(title: string, conversation = false): string {
@@ -69,7 +70,8 @@ export function RecentProjectsWindow({
   open,
   authenticated,
   onClose,
-  onLogin
+  onLogin,
+  triggerRef
 }: RecentProjectsWindowProps) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<RecentTab>("projects");
@@ -107,7 +109,13 @@ export function RecentProjectsWindow({
       : sortedConversations.length;
 
   return (
-    <MacWindow title="最近项目" onClose={onClose} wide>
+    <MacWindow
+      title="最近项目"
+      onClose={onClose}
+      wide
+      modal={false}
+      triggerRef={triggerRef}
+    >
       {!authenticated ? (
         <div className="mac-recents-guest">
           <span><LogIn aria-hidden="true" /></span>

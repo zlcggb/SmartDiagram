@@ -6,7 +6,7 @@
  * 桌面与 Dock 同时渲染时发生 ID 冲突。
  */
 
-import { useId, type ComponentType } from "react";
+import { useId } from "react";
 
 interface IconProps {
   size?: number;
@@ -148,9 +148,3 @@ export function FolderIcon({ size = 60 }: IconProps) {
     </svg>
   );
 }
-
-/** 按模块路由路径取 macOS 风格 artwork。 */
-export const MODULE_ICONS: Record<string, ComponentType<IconProps>> = {
-  "/diagram": MindmapAppIcon,
-  "/ppt": SlidesAppIcon
-};
