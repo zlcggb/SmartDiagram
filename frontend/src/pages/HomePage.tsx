@@ -1,10 +1,9 @@
 /**
- * DeepDiagram 桌面——以现代 macOS 的材质、层级和操作模式为参考，
- * 但使用属于产品的抽象工作流壁纸和应用 artwork。
+ * DeepDiagram 浅色 Aqua 日间桌面——以现代 macOS 的材质、层级和操作模式为参考，
+ * 使用属于产品的明亮湖景壁纸和应用 artwork。
  */
 import {
   useEffect,
-  useId,
   useMemo,
   useState,
   type ComponentType,
@@ -20,10 +19,12 @@ import {
   Sparkles
 } from "lucide-react";
 import {
+  FinderIcon,
   FolderIcon,
   MindmapAppIcon,
   SlidesAppIcon
 } from "../components/macos/MacOSIcons";
+import aquaLakeWallpaper from "../assets/macos-aqua-lake-wallpaper.jpg";
 import { MODULE_ICONS } from "../components/macos/moduleIcons";
 import { useRecentWork } from "../components/shell/useRecentWork";
 import { moduleRegistry } from "../modules/registry";
@@ -83,115 +84,6 @@ function formatRecentTime(value?: string) {
     ? { hour: "2-digit", minute: "2-digit" }
     : { month: "short", day: "numeric" }
   ).format(date);
-}
-
-function wallpaperId(rawId: string, name: string) {
-  return `${rawId.replace(/:/g, "")}-${name}`;
-}
-
-/** 深色抽象壁纸：将结构节点和流动的工作轨迹融合为 DeepDiagram 的自有图形。 */
-function DarkWorkspaceWallpaper() {
-  const rawId = useId();
-  const backgroundId = wallpaperId(rawId, "background");
-  const ribbonOneId = wallpaperId(rawId, "ribbon-one");
-  const ribbonTwoId = wallpaperId(rawId, "ribbon-two");
-  const glowId = wallpaperId(rawId, "glow");
-  const blurId = wallpaperId(rawId, "blur");
-  const grainId = wallpaperId(rawId, "grain");
-
-  const stars = useMemo(
-    () => Array.from({ length: 28 }, (_, index) => ({
-      x: (index * 157 + 83) % 1550,
-      y: (index * 79 + 46) % 610,
-      radius: 0.7 + (index % 4) * 0.35,
-      opacity: 0.16 + (index % 5) * 0.08
-    })),
-    []
-  );
-
-  return (
-    <svg
-      className="mac-desktop__wallpaper-art"
-      viewBox="0 0 1600 1000"
-      preserveAspectRatio="xMidYMid slice"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient id={backgroundId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#05070d" />
-          <stop offset="48%" stopColor="#0a1020" />
-          <stop offset="100%" stopColor="#111b31" />
-        </linearGradient>
-        <linearGradient id={ribbonOneId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#2756d8" stopOpacity="0.16" />
-          <stop offset="45%" stopColor="#6377ff" stopOpacity="0.76" />
-          <stop offset="100%" stopColor="#1ac4d8" stopOpacity="0.24" />
-        </linearGradient>
-        <linearGradient id={ribbonTwoId} x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor="#0a2c61" stopOpacity="0.18" />
-          <stop offset="55%" stopColor="#1b89c4" stopOpacity="0.52" />
-          <stop offset="100%" stopColor="#60e4d0" stopOpacity="0.12" />
-        </linearGradient>
-        <radialGradient id={glowId} cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0%" stopColor="#62a8ff" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#62a8ff" stopOpacity="0" />
-        </radialGradient>
-        <filter id={blurId} x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="28" />
-        </filter>
-        <filter id={grainId}>
-          <feTurbulence type="fractalNoise" baseFrequency="0.72" numOctaves="3" seed="8" />
-          <feColorMatrix type="saturate" values="0" />
-          <feComponentTransfer><feFuncA type="table" tableValues="0 0.045" /></feComponentTransfer>
-        </filter>
-      </defs>
-
-      <rect width="1600" height="1000" fill={`url(#${backgroundId})`} />
-      <ellipse cx="1120" cy="230" rx="520" ry="430" fill={`url(#${glowId})`} filter={`url(#${blurId})`} />
-      {stars.map((star, index) => (
-        <circle
-          key={index}
-          cx={star.x}
-          cy={star.y}
-          r={star.radius}
-          fill="#dce9ff"
-          opacity={star.opacity}
-        />
-      ))}
-
-      <path
-        d="M-120 812C170 548 360 488 572 600c190 101 276 32 408-160 131-191 348-229 742-29v489H-120Z"
-        fill={`url(#${ribbonOneId})`}
-        filter={`url(#${blurId})`}
-      />
-      <path
-        d="M-160 878c312-176 526-128 708-18 218 132 414 49 607-154 156-165 343-178 613-55v397H-160Z"
-        fill={`url(#${ribbonTwoId})`}
-        opacity="0.86"
-      />
-      <path
-        d="M-80 873c275-156 486-108 662 3 183 115 377 68 584-133 154-150 323-181 536-99"
-        fill="none"
-        stroke="#8ec9ff"
-        strokeWidth="1.2"
-        opacity="0.18"
-      />
-
-      {/* 极弱的结构节点，与应用的图表逻辑呼应。 */}
-      <g fill="none" stroke="#9abaff" strokeWidth="1" opacity="0.1">
-        <path d="m985 174 118 70 139-99 126 91" />
-        <path d="m1103 244 42 121 97-220" />
-      </g>
-      <g fill="#d9e7ff" opacity="0.2">
-        <circle cx="985" cy="174" r="4" />
-        <circle cx="1103" cy="244" r="5" />
-        <circle cx="1145" cy="365" r="4" />
-        <circle cx="1242" cy="145" r="4" />
-        <circle cx="1368" cy="236" r="4" />
-      </g>
-      <rect width="1600" height="1000" filter={`url(#${grainId})`} opacity="0.55" />
-    </svg>
-  );
 }
 
 function ClockWidget() {
@@ -284,7 +176,9 @@ function AccountWidget({ recentCount }: { recentCount: number }) {
   return (
     <article className="mac-desktop-widget mac-desktop-widget--account mac-desktop-widget--guest">
       <div className="mac-desktop-account__identity">
-        <span className="mac-desktop-account__avatar" aria-hidden="true"><Sparkles /></span>
+        <span className="mac-desktop-account__avatar mac-desktop-account__avatar--artwork" aria-hidden="true">
+          <FinderIcon size={38} />
+        </span>
         <span>
           <small>{checking ? "正在恢复工作区" : greetingForHour(hour)}</small>
           <strong>{checking ? "请稍候…" : "欢迎回到 DeepDiagram"}</strong>
@@ -518,7 +412,14 @@ export default function HomePage() {
 
   return (
     <main className="mac-desktop" onClick={() => setSelectedDesktopIcon(null)}>
-      <div className="mac-desktop__wallpaper"><DarkWorkspaceWallpaper /></div>
+      <div className="mac-desktop__wallpaper" aria-hidden="true">
+        <img
+          className="mac-desktop__wallpaper-art"
+          src={aquaLakeWallpaper}
+          alt=""
+          draggable="false"
+        />
+      </div>
       <div className="mac-desktop__atmosphere" aria-hidden="true" />
       <div className="mac-desktop__scrim" aria-hidden="true" />
 

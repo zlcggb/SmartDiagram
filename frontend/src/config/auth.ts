@@ -136,9 +136,14 @@ export interface CaptchaConfig {
 }
 
 export async function fetchCaptchaConfig(): Promise<CaptchaConfig> {
-  const res = await fetch(`${API_BASE}/api/auth/captcha-config`);
-  if (!res.ok) {
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/captcha-config`);
+    if (!res.ok) {
+      return { provider: 'altcha', challenge_url: '', turnstile_site_key: '', enabled: false, show_demo_presets: false };
+    }
+    return (await res.json()) as CaptchaConfig;
+  } catch {
+    // Keep the shell usable when the API is still starting or the preview runs frontend-only.
     return { provider: 'altcha', challenge_url: '', turnstile_site_key: '', enabled: false, show_demo_presets: false };
   }
-  return (await res.json()) as CaptchaConfig;
 }

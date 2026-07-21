@@ -51,8 +51,9 @@ export function MacWindow({
     const triggerElement = triggerRef?.current;
     const frame = window.requestAnimationFrame(() => {
       const preferred = dialogRef.current?.querySelector<HTMLElement>("[data-autofocus]");
-      const first = dialogRef.current ? focusableElements(dialogRef.current)[0] : null;
-      (preferred ?? first ?? dialogRef.current)?.focus();
+      // Focus the window surface by default so a programmatically opened window
+      // does not paint a keyboard focus ring around the red traffic-light button.
+      (preferred ?? dialogRef.current)?.focus();
     });
     return () => {
       window.cancelAnimationFrame(frame);

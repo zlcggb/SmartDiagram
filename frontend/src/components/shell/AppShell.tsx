@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -13,7 +12,6 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   CircleUserRound,
   Command,
-  HelpCircle,
   LogOut,
   Search,
   SlidersHorizontal,
@@ -22,7 +20,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import LoginScreen from "../auth/LoginScreen";
-import { FinderIcon } from "../macos/MacOSIcons";
+import { FinderIcon, FolderIcon } from "../macos/MacOSIcons";
 import { MODULE_ICONS } from "../macos/moduleIcons";
 import { moduleRegistry } from "../../modules/registry";
 import { usePlatformAuth } from "../../store/authStore";
@@ -79,20 +77,7 @@ function MenuBarClock({ active, onClick }: { active: boolean; onClick: () => voi
 }
 
 function DeepDiagramMark({ size = 18 }: { size?: number }) {
-  const gradientId = useId();
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
-      <defs>
-        <linearGradient id={gradientId} x1="2" y1="2" x2="22" y2="22">
-          <stop stopColor="#7b80ff" />
-          <stop offset="1" stopColor="#30bdeb" />
-        </linearGradient>
-      </defs>
-      <rect x="1" y="1" width="22" height="22" rx="6.5" fill={`url(#${gradientId})`} />
-      <path d="M7.2 12 12 7.2 16.8 12 12 16.8 7.2 12Z" fill="none" stroke="white" strokeWidth="1.7" />
-      <circle cx="12" cy="12" r="1.8" fill="white" />
-    </svg>
-  );
+  return <FinderIcon size={size} />;
 }
 
 function UserPanel({ onClose }: { onClose: () => void }) {
@@ -144,20 +129,29 @@ function UserPanel({ onClose }: { onClose: () => void }) {
 
 interface DockItem {
   key: string;
-  path: string;
+  path: string | null;
   label: string;
   artwork: ComponentType<{ size?: number }> | null;
   icon: LucideIcon | null;
   tileBackground: string;
+  dividerBefore?: boolean;
+  onActivate?: (trigger: HTMLElement) => void;
 }
 
-function Dock({ alwaysVisible }: { alwaysVisible: boolean }) {
+function Dock({
+  alwaysVisible,
+  onOpenRecents
+}: {
+  alwaysVisible: boolean;
+  onOpenRecents: (trigger: HTMLElement) => void;
+}) {
   const location = useLocation();
+  const activeWindow = useDesktopStore((state) => state.activeWindow);
   const [peekVisible, setPeekVisible] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [dockScales, setDockScales] = useState<Record<string, number>>({});
   const [dockTracking, setDockTracking] = useState(false);
-  const iconRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
+  const iconRefs = useRef<Record<string, HTMLElement | null>>({});
   const hideTimerRef = useRef<number | null>(null);
 
   const cancelHide = useCallback(() => {
@@ -215,7 +209,17 @@ function Dock({ alwaysVisible }: { alwaysVisible: boolean }) {
         icon: artwork ? null : module.icon,
         tileBackground: `linear-gradient(145deg, ${module.accent.gradientFrom}, ${module.accent.gradientTo})`
       };
-    })
+    }),
+    {
+      key: "recents",
+      path: null,
+      label: "最近项目",
+      artwork: FolderIcon,
+      icon: null,
+      tileBackground: "",
+      dividerBefore: true,
+      onActivate: onOpenRecents
+    }
   ];
 
   const updateDockScales = (pointerX: number) => {
@@ -276,22 +280,18 @@ function Dock({ alwaysVisible }: { alwaysVisible: boolean }) {
           }}
         >
           {items.map((item) => {
-            const active = item.path === "/"
+            const routeActive = item.path === "/"
               ? location.pathname === "/"
-              : location.pathname.startsWith(item.path);
+              : item.path
+                ? location.pathname.startsWith(item.path)
+                : activeWindow === "recents";
+            const running = item.key === "home" || (Boolean(item.path) && item.path !== "/" && routeActive);
+            const windowOpen = item.key === "recents" && activeWindow === "recents";
             const Artwork = item.artwork;
             const FallbackIcon = item.icon;
             const scale = dockScales[item.key] ?? 1;
-            return (
-              <NavLink
-                key={item.key}
-                ref={(element) => { iconRefs.current[item.key] = element; }}
-                to={item.path}
-                className="mac-dock-item"
-                data-active={active || undefined}
-                aria-label={item.label}
-                tabIndex={visible ? undefined : -1}
-              >
+            const content = (
+              <>
                 <span className="mac-dock-tooltip" role="tooltip">{item.label}</span>
                 <span
                   className="mac-dock-artwork"
@@ -300,14 +300,47 @@ function Dock({ alwaysVisible }: { alwaysVisible: boolean }) {
                     transitionDuration: dockTracking ? "60ms" : "220ms"
                   }}
                 >
-                  {Artwork ? <Artwork size={46} /> : FallbackIcon ? (
+                  {Artwork ? <Artwork size={item.key === "home" ? 60 : 56} /> : FallbackIcon ? (
                     <span className="mac-dock-fallback" style={{ background: item.tileBackground }}>
                       <FallbackIcon />
                     </span>
                   ) : null}
                 </span>
                 <i className="mac-dock-indicator" aria-hidden="true" />
-              </NavLink>
+              </>
+            );
+            if (item.path) {
+              return (
+                <NavLink
+                  key={item.key}
+                  ref={(element) => { iconRefs.current[item.key] = element; }}
+                  to={item.path}
+                  className="mac-dock-item"
+                  data-active={running || undefined}
+                  data-open={windowOpen || undefined}
+                  data-divider-before={item.dividerBefore || undefined}
+                  aria-label={item.label}
+                  tabIndex={visible ? undefined : -1}
+                >
+                  {content}
+                </NavLink>
+              );
+            }
+            return (
+              <button
+                key={item.key}
+                ref={(element) => { iconRefs.current[item.key] = element; }}
+                type="button"
+                className="mac-dock-item"
+                data-active={running || undefined}
+                data-open={windowOpen || undefined}
+                data-divider-before={item.dividerBefore || undefined}
+                aria-label={item.label}
+                tabIndex={visible ? undefined : -1}
+                onClick={(event) => item.onActivate?.(event.currentTarget)}
+              >
+                {content}
+              </button>
             );
           })}
         </nav>
@@ -324,7 +357,7 @@ function LoginWindow() {
   return (
     <MacWindow title="登录 DeepDiagram Pro" onClose={closeLogin}>
       <div className="mac-login-content">
-        <LoginScreen displayMode="modal" onLogin={setSession} onClose={closeLogin} />
+        <LoginScreen displayMode="modal" onLogin={setSession} />
       </div>
     </MacWindow>
   );
@@ -371,6 +404,23 @@ function HelpWindow({
   onClose: () => void;
   triggerRef?: RefObject<HTMLElement | null>;
 }) {
+  const [query, setQuery] = useState("");
+  const shortcuts = [
+    { keys: "⌘ K", label: "搜索应用与历史" },
+    { keys: "⌘ 1", label: "打开思维导图" },
+    { keys: "⌘ 2", label: "打开 PPT 制作" },
+    ...(area === "diagram" ? [
+      { keys: "⌘ N", label: "新建绘图会话" },
+      { keys: "⌘ O", label: "打开绘图历史" }
+    ] : []),
+    { keys: "⌃ ⌘ F", label: "切换全屏" },
+    { keys: "Esc", label: "关闭菜单或浮层" }
+  ];
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filteredShortcuts = shortcuts.filter((item) => (
+    !normalizedQuery || `${item.label} ${item.keys}`.toLocaleLowerCase().includes(normalizedQuery)
+  ));
+
   return (
     <MacWindow
       title="DeepDiagram 帮助"
@@ -380,17 +430,24 @@ function HelpWindow({
     >
       <div className="mac-help-window">
         <div className="mac-help-heading">
-          <span><HelpCircle /></span>
+          <span className="mac-help-heading__artwork"><DeepDiagramMark size={38} /></span>
           <div><h3>键盘操作</h3><p>菜单栏、Dock 和搜索都连接到真实页面功能。</p></div>
         </div>
+        <label className="mac-help-search">
+          <Search aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            placeholder="搜索帮助"
+            aria-label="搜索帮助主题"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
         <div className="mac-shortcut-list">
-          <ShortcutRow keys="⌘ K">搜索应用与历史</ShortcutRow>
-          <ShortcutRow keys="⌘ 1">打开思维导图</ShortcutRow>
-          <ShortcutRow keys="⌘ 2">打开 PPT 制作</ShortcutRow>
-          {area === "diagram" ? <ShortcutRow keys="⌘ N">新建绘图会话</ShortcutRow> : null}
-          {area === "diagram" ? <ShortcutRow keys="⌘ O">打开绘图历史</ShortcutRow> : null}
-          <ShortcutRow keys="⌃ ⌘ F">切换全屏</ShortcutRow>
-          <ShortcutRow keys="Esc">关闭菜单或浮层</ShortcutRow>
+          {filteredShortcuts.map((item) => (
+            <ShortcutRow key={`${item.keys}-${item.label}`} keys={item.keys}>{item.label}</ShortcutRow>
+          ))}
+          {filteredShortcuts.length === 0 ? <p className="mac-help-empty">没有找到相关帮助主题。</p> : null}
         </div>
       </div>
     </MacWindow>
@@ -855,7 +912,13 @@ function AppShell() {
         </div>
       ) : null}
 
-      <Dock alwaysVisible={showDock} />
+      <Dock
+        alwaysVisible={showDock}
+        onOpenRecents={(trigger) => {
+          windowOpenerRef.current = trigger;
+          openWindow("recents");
+        }}
+      />
       {activePanel === "spotlight" ? (
         <Spotlight
           open

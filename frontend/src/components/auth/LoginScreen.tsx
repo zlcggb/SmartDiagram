@@ -21,6 +21,7 @@ import {
   type CaptchaConfig,
   type CaptchaResult,
 } from '../../config/auth';
+import { FinderIcon } from '../macos/MacOSIcons';
 import { useT } from '../../i18n';
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '';
@@ -35,6 +36,7 @@ interface LoginScreenProps {
 
 type LoginPreset = 'user' | 'admin';
 type AuthMode = 'login' | 'register';
+type CaptchaConfigState = 'loading' | 'ready' | 'unavailable';
 
 // ─── Custom CAPTCHA Widget (ALTCHA PoW) ───
 
@@ -75,8 +77,11 @@ function AltchaWidget({
 }) {
   const [state, setState] = useState<CaptchaState>('idle');
   const onPayloadRef = useRef(onPayload);
-  onPayloadRef.current = onPayload;
   const solvingRef = useRef(false);
+
+  useEffect(() => {
+    onPayloadRef.current = onPayload;
+  }, [onPayload]);
 
   const handleClick = async () => {
     if (state !== 'idle' || solvingRef.current) return;
@@ -95,10 +100,13 @@ function AltchaWidget({
   };
 
   return (
-    <div
+    <button
+      type="button"
       onClick={handleClick}
       className="captcha-widget"
       data-state={state}
+      disabled={state === 'verifying' || state === 'verified'}
+      aria-label={state === 'verified' ? '安全验证已通过' : '开始安全验证'}
     >
       <div className="captcha-checkbox-area">
         <div className="captcha-checkbox">
@@ -131,9 +139,9 @@ function AltchaWidget({
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         </svg>
-        <span>SmartDiagram</span>
+        <span>DeepDiagram</span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -150,18 +158,41 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
   const [error, setError] = useState('');
   const [captchaResult, setCaptchaResult] = useState<CaptchaResult | null>(null);
   const [captchaConfig, setCaptchaConfig] = useState<CaptchaConfig | null>(null);
+  const [captchaConfigState, setCaptchaConfigState] = useState<CaptchaConfigState>('loading');
+  const [captchaReloadKey, setCaptchaReloadKey] = useState(0);
 
-  // Fetch captcha config on mount
+  // Fetch captcha config on mount and allow a real retry when the API is still starting.
   useEffect(() => {
-    fetchCaptchaConfig().then((config) => {
+    let cancelled = false;
+    setCaptchaConfigState('loading');
+    setCaptchaConfig(null);
+    setCaptchaResult(null);
+    void fetchCaptchaConfig().then((config) => {
+      if (cancelled) return;
+      if (!config.challenge_url) {
+        setCaptchaConfigState('unavailable');
+        return;
+      }
       setCaptchaConfig(config);
+      setCaptchaConfigState('ready');
       // Auto-fill demo credentials only when demo presets are enabled
       if (config.show_demo_presets) {
         setEmail(DEMO_LOGIN_HINTS.user.email);
         setPassword(DEMO_LOGIN_HINTS.user.password);
       }
+    }).catch(() => {
+      if (!cancelled) setCaptchaConfigState('unavailable');
     });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [captchaReloadKey]);
+
+  useEffect(() => {
+    if (mode === 'register' && captchaConfigState === 'ready' && !captchaConfig?.enabled) {
+      setMode('login');
+    }
+  }, [captchaConfig?.enabled, captchaConfigState, mode]);
 
   const switchMode = (next: AuthMode) => {
     setMode(next);
@@ -213,8 +244,8 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
         const session = await loginWithPassword(email, password, captchaResult!);
         onLogin(session);
       }
-    } catch (err: any) {
-      const msg = err?.message || '';
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
       if (msg.includes('EMAIL_EXISTS') || msg.includes('already registered')) {
         setError(t('auth.emailExists'));
       } else if (msg.includes('CAPTCHA')) {
@@ -292,7 +323,7 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
               <div className="mb-7 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/10 shadow-2xl shadow-blue-500/20">
                 <Sparkles className="h-7 w-7 text-cyan-300" />
               </div>
-              <h1 className="max-w-xl text-4xl font-semibold sm:text-5xl">SmartDiagram Pro</h1>
+              <h1 className="max-w-xl text-4xl font-semibold sm:text-5xl">DeepDiagram Pro</h1>
               <p className="mt-5 max-w-xl text-base leading-8 text-slate-300">
                 {t('auth.heroDescription')}
               </p>
@@ -314,16 +345,19 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
 
         <main className={isModal ? 'px-6 py-8' : 'flex items-center justify-center px-5 py-10'}>
           <form onSubmit={submit} className={isModal ? 'w-full' : 'w-full max-w-[420px]'}>
-            <div className="mb-6">
-              <p className="text-xs font-semibold uppercase text-blue-600">
-                {t('auth.console')}
-              </p>
-              <h2 className="mt-3 text-2xl font-semibold">
-                {mode === 'login' ? t('auth.title') : t('auth.registerTitle')}
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                {mode === 'login' ? t('auth.description') : t('auth.registerDescription')}
-              </p>
+            <div className={isModal ? 'mac-auth-heading mb-6' : 'mb-6'}>
+              {isModal ? <FinderIcon size={54} /> : null}
+              <div>
+                <p className="text-xs font-semibold uppercase text-blue-600">
+                  {t('auth.console')}
+                </p>
+                <h2 className="mt-3 text-2xl font-semibold">
+                  {mode === 'login' ? t('auth.title') : t('auth.registerTitle')}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  {mode === 'login' ? t('auth.description') : t('auth.registerDescription')}
+                </p>
+              </div>
             </div>
 
             {/* Login / Register tabs */}
@@ -331,7 +365,13 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
               <button type="button" className={tabClass(mode === 'login')} onClick={() => switchMode('login')}>
                 <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" />{t('auth.signIn')}</span>
               </button>
-              <button type="button" className={tabClass(mode === 'register')} onClick={() => switchMode('register')}>
+              <button
+                type="button"
+                className={`${tabClass(mode === 'register')} disabled:cursor-not-allowed disabled:opacity-50`}
+                disabled={captchaConfigState !== 'ready' || !captchaConfig?.enabled}
+                title={captchaConfigState === 'ready' && !captchaConfig?.enabled ? '当前未开放注册' : undefined}
+                onClick={() => switchMode('register')}
+              >
                 <span className="inline-flex items-center gap-1.5"><UserPlus className="h-3.5 w-3.5" />{t('auth.register')}</span>
               </button>
             </div>
@@ -358,6 +398,7 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
                 <input
                   className={`${inputClass} pl-9`}
                   type="email"
+                  data-autofocus={isModal || undefined}
                   autoComplete="username"
                   placeholder={mode === 'register' ? t('auth.emailPlaceholder') : ''}
                   value={email}
@@ -403,15 +444,29 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
             )}
 
             {/* CAPTCHA: Custom PoW verification */}
-            {captchaConfig && (
+            {captchaConfigState === 'loading' ? (
+              <div className="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500" role="status">
+                <Loader2 className="h-4 w-4 animate-spin" /> 正在连接安全验证服务…
+              </div>
+            ) : null}
+            {captchaConfigState === 'unavailable' ? (
+              <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800" role="alert">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1">安全验证服务暂不可用</span>
+                <button type="button" className="rounded-md px-2 py-1 font-semibold hover:bg-amber-100" onClick={() => setCaptchaReloadKey((key) => key + 1)}>
+                  重试
+                </button>
+              </div>
+            ) : null}
+            {captchaConfigState === 'ready' && captchaConfig?.challenge_url ? (
               <div className="mb-4">
                 <AltchaWidget
                   key={mode}
-                  challengeUrl={captchaConfig.challenge_url ? `${API_BASE}${captchaConfig.challenge_url}` : ''}
+                  challengeUrl={`${API_BASE}${captchaConfig.challenge_url}`}
                   onPayload={(payload) => setCaptchaResult(payload ? { provider: 'altcha', token: payload } : null)}
                 />
               </div>
-            )}
+            ) : null}
 
             {/* Error */}
             {error && (
@@ -424,7 +479,7 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
             {/* Submit */}
             <button
               type="submit"
-              disabled={busy || !captchaResult}
+              disabled={busy || captchaConfigState !== 'ready' || !captchaResult}
               className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold shadow-lg transition ${
                 !captchaResult
                   ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
@@ -433,13 +488,21 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
             >
               {busy
                 ? <Loader2 className="h-4 w-4 animate-spin" />
-                : !captchaResult
+                : captchaConfigState === 'loading'
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : captchaConfigState === 'unavailable'
+                  ? <AlertCircle className="h-4 w-4" />
+                  : !captchaResult
                   ? <LockKeyhole className="h-4 w-4" />
                   : mode === 'register' ? <UserPlus className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />
               }
               {busy
                 ? (mode === 'register' ? t('auth.registering') : t('auth.signingIn'))
-                : !captchaResult
+                : captchaConfigState === 'loading'
+                  ? '正在连接认证服务'
+                  : captchaConfigState === 'unavailable'
+                  ? '认证服务暂不可用'
+                  : !captchaResult
                   ? '请先完成安全验证'
                   : (mode === 'register' ? t('auth.register') : t('auth.signIn'))
               }
