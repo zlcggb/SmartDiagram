@@ -229,6 +229,27 @@ services:
       - qdrantdata:/source/qdrantdata:ro
       - ${BACKUP_DIR:-./backups}:/backup
 
+  # 旧版本可能把上传文件写在 backend 容器层。deploy.sh 先 docker cp 到
+  # 宿主机备份目录，再仅在目标卷为空时通过本工具导入，避免覆盖现有文件。
+  legacy-storage-import:
+    image: pgvector/pgvector:pg16
+    profiles:
+      - tools
+    restart: "no"
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        if [ -n "$(find /target -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+          echo "Target knowledge volume is not empty; refusing to overwrite" >&2
+          exit 1
+        fi
+        cp -a /source/. /target/
+    volumes:
+      - knowledgedata:/target
+      - ${LEGACY_STORAGE_SOURCE:-./backups}:/source:ro
+
 volumes:
   pgdata:
   qdrantdata:
