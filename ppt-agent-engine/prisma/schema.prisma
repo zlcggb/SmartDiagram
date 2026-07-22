@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id           String        @id @default(cuid())
+  name         String
+  reportType   String
+  audience     String
+  purpose      String
+  pageCount    Int           @default(6)
+  theme        String        @default("unilumin-blue")
+  mode         String        @default("paste")
+  topic        String?
+  briefJson    String?
+  researchJson String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sourceTexts  SourceText[]
+  facts        Fact[]
+  slides       Slide[]
+  exports      Export[]
+  mediaExports MediaExport[]
+  materials    ProjectMaterial[]
+}
+
+model SourceText {
+  id        String   @id @default(cuid())
+  projectId String
+  content   String
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Fact {
+  id             String        @id @default(cuid())
+  projectId      String
+  category       String
+  content        String
+  status         String
+  confidence     Float
+  sourceText     String
+  sourceLocation String
+  evidenceJson   String?
+  canUseInPpt    Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  slideSources   SlideSource[]
+
+  @@index([projectId])
+  @@index([status])
+}
+
+model ProjectMaterial {
+  id                  String   @id @default(cuid())
+  projectId           String
+  knowledgeDocumentId String
+  knowledgeSourceId   String
+  ingestionJobId      String
+  filename            String
+  mimeType            String
+  sizeBytes           Int
+  contentHash         String
+  routeMode           String   @default("auto")
+  status              String   @default("processing")
+  errorMessage        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, knowledgeDocumentId])
+  @@index([projectId, createdAt])
+  @@index([ingestionJobId])
+}
+
+model Slide {
+  id                String          @id @default(cuid())
+  projectId         String
+  sortOrder         Int
+  title             String
+  slideGoal         String
+  keyMessage        String
+  contentPoints     String          @default("[]")
+  recommendedLayout String
+  status            String          @default("draft")
+  isContentLocked   Boolean         @default(false)
+  isLayoutLocked    Boolean         @default(false)
+  planJson          String?
+  irJson            String?
+  svgPreview        String?
+  searchJson        String?
+  partTitle         String?
+  generationStatus  String          @default("draft")
+  /**
+   * ir | svg | hybrid；空则由 API format 时 inferRenderStrategy
+   */
+  renderStrategy    String?
+  /**
+   * 手动锁定后，大纲重生成（非 force）保留 renderStrategy
+   */
+  strategyLocked    Boolean         @default(false)
+  project           Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  slideSources      SlideSource[]
+  narration         SlideNarration?
+
+  @@index([projectId])
+  @@index([sortOrder])
+}
+
+model SlideNarration {
+  id              String   @id @default(cuid())
+  slideId         String   @unique
+  scriptText      String
+  ttsText         String
+  voice           String   @default("Kore")
+  model           String   @default("gemini-3.1-flash-tts-preview")
+  prompt          String?
+  languageCode    String   @default("cmn-CN")
+  audioPath       String?
+  audioDurationMs Int?
+  sourceHash      String?
+  status          String   @default("draft")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  slide           Slide    @relation(fields: [slideId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model SlideSource {
+  slideId   String
+  factId    String
+  usageType String @default("supporting")
+  slide     Slide  @relation(fields: [slideId], references: [id], onDelete: Cascade)
+  fact      Fact   @relation(fields: [factId], references: [id], onDelete: Cascade)
+
+  @@id([slideId, factId])
+  @@index([factId])
+}
+
+model Export {
+  id          String   @id @default(cuid())
+  projectId   String
+  versionName String
+  pptxPath    String
+  createdAt   DateTime @default(now())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model MediaExport {
+  id          String   @id @default(cuid())
+  projectId   String
+  kind        String   @default("video")
+  status      String   @default("pending")
+  progress    Int      @default(0)
+  optionsJson String   @default("{}")
+  outputPath  String?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
+}

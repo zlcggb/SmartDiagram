@@ -63,18 +63,21 @@ function ControlToggle({
   icon,
   label,
   pressed,
-  onClick
+  onClick,
+  title
 }: {
   icon: ReactNode;
   label: string;
   pressed: boolean;
   onClick: () => void;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       className="mac-control-toggle"
       aria-pressed={pressed}
+      title={title}
       onClick={onClick}
     >
       <span>{icon}</span>
@@ -85,8 +88,10 @@ function ControlToggle({
 }
 
 export function ControlCenterPanel({
+  forceDockAutoHide = false,
   onError
 }: {
+  forceDockAutoHide?: boolean;
   onError?: (message: string) => void;
 }) {
   const widgetsVisible = useDesktopStore((state) => state.widgetsVisible);
@@ -118,7 +123,7 @@ export function ControlCenterPanel({
     <PanelShell
       icon={<SlidersHorizontal />}
       title="控制中心"
-      subtitle="DeepDiagram 桌面"
+      subtitle="桌面"
     >
       <div className="mac-control-grid">
         <ControlToggle
@@ -135,8 +140,9 @@ export function ControlCenterPanel({
         />
         <ControlToggle
           icon={<PanelBottom />}
-          label="自动隐藏 Dock"
+          label={forceDockAutoHide ? "桌面隐藏 Dock" : "自动隐藏 Dock"}
           pressed={dockAutoHide}
+          title={forceDockAutoHide ? "仅设置桌面；工作页面始终自动隐藏 Dock" : undefined}
           onClick={toggleDockAutoHide}
         />
         <ControlToggle
@@ -146,6 +152,9 @@ export function ControlCenterPanel({
           onClick={() => void toggleFullscreen()}
         />
       </div>
+      {forceDockAutoHide ? (
+        <p className="mac-control-note">工作页面始终自动隐藏 Dock；该开关只设置桌面。</p>
+      ) : null}
     </PanelShell>
   );
 }

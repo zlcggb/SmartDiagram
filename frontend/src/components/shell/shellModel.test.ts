@@ -4,7 +4,6 @@ import {
   buildCalendarCells,
   buildSpotlightResults,
   buildShellMenus,
-  dockScaleForDistance,
   findMenuItemByPrefix,
   nextEnabledMenuIndex,
   parseShellContext,
@@ -14,7 +13,7 @@ import {
 test("识别桌面、绘图、PPT 首页和 PPT 项目上下文", () => {
   assert.deepEqual(parseShellContext("/"), {
     area: "desktop",
-    appName: "DeepDiagram Pro",
+    appName: "桌面",
     projectId: null,
     pathname: "/"
   });
@@ -39,7 +38,7 @@ test("桌面菜单只包含可执行命令或分隔符", () => {
   });
 
   assert.deepEqual(menus.map((menu) => menu.label), [
-    "DeepDiagram Pro",
+    "桌面",
     "文件",
     "编辑",
     "显示",
@@ -218,17 +217,6 @@ test("空查询时应用在前，最近工作按更新时间排序", () => {
 
   assert.deepEqual(results.slice(0, 2).map((result) => result.title), ["思维导图", "PPT 制作"]);
   assert.deepEqual(results.slice(2).map((result) => result.title), ["新绘图", "旧项目"]);
-});
-
-test("Dock 缩放曲线克制、平滑并始终落在安全范围", () => {
-  assert.equal(dockScaleForDistance(0), 1.25);
-  assert.equal(dockScaleForDistance(110), 1);
-  assert.equal(dockScaleForDistance(500), 1);
-  assert.equal(dockScaleForDistance(Number.NaN), 1);
-  for (const distance of [-50, 20, 55, 90, 109]) {
-    const scale = dockScaleForDistance(distance);
-    assert.ok(scale >= 1 && scale <= 1.25);
-  }
 });
 
 test("菜单前缀检索跳过禁用项并从当前位置循环查找", () => {

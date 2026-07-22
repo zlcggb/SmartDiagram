@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:shell": "node --experimental-strip-types --test src/components/shell/*.test.ts src/lib/diagramHistory.test.ts src/store/desktopStore.test.ts"
+    "test:shell": "node --experimental-strip-types --test src/components/brand/*.test.ts src/components/shell/*.test.ts src/lib/diagramHistory.test.ts src/store/desktopStore.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
@@ -26,13 +26,16 @@
     "markmap-lib": "^0.18.12",
     "mermaid": "^11.13.0",
     "mind-elixir": "^5.9.3",
+    "officeparser": "^7.4.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.7.2",
+    "react-router-dom": "^6.30.4",
     "react-zoom-pan-pinch": "^3.7.0",
     "reactflow": "^11.11.4",
     "remark-gfm": "^4.0.1",
+    "zod": "^3.25.76",
     "zustand": "^5.0.11"
   },
   "devDependencies": {

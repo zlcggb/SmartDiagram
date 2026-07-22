@@ -26,6 +26,7 @@ import {
 } from "../components/macos/MacOSIcons";
 import aquaLakeWallpaper from "../assets/macos-aqua-lake-wallpaper.jpg";
 import { MODULE_ICONS } from "../components/macos/moduleIcons";
+import { UserAvatar } from "../components/profile/UserAvatar";
 import { useRecentWork } from "../components/shell/useRecentWork";
 import { moduleRegistry } from "../modules/registry";
 import { usePlatformAuth } from "../store/authStore";
@@ -156,9 +157,7 @@ function AccountWidget({ recentCount }: { recentCount: number }) {
     return (
       <article className="mac-desktop-widget mac-desktop-widget--account">
         <div className="mac-desktop-account__identity">
-          <span className="mac-desktop-account__avatar" aria-hidden="true">
-            {displayName.trim().charAt(0).toUpperCase()}
-          </span>
+          <UserAvatar user={session.user} size={38} />
           <span>
             <small>{greetingForHour(hour)}</small>
             <strong>{displayName}</strong>
@@ -166,8 +165,8 @@ function AccountWidget({ recentCount }: { recentCount: number }) {
           <Cloud className="mac-desktop-account__cloud" aria-label="已连接工作区" />
         </div>
         <p>{recentCount ? `已同步 ${recentCount} 个最近工作项` : "工作区已连接，可以开始新项目。"}</p>
-        <button type="button" onClick={() => openWindow("recents")}>
-          查看全部最近项目 <ArrowUpRight aria-hidden="true" />
+        <button type="button" onClick={() => openWindow("profile")}>
+          管理个人资料 <ArrowUpRight aria-hidden="true" />
         </button>
       </article>
     );
@@ -181,7 +180,7 @@ function AccountWidget({ recentCount }: { recentCount: number }) {
         </span>
         <span>
           <small>{checking ? "正在恢复工作区" : greetingForHour(hour)}</small>
-          <strong>{checking ? "请稍候…" : "欢迎回到 DeepDiagram"}</strong>
+          <strong>{checking ? "请稍候…" : "欢迎回到桌面"}</strong>
         </span>
       </div>
       <p>登录后，PPT、思维导图与历史对话会在同一工作区继续。</p>

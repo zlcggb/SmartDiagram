@@ -9,6 +9,10 @@ __pycache__/
 dist/
 build/
 backend/storage/
+coverage/
+htmlcov/
+.coverage
+*.tsbuildinfo
 
 # Environment (敏感！永不提交)
 .env
@@ -18,8 +22,20 @@ backend/.env
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
+
+# Local agent / browser automation artifacts
+.agent/
+.codex/
+.codegraph/
+**/.playwright-cli/
+/output/
+/tmp/
+playwright-report/
+test-results/
+.pytest_cache/
 
 # OS
 .DS_Store

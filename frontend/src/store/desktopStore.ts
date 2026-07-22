@@ -10,7 +10,7 @@ export type ShellPanel =
   | "spotlight"
   | null;
 
-export type ShellWindow = "login" | "recents" | "about" | "help" | null;
+export type ShellWindow = "login" | "recents" | "about" | "help" | "profile" | null;
 
 export interface DesktopPreferences {
   widgetsVisible: boolean;

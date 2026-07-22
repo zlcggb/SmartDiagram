@@ -1,9 +1,11 @@
 """Knowledge ingestion orchestration."""
 
+import asyncio
 import hashlib
+import tempfile
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -38,16 +40,31 @@ def materialize_document_file(
     storage_root: str | Path,
     document: KnowledgeDocument,
 ) -> Path:
-    """Ensure a knowledge document object is available as a local parse file."""
+    """Copy an object to a disposable local file for parsers that require paths."""
 
-    file_path = Path(storage_root) / document.storage_key
-    if file_path.exists():
-        return file_path
-
+    del storage_root  # Kept in the signature for worker compatibility.
     content = get_object_storage().get_object(document.storage_key)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_bytes(content)
-    return file_path
+    suffix = Path(document.original_filename).suffix.lower()
+    temporary = tempfile.NamedTemporaryFile(
+        mode="wb",
+        prefix="smartdiagram-ingestion-",
+        suffix=suffix,
+        delete=False,
+    )
+    with temporary:
+        temporary.write(content)
+    return Path(temporary.name)
+
+
+async def _delete_document_artifacts(session: AsyncSession, document_id: str) -> None:
+    """Remove partial DB artifacts before a retry rebuilds a document."""
+
+    chunk_ids = select(KnowledgeChunk.id).where(KnowledgeChunk.document_id == document_id)
+    await session.execute(
+        delete(KnowledgeEmbedding).where(KnowledgeEmbedding.chunk_id.in_(chunk_ids))
+    )
+    await session.execute(delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document_id))
+    await session.flush()
 
 
 async def ingest_uploaded_document(
@@ -64,11 +81,40 @@ async def ingest_uploaded_document(
     job.progress = 0.1
     document.status = "indexing"
 
-    parsed = parse_file(file_path, document.mime_type, document.original_filename)
+    parsed = await asyncio.to_thread(
+        parse_file,
+        file_path,
+        document.mime_type,
+        document.original_filename,
+    )
+    document.metadata_json = {
+        **(document.metadata_json or {}),
+        "route_mode": parsed["metadata"].get("route_mode", "full-context"),
+        "parser": parsed["metadata"].get("parser", "builtin"),
+        "parse": parsed["metadata"],
+    }
+    if parsed["metadata"].get("processing_status") == "vision_required":
+        document.status = "vision_required"
+        job.status = "vision_required"
+        job.stage = "vision_required"
+        job.progress = 1.0
+        job.ended_at = utc_now()
+        job.stats_json = {
+            **(job.stats_json or {}),
+            "block_count": 0,
+            "chunk_count": 0,
+            "embedding_count": 0,
+            "route_mode": "vision",
+            "processing_status": "vision_required",
+        }
+        return dict(job.stats_json)
+
     job.stage = "chunking"
     job.progress = 0.35
 
     chunk_payloads = chunk_parsed_document(parsed)
+    if not chunk_payloads:
+        raise ValueError("Document contains no extractable text.")
     chunks: list[KnowledgeChunk] = []
     embeddings: list[KnowledgeEmbedding] = []
     security_counts = {
@@ -252,19 +298,18 @@ async def run_knowledge_ingestion_job(
         .all()
     )
     if existing_chunks:
-        job.status = "completed"
-        job.stage = "completed"
-        job.progress = 1.0
-        job.ended_at = job.ended_at or utc_now()
-        await session.commit()
-        return job.stats_json or {}
+        await _delete_document_artifacts(session, document.id)
 
+    file_path: Path | None = None
     try:
         file_path = materialize_document_file(storage_root, document)
         stats = await ingest_uploaded_document(session, document, job, file_path)
         await session.commit()
         return stats
     except Exception as exc:
+        await session.rollback()
+        job = await session.get(KnowledgeIngestionJob, job_id) or job
+        document = await session.get(KnowledgeDocument, job.document_id) or document
         job.status = "failed"
         job.stage = "failed"
         job.progress = 1.0
@@ -275,3 +320,6 @@ async def run_knowledge_ingestion_job(
         return {
             "error": str(exc),
         }
+    finally:
+        if file_path and file_path.name.startswith("smartdiagram-ingestion-"):
+            file_path.unlink(missing_ok=True)

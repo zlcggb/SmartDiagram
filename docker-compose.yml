@@ -11,6 +11,31 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d smartdiagram"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # 无论是全新卷还是旧卷，都以幂等方式确保 PPT 独立库存在。
+  ppt-db-init:
+    image: pgvector/pgvector:pg16
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: ${DB_PASSWORD:-smartdiagram_secret}
+      PGDATABASE: smartdiagram
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname='ppt_agent'" | grep -q 1; then
+          psql -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ppt_agent'
+        fi
 
   redis:
     image: redis:7-alpine
@@ -57,6 +82,9 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/smartdiagram
       - REDIS_URL=redis://redis:6379/0
       - LANGCHAIN_TRACING_V2=false
+    volumes:
+      # local ObjectStorage 必须与独立 worker 共享；生产可改用 S3 兼容存储。
+      - knowledgedata:/app/storage
     ports:
       - "9236:8000"
 
@@ -80,6 +108,8 @@ services:
       # 覆盖容器内网络地址
       - DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/smartdiagram
       - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - knowledgedata:/app/storage
 
   frontend:
     build:
@@ -95,6 +125,93 @@ services:
     ports:
       - "9237:80"
 
+  # ================= PPT Agent 模块 =================
+  # Node 数据/渲染侧车（Prisma + PPTX 渲染，内部 4010）
+  ppt-node-api:
+    build:
+      context: ./ppt-agent-engine
+      dockerfile: Dockerfile
+      target: node-api
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim-bookworm}
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:stable-alpine}
+    container_name: deepdiagram-ppt-node-api
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+      ppt-db-init:
+        condition: service_completed_successfully
+    env_file:
+      # AI/TTS 密钥从 PPT 项目 .env 注入（文件缺失时忽略，可用 AI_PROVIDER=mock 演示）
+      - path: ./ppt-agent-engine/.env
+        required: false
+    environment:
+      # 覆盖 .env 中的本机地址，适配容器网络；ppt-db-init 会先幂等创建独立库。
+      - NODE_ENV=production
+      - API_HOST=0.0.0.0
+      - API_PORT=4010
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/ppt_agent?schema=public
+      - STORAGE_DIR=/data/storage
+      - MATERIAL_GATEWAY_URL=http://backend:8000
+    volumes:
+      - pptdata:/data
+    expose:
+      - "4010"
+
+  # FastAPI + LangGraph 编排网关（内部 4000）
+  ppt-python-api:
+    build:
+      context: ./ppt-agent-engine
+      dockerfile: Dockerfile
+      target: python-api
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim-bookworm}
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:stable-alpine}
+    container_name: deepdiagram-ppt-python-api
+    restart: always
+    depends_on:
+      - ppt-node-api
+    env_file:
+      - path: ./ppt-agent-engine/.env
+        required: false
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=4000
+      - LEGACY_API_URL=http://ppt-node-api:4010
+      - GRAPH_CHECKPOINT_PATH=/data/langgraph/checkpoints.sqlite
+    volumes:
+      - pptdata:/data
+    expose:
+      - "4000"
+
+  # PPT Agent 前端已并入统一 SPA（frontend），不再需要独立的 ppt-web 服务。
+
+  # ================= 聚合网关（统一入口） =================
+  #   /         → 统一前端 SPA（/ 首页 · /diagram 思维导图 · /ppt PPT 制作）
+  #   /api/     → SmartDiagram 后端      /ppt-api/ → PPT Agent 后端
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+      args:
+        CN_MIRROR: ${CN_MIRROR:-false}
+    container_name: deepdiagram-gateway
+    restart: always
+    depends_on:
+      - frontend
+      - backend
+      - drawio
+      - ppt-python-api
+    ports:
+      - "${GATEWAY_PORT:-80}:80"
+
 volumes:
   pgdata:
   qdrantdata:
+  pptdata:
+  knowledgedata:

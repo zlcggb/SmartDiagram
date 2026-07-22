@@ -4,12 +4,14 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ComponentType,
   type ReactNode,
   type RefObject
 } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  ChevronRight,
   CircleUserRound,
   Command,
   LogOut,
@@ -20,6 +22,8 @@ import {
   type LucideIcon
 } from "lucide-react";
 import LoginScreen from "../auth/LoginScreen";
+import { ProfileWindow } from "../profile/ProfileWindow";
+import { UserAvatar } from "../profile/UserAvatar";
 import { FinderIcon, FolderIcon } from "../macos/MacOSIcons";
 import { MODULE_ICONS } from "../macos/moduleIcons";
 import { moduleRegistry } from "../../modules/registry";
@@ -28,8 +32,13 @@ import { useChatStore } from "../../store/chatStore";
 import { useDesktopStore, type ShellPanel } from "../../store/desktopStore";
 import { dispatchDiagramShellCommand, type DiagramShellCommand } from "./shellEvents";
 import {
+  DOCK_AUTO_HIDE_DELAY_MS,
+  DOCK_PEEK_HEIGHT_PX,
+  DOCK_REVEAL_ZONE_HEIGHT_PX,
+  dockScaleForItem
+} from "./dockModel";
+import {
   buildShellMenus,
-  dockScaleForDistance,
   parseShellContext,
   type ShellMenuItem
 } from "./shellModel";
@@ -76,11 +85,17 @@ function MenuBarClock({ active, onClick }: { active: boolean; onClick: () => voi
   );
 }
 
-function DeepDiagramMark({ size = 18 }: { size?: number }) {
+function DesktopMark({ size = 18 }: { size?: number }) {
   return <FinderIcon size={size} />;
 }
 
-function UserPanel({ onClose }: { onClose: () => void }) {
+function UserPanel({
+  onClose,
+  onOpenProfile,
+}: {
+  onClose: () => void;
+  onOpenProfile: () => void;
+}) {
   const session = usePlatformAuth((state) => state.session);
   const logout = usePlatformAuth((state) => state.logout);
   const openLogin = usePlatformAuth((state) => state.openLogin);
@@ -110,15 +125,16 @@ function UserPanel({ onClose }: { onClose: () => void }) {
   const displayName = session.user.display_name?.trim() || session.user.email;
   return (
     <section className="mac-system-panel mac-user-panel">
-      <div className="mac-user-profile">
-        <span>{displayName.charAt(0).toUpperCase()}</span>
+      <button type="button" className="mac-user-profile" onClick={onOpenProfile}>
+        <UserAvatar user={session.user} size={44} />
         <div>
           <strong>{displayName}</strong>
           <small>{session.user.email}</small>
         </div>
-      </div>
+        <ChevronRight aria-hidden="true" />
+      </button>
       <div className="mac-user-actions">
-        <button type="button" onClick={() => { onClose(); logout(); }}>
+        <button type="button" data-danger onClick={() => { onClose(); logout(); }}>
           <LogOut />
           退出登录
         </button>
@@ -149,8 +165,7 @@ function Dock({
   const activeWindow = useDesktopStore((state) => state.activeWindow);
   const [peekVisible, setPeekVisible] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
-  const [dockScales, setDockScales] = useState<Record<string, number>>({});
-  const [dockTracking, setDockTracking] = useState(false);
+  const [hoveredDockItem, setHoveredDockItem] = useState<string | null>(null);
   const iconRefs = useRef<Record<string, HTMLElement | null>>({});
   const hideTimerRef = useRef<number | null>(null);
 
@@ -178,10 +193,10 @@ function Dock({
   useEffect(() => {
     if (alwaysVisible) return;
     const handleMouseMove = (event: MouseEvent) => {
-      if (event.clientY <= window.innerHeight - 10) return;
+      if (event.clientY <= window.innerHeight - DOCK_REVEAL_ZONE_HEIGHT_PX) return;
       cancelHide();
       setPeekVisible(true);
-      scheduleHide(900);
+      scheduleHide(DOCK_AUTO_HIDE_DELAY_MS);
     };
     window.addEventListener("mousemove", handleMouseMove);
     return () => {
@@ -190,11 +205,27 @@ function Dock({
     };
   }, [alwaysVisible, cancelHide, scheduleHide]);
 
+  useEffect(() => {
+    const focusDock = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || event.key !== "F3") {
+        return;
+      }
+      event.preventDefault();
+      cancelHide();
+      setPeekVisible(true);
+      window.requestAnimationFrame(() => {
+        iconRefs.current.home?.focus({ preventScroll: true });
+      });
+    };
+    window.addEventListener("keydown", focusDock);
+    return () => window.removeEventListener("keydown", focusDock);
+  }, [cancelHide]);
+
   const items: DockItem[] = [
     {
       key: "home",
       path: "/",
-      label: "DeepDiagram 桌面",
+      label: "桌面",
       artwork: FinderIcon,
       icon: null,
       tileBackground: ""
@@ -222,18 +253,6 @@ function Dock({
     }
   ];
 
-  const updateDockScales = (pointerX: number) => {
-    if (reduceMotion) return;
-    const nextScales: Record<string, number> = {};
-    for (const item of items) {
-      const element = iconRefs.current[item.key];
-      if (!element) continue;
-      const centerX = element.getBoundingClientRect().left + element.offsetWidth / 2;
-      nextScales[item.key] = dockScaleForDistance(Math.abs(pointerX - centerX));
-    }
-    setDockScales(nextScales);
-  };
-
   const visible = alwaysVisible || peekVisible;
   return (
     <>
@@ -241,13 +260,16 @@ function Dock({
         <button
           type="button"
           className="mac-dock-reveal-zone"
+          style={{
+            "--mac-dock-reveal-zone-height": `${DOCK_REVEAL_ZONE_HEIGHT_PX}px`
+          } as CSSProperties}
           aria-label="显示程序坞"
           aria-expanded={visible}
           onFocus={() => {
             cancelHide();
             setPeekVisible(true);
           }}
-          onBlur={() => scheduleHide(900)}
+          onBlur={() => scheduleHide(DOCK_AUTO_HIDE_DELAY_MS)}
           onPointerEnter={() => {
             cancelHide();
             setPeekVisible(true);
@@ -256,27 +278,32 @@ function Dock({
             cancelHide();
             setPeekVisible(true);
           }}
-          onPointerLeave={() => scheduleHide(300)}
+          onPointerLeave={() => scheduleHide(DOCK_AUTO_HIDE_DELAY_MS)}
         />
       ) : null}
-      <div className="mac-dock-stage" data-visible={visible || undefined} aria-hidden={!visible || undefined}>
+      <div
+        className="mac-dock-stage"
+        data-visible={visible || undefined}
+        aria-hidden={!visible || undefined}
+        style={{ "--mac-dock-peek-height": `${DOCK_PEEK_HEIGHT_PX}px` } as CSSProperties}
+      >
         <nav
           className="mac-dock"
           aria-label="程序坞"
-          onMouseEnter={cancelHide}
+          onMouseEnter={() => {
+            cancelHide();
+            if (!alwaysVisible) setPeekVisible(true);
+          }}
           onFocusCapture={cancelHide}
           onBlurCapture={(event) => {
             const nextFocus = event.relatedTarget as Node | null;
-            if (!event.currentTarget.contains(nextFocus) && !alwaysVisible) scheduleHide(240);
-          }}
-          onMouseMove={(event) => {
-            setDockTracking(true);
-            updateDockScales(event.clientX);
+            if (!event.currentTarget.contains(nextFocus) && !alwaysVisible) {
+              scheduleHide(DOCK_AUTO_HIDE_DELAY_MS);
+            }
           }}
           onMouseLeave={() => {
-            setDockTracking(false);
-            setDockScales({});
-            if (!alwaysVisible) scheduleHide(240);
+            setHoveredDockItem(null);
+            if (!alwaysVisible) scheduleHide(DOCK_AUTO_HIDE_DELAY_MS);
           }}
         >
           {items.map((item) => {
@@ -289,7 +316,11 @@ function Dock({
             const windowOpen = item.key === "recents" && activeWindow === "recents";
             const Artwork = item.artwork;
             const FallbackIcon = item.icon;
-            const scale = dockScales[item.key] ?? 1;
+            const scale = dockScaleForItem(item.key, hoveredDockItem, reduceMotion);
+            const activateMagnification = () => setHoveredDockItem(item.key);
+            const deactivateMagnification = () => {
+              setHoveredDockItem((current) => current === item.key ? null : current);
+            };
             const content = (
               <>
                 <span className="mac-dock-tooltip" role="tooltip">{item.label}</span>
@@ -297,7 +328,7 @@ function Dock({
                   className="mac-dock-artwork"
                   style={{
                     transform: `scale(${scale}) translateY(${Math.min((scale - 1) * -32, 0)}px)`,
-                    transitionDuration: dockTracking ? "60ms" : "220ms"
+                    transitionDuration: hoveredDockItem === item.key ? "120ms" : "220ms"
                   }}
                 >
                   {Artwork ? <Artwork size={item.key === "home" ? 60 : 56} /> : FallbackIcon ? (
@@ -321,6 +352,10 @@ function Dock({
                   data-divider-before={item.dividerBefore || undefined}
                   aria-label={item.label}
                   tabIndex={visible ? undefined : -1}
+                  onMouseEnter={activateMagnification}
+                  onMouseLeave={deactivateMagnification}
+                  onFocus={activateMagnification}
+                  onBlur={deactivateMagnification}
                 >
                   {content}
                 </NavLink>
@@ -337,6 +372,10 @@ function Dock({
                 data-divider-before={item.dividerBefore || undefined}
                 aria-label={item.label}
                 tabIndex={visible ? undefined : -1}
+                onMouseEnter={activateMagnification}
+                onMouseLeave={deactivateMagnification}
+                onFocus={activateMagnification}
+                onBlur={deactivateMagnification}
                 onClick={(event) => item.onActivate?.(event.currentTarget)}
               >
                 {content}
@@ -355,7 +394,7 @@ function LoginWindow() {
   const setSession = usePlatformAuth((state) => state.setSession);
   if (!loginOpen) return null;
   return (
-    <MacWindow title="登录 DeepDiagram Pro" onClose={closeLogin}>
+    <MacWindow title="登录桌面" onClose={closeLogin}>
       <div className="mac-login-content">
         <LoginScreen displayMode="modal" onLogin={setSession} />
       </div>
@@ -372,14 +411,14 @@ function AboutWindow({
 }) {
   return (
     <MacWindow
-      title="关于 DeepDiagram Pro"
+      title="关于桌面"
       onClose={onClose}
       modal={false}
       triggerRef={triggerRef}
     >
       <div className="mac-about-window">
-        <DeepDiagramMark size={76} />
-        <h3>DeepDiagram Pro</h3>
+        <DesktopMark size={76} />
+        <h3>桌面</h3>
         <p>一个把思维导图、AI 绘图与演示文稿制作汇聚在同一工作空间的创作平台。</p>
         <small>现代 macOS Web Shell · 2026</small>
         <div>
@@ -423,14 +462,14 @@ function HelpWindow({
 
   return (
     <MacWindow
-      title="DeepDiagram 帮助"
+      title="桌面帮助"
       onClose={onClose}
       modal={false}
       triggerRef={triggerRef}
     >
       <div className="mac-help-window">
         <div className="mac-help-heading">
-          <span className="mac-help-heading__artwork"><DeepDiagramMark size={38} /></span>
+          <span className="mac-help-heading__artwork"><DesktopMark size={38} /></span>
           <div><h3>键盘操作</h3><p>菜单栏、Dock 和搜索都连接到真实页面功能。</p></div>
         </div>
         <label className="mac-help-search">
@@ -529,6 +568,7 @@ function AppShell() {
   const [fullscreen, setFullscreen] = useState(() => Boolean(document.fullscreenElement));
   const [notice, setNotice] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
+  const userButtonRef = useRef<HTMLButtonElement>(null);
   const windowOpenerRef = useRef<HTMLElement | null>(null);
   const lastEditableRef = useRef<HTMLElement | null>(null);
   const lastEditableRangeRef = useRef<Range | null>(null);
@@ -840,23 +880,36 @@ function AppShell() {
   }, [activePanel, activeWindow, closeLogin, closeOverlay, context.area, loginOpen, navigate, openShellPanel, openWindow, runDiagramCommand, toggleFullscreen]);
 
   const userLabel = session?.user.display_name?.trim() || session?.user.email || "登录";
-  const showDock = !dockAutoHide;
+  const isDesktop = context.area === "desktop";
+  const dockAlwaysVisible = isDesktop && !dockAutoHide;
+  const MenuBarArtwork = context.area === "diagram"
+    ? MODULE_ICONS["/diagram"]
+    : context.area === "ppt-home" || context.area === "ppt-project"
+      ? MODULE_ICONS["/ppt"]
+      : FinderIcon;
+  const menuBarArtworkSize = isDesktop ? 22 : 18;
 
   return (
-    <div className="mac-shell mac-app-shell">
+    <div
+      className="mac-shell mac-app-shell"
+      data-area={context.area}
+      data-canvas-mode={context.area === "diagram" ? canvasMode : undefined}
+      data-dock-autohide={!dockAlwaysVisible || undefined}
+    >
       <MacMenuBar
         menus={menus}
         onAction={handleMenuAction}
         closeSignal={location.key}
         overlayActive={Boolean(activePanel || activeWindow || loginOpen)}
         homeControl={(
-          <NavLink to="/" className="mac-brand-control" aria-label="DeepDiagram 桌面" title="DeepDiagram 桌面">
-            <DeepDiagramMark />
+          <NavLink to="/" className="mac-brand-control" aria-label="桌面" title="桌面">
+            <MenuBarArtwork size={menuBarArtworkSize} />
           </NavLink>
         )}
         trailing={(
           <>
             <button
+              ref={userButtonRef}
               type="button"
               className="mac-menu-status-button"
               data-active={activePanel === "network" || undefined}
@@ -895,7 +948,7 @@ function AppShell() {
               aria-expanded={activePanel === "user"}
               onClick={() => openShellPanel("user")}
             >
-              {session ? userLabel.charAt(0).toUpperCase() : "登录"}
+              <UserAvatar user={session?.user} size={20} label={session ? `账户：${userLabel}` : "登录账户"} />
             </button>
           </>
         )}
@@ -906,14 +959,28 @@ function AppShell() {
       {activePanel && activePanel !== "spotlight" ? (
         <div ref={panelRef} className="mac-system-popover" data-panel={activePanel}>
           {activePanel === "network" ? <NetworkPanel /> : null}
-          {activePanel === "control-center" ? <ControlCenterPanel onError={setNotice} /> : null}
+            {activePanel === "control-center" ? (
+              <ControlCenterPanel
+                forceDockAutoHide={!isDesktop}
+                onError={setNotice}
+              />
+            ) : null}
           {activePanel === "calendar" ? <CalendarPanel /> : null}
-          {activePanel === "user" ? <UserPanel onClose={closeOverlay} /> : null}
+          {activePanel === "user" ? (
+            <UserPanel
+              onClose={closeOverlay}
+              onOpenProfile={() => {
+                windowOpenerRef.current = userButtonRef.current;
+                openWindow("profile");
+              }}
+            />
+          ) : null}
         </div>
       ) : null}
 
       <Dock
-        alwaysVisible={showDock}
+        key={`${context.area}-${dockAlwaysVisible ? "fixed" : "autohide"}`}
+        alwaysVisible={dockAlwaysVisible}
         onOpenRecents={(trigger) => {
           windowOpenerRef.current = trigger;
           openWindow("recents");
@@ -939,6 +1006,9 @@ function AppShell() {
       ) : null}
       {activeWindow === "help" ? (
         <HelpWindow area={context.area} onClose={closeShellWindow} triggerRef={windowOpenerRef} />
+      ) : null}
+      {activeWindow === "profile" ? (
+        <ProfileWindow onClose={closeShellWindow} triggerRef={windowOpenerRef} />
       ) : null}
       <LoginWindow />
 

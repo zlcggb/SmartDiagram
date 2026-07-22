@@ -1,0 +1,44 @@
+{
+  "variantId": "closing-cta",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "closing",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "conclusion",
+      "type": "callout",
+      "role": "conclusion",
+      "slot": "conclusion",
+      "x": 120,
+      "y": 140,
+      "w": 1040,
+      "h": 260,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 32,
+        "bold": true,
+        "tone": "primary",
+        "align": "center"
+      }
+    },
+    {
+      "id": "cta",
+      "type": "card",
+      "role": "cta",
+      "slot": "cta",
+      "x": 220,
+      "y": 460,
+      "w": 840,
+      "h": 160,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "tone": "accent"
+      }
+    }
+  ]
+}

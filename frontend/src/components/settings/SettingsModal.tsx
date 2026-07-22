@@ -10,7 +10,6 @@ import {
   Moon,
   Palette,
   Settings2,
-  ShieldCheck,
   SlidersHorizontal,
   Sun,
   Trash2,
@@ -26,6 +25,7 @@ import UserManagementPanel from './UserManagementPanel';
 import { canReadOps } from '../../config/enterpriseContext';
 import { isAdminSession, type AuthSession } from '../../config/auth';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { UserAvatar } from '../profile/UserAvatar';
 
 type SettingsSection = 'appearance' | 'model' | 'preferences' | 'ops' | 'users' | 'session';
 
@@ -368,13 +368,7 @@ export default function SettingsModal({
       <div className={`rounded-lg border p-5 ${cardClass}`}>
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-start gap-4">
-            <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${
-              isAdmin
-                ? isLight ? 'bg-blue-50 text-blue-600' : 'bg-blue-500/10 text-blue-200'
-                : isLight ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-300'
-            }`}>
-              {isAdmin ? <ShieldCheck className="h-6 w-6" /> : <UserRound className="h-6 w-6" />}
-            </span>
+            <UserAvatar user={authSession.user} size={48} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="truncate text-base font-semibold">{userDisplayName}</h3>

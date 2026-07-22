@@ -139,7 +139,7 @@ function AltchaWidget({
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         </svg>
-        <span>DeepDiagram</span>
+        <span>安全验证</span>
       </div>
     </button>
   );
@@ -323,7 +323,7 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
               <div className="mb-7 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/10 shadow-2xl shadow-blue-500/20">
                 <Sparkles className="h-7 w-7 text-cyan-300" />
               </div>
-              <h1 className="max-w-xl text-4xl font-semibold sm:text-5xl">DeepDiagram Pro</h1>
+              <h1 className="max-w-xl text-4xl font-semibold sm:text-5xl">桌面</h1>
               <p className="mt-5 max-w-xl text-base leading-8 text-slate-300">
                 {t('auth.heroDescription')}
               </p>

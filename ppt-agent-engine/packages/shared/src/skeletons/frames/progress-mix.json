@@ -1,0 +1,98 @@
+{
+  "variantId": "progress-mix",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "progress-cards",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "slot": "pageTitle",
+      "x": 56,
+      "y": 36,
+      "w": 900,
+      "h": 52,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 32,
+        "bold": true
+      }
+    },
+    {
+      "id": "claim",
+      "type": "callout",
+      "role": "key-message",
+      "slot": "claim",
+      "x": 56,
+      "y": 100,
+      "w": 1168,
+      "h": 80,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "tone": "primary"
+      }
+    },
+    {
+      "id": "p1",
+      "type": "card",
+      "role": "progress",
+      "slot": "progressCards.0",
+      "x": 56,
+      "y": 220,
+      "w": 480,
+      "h": 400,
+      "z": 3,
+      "editable": true
+    },
+    {
+      "id": "p2",
+      "type": "card",
+      "role": "progress",
+      "slot": "progressCards.1",
+      "x": 560,
+      "y": 220,
+      "w": 360,
+      "h": 400,
+      "z": 4,
+      "editable": true
+    },
+    {
+      "id": "m1",
+      "type": "metric",
+      "role": "metric",
+      "slot": "metrics.0",
+      "x": 950,
+      "y": 220,
+      "w": 270,
+      "h": 180,
+      "z": 5,
+      "editable": true,
+      "style": {
+        "fontSize": 36,
+        "bold": true
+      }
+    },
+    {
+      "id": "m2",
+      "type": "metric",
+      "role": "metric",
+      "slot": "metrics.1",
+      "x": 950,
+      "y": 440,
+      "w": 270,
+      "h": 180,
+      "z": 6,
+      "editable": true,
+      "style": {
+        "fontSize": 36,
+        "bold": true
+      }
+    }
+  ]
+}

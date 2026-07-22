@@ -7,7 +7,7 @@
 import { Suspense, lazy, useRef, useEffect, useState } from 'react';
 import { useChatStore } from '../../store/chatStore';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { PenTool, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ReactFlowProvider } from 'reactflow';
@@ -20,6 +20,7 @@ import {
   getAgentMeta,
 } from '../../config/diagramAgents';
 import { useT } from '../../i18n';
+import { SmartDiagramIconMark } from '../brand/AppIconMarks';
 
 const ExcalidrawCanvas = lazy(() => import('../canvas/ExcalidrawCanvas'));
 const MermaidCanvas = lazy(() => import('../canvas/MermaidCanvas'));
@@ -81,13 +82,7 @@ function EmptyCanvas() {
         }} />
 
       <div className="relative z-10 flex flex-col items-center sd-fade-in text-center">
-        <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-7 border shadow-2xl ${
-          canvasMode === 'light'
-            ? 'bg-white border-slate-200 shadow-slate-200/50'
-            : 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700/50 shadow-indigo-500/10'
-        }`}>
-          <PenTool className="w-9 h-9 text-indigo-500" />
-        </div>
+        <SmartDiagramIconMark className="w-20 h-20 mb-7 drop-shadow-xl" />
         <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-3 sd-mobile-empty-title">
           SmartDiagram Pro
         </h1>

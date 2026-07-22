@@ -1,0 +1,35 @@
+{
+  "name": "@ppt-agent/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node dev.mjs",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:css": "node build-scoped-css.mjs",
+    "test:intent": "node --import tsx --test src/components/intent/*.test.ts",
+    "test:structure": "node --import tsx --test src/components/structure/*.test.ts"
+  },
+  "dependencies": {
+    "@ppt-agent/shared": "workspace:*",
+    "@vitejs/plugin-react": "^4.3.4",
+    "lucide-react": "^0.468.0",
+    "officeparser": "^7.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.1",
+    "postcss-prefix-selector": "^2.1.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3",
+    "vite": "^6.0.7"
+  }
+}

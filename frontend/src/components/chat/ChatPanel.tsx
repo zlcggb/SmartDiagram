@@ -76,6 +76,7 @@ import {
   type DiagramShellCommand,
   type DiagramShellEventDetail,
 } from '../shell/shellEvents';
+import { SmartDiagramIconMark } from '../brand/AppIconMarks';
 
 type VersionActionPayload = {
   diagram_id: string;
@@ -2624,9 +2625,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
         canvasMode === 'light' ? 'border-slate-200 bg-white/60' : 'border-slate-700/50 bg-dark-900/60'
       }`}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-indigo-500/20">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
+          <SmartDiagramIconMark className="w-8 h-8 shrink-0 drop-shadow-sm" />
           <div>
             <h1 className={`text-[13px] font-semibold tracking-tight ${canvasMode === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>SmartDiagram</h1>
             <p className={`text-[10px] ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>{t('app.subtitle')}</p>
@@ -2733,11 +2732,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-3">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center sd-fade-in">
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-5 border ${
-              canvasMode === 'light' ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-800 border-slate-700/50'
-            }`}>
-              <Sparkles className="w-7 h-7 text-blue-500/70" />
-            </div>
+            <SmartDiagramIconMark className="w-14 h-14 mb-5 drop-shadow-sm" />
             <p className={`text-sm font-medium mb-1 ${canvasMode === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{t('chat.emptyTitle')}</p>
             <p className={`text-xs mb-6 ${canvasMode === 'light' ? 'text-slate-500' : 'text-slate-600'}`}>
               {t('chat.emptyDescription')}

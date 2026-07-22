@@ -1,13 +1,12 @@
 /**
  * Product artwork shared by the desktop, Dock, Spotlight, and shell windows.
  *
- * Each runtime image is a 384 px export of an original 1024 px layered asset.
- * Keeping one component API prevents the same module from drifting across surfaces.
+ * Artwork can be vector or raster, while the shared component API prevents the
+ * same module from drifting across surfaces and output sizes.
  */
-import deepDiagramHomeIcon from "../../assets/macos-icons/deepdiagram-home-384.png";
-import mindmapIcon from "../../assets/macos-icons/mindmap-384.png";
-import presentationIcon from "../../assets/macos-icons/presentation-384.png";
+import deepDiagramHomeIcon from "../../assets/macos-icons/deepdiagram-home.svg";
 import recentFolderIcon from "../../assets/macos-icons/recent-folder-384.png";
+import { PptAgentIconMark, SmartDiagramIconMark } from "../brand/AppIconMarks";
 
 interface IconProps {
   size?: number;
@@ -33,11 +32,11 @@ export function FinderIcon({ size = 60 }: IconProps) {
 }
 
 export function MindmapAppIcon({ size = 60 }: IconProps) {
-  return <ArtworkImage src={mindmapIcon} size={size} />;
+  return <SmartDiagramIconMark className="mac-artwork-image" size={size} />;
 }
 
 export function SlidesAppIcon({ size = 60 }: IconProps) {
-  return <ArtworkImage src={presentationIcon} size={size} />;
+  return <PptAgentIconMark className="mac-artwork-image" size={size} />;
 }
 
 export function FolderIcon({ size = 60 }: IconProps) {

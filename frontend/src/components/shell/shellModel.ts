@@ -163,7 +163,7 @@ function windowMenu(context: ShellContext): ShellMenu {
       { id: "window-recents", label: "最近项目…", action: "open-recents" },
       separator("window-navigation-separator"),
       {
-        ...navigateItem("window-desktop", "DeepDiagram 桌面", "/"),
+        ...navigateItem("window-desktop", "桌面", "/"),
         disabled: context.area === "desktop"
       }
     ]
@@ -338,7 +338,7 @@ export function parseShellContext(pathname: string): ShellContext {
   if (normalizedPathname === "/" || !normalizedPathname.startsWith("/")) {
     return {
       area: "desktop",
-      appName: "DeepDiagram Pro",
+      appName: "桌面",
       projectId: null,
       pathname: normalizedPathname
     };
@@ -378,7 +378,7 @@ export function parseShellContext(pathname: string): ShellContext {
 
   return {
     area: normalizedPathname.startsWith("/ppt") ? "ppt-home" : "desktop",
-    appName: normalizedPathname.startsWith("/ppt") ? "PPT 制作" : "DeepDiagram Pro",
+    appName: normalizedPathname.startsWith("/ppt") ? "PPT 制作" : "桌面",
     projectId: null,
     pathname: normalizedPathname
   };
@@ -488,7 +488,7 @@ export function buildSpotlightResults(
       {
         id: "command-login",
         kind: "login" as const,
-        title: "登录 DeepDiagram Pro",
+        title: "登录桌面",
         subtitle: "同步项目、绘图历史与对话记录"
       }
     ];
@@ -532,12 +532,4 @@ export function buildSpotlightResults(
   const matchingApps = apps.filter((result) => includesSpotlightQuery(result, query));
   const matchingRecent = recent.filter((result) => includesSpotlightQuery(result, query));
   return [...matchingApps, ...matchingRecent].slice(0, 12);
-}
-
-export function dockScaleForDistance(rawDistance: number): number {
-  if (!Number.isFinite(rawDistance)) return 1;
-  const distance = Math.abs(rawDistance);
-  if (distance >= 110) return 1;
-  const falloff = Math.cos((distance / 110) * (Math.PI / 2));
-  return Math.min(1.25, Math.max(1, 1 + falloff * 0.25));
 }

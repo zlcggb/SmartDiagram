@@ -1,0 +1,68 @@
+{
+  "variantId": "cover-center-statement",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "cover",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "slot": "title",
+      "x": 160,
+      "y": 180,
+      "w": 960,
+      "h": 140,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 52,
+        "bold": true,
+        "align": "center"
+      }
+    },
+    {
+      "id": "lead",
+      "type": "text",
+      "role": "lead",
+      "slot": "lead",
+      "x": 220,
+      "y": 360,
+      "w": 840,
+      "h": 70,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "fontSize": 18,
+        "align": "center"
+      }
+    },
+    {
+      "id": "meta-1",
+      "type": "card",
+      "role": "meta",
+      "slot": "metaCards.0",
+      "x": 160,
+      "y": 520,
+      "w": 440,
+      "h": 120,
+      "z": 3,
+      "editable": true
+    },
+    {
+      "id": "meta-2",
+      "type": "card",
+      "role": "meta",
+      "slot": "metaCards.1",
+      "x": 680,
+      "y": 520,
+      "w": 440,
+      "h": 120,
+      "z": 4,
+      "editable": true
+    }
+  ]
+}

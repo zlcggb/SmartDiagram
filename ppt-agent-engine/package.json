@@ -1,0 +1,38 @@
+{
+  "name": "ppt-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "build": "corepack pnpm -r build",
+    "build:packages": "corepack pnpm --filter @ppt-agent/shared build && corepack pnpm --filter @ppt-agent/agents build && corepack pnpm --filter @ppt-agent/ppt-renderer build",
+    "dev": "bash ./scripts/dev-all.sh",
+    "dev:legacy-api": "corepack pnpm db:migrate && API_PORT=4010 corepack pnpm --filter @ppt-agent/api dev",
+    "dev:python-api": "uv run --project apps/api-python uvicorn ppt_agent_api.main:app --reload --host 127.0.0.1 --port 4000",
+    "dev:api": "corepack pnpm db:migrate && corepack pnpm --filter @ppt-agent/api dev",
+    "dev:web": "corepack pnpm --filter @ppt-agent/web dev",
+    "start:dev": "bash ./start-dev.sh",
+    "setup": "corepack pnpm install; uv sync --project apps/api-python; corepack pnpm db:generate; corepack pnpm db:migrate",
+    "test:python-api": "uv run --project apps/api-python pytest",
+    "typecheck": "corepack pnpm -r typecheck",
+    "smoke:concurrency": "tsx scripts/concurrency-smoke.ts",
+    "smoke:media": "tsx scripts/media-export-smoke.ts",
+    "test:subtitles": "node --import tsx --test apps/api/src/lib/subtitles.test.ts apps/api/src/lib/subtitleFonts.test.ts apps/api/src/lib/video.test.ts packages/ppt-renderer/src/subtitleOverlay.test.ts",
+    "test:svg-regression": "corepack pnpm --filter @ppt-agent/ppt-renderer test",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:migrate": "tsx prisma/apply-migrations.ts",
+    "db:studio": "prisma studio --schema prisma/schema.prisma",
+    "db:seed": "tsx prisma/seed.ts",
+    "prepare:demo": "corepack pnpm db:generate && corepack pnpm db:migrate && corepack pnpm db:seed"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "prisma": "^6.16.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.0"
+  }
+}

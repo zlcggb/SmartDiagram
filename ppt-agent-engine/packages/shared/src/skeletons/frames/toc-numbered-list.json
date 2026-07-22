@@ -1,0 +1,114 @@
+{
+  "variantId": "toc-numbered-list",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "toc",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "slot": "pageTitle",
+      "x": 56,
+      "y": 40,
+      "w": 800,
+      "h": 56,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 34,
+        "bold": true
+      }
+    },
+    {
+      "id": "summary",
+      "type": "callout",
+      "role": "summary",
+      "slot": "summary",
+      "x": 56,
+      "y": 120,
+      "w": 420,
+      "h": 520,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "tone": "primary"
+      }
+    },
+    {
+      "id": "ch1",
+      "type": "card",
+      "role": "chapter",
+      "slot": "chapters.0",
+      "x": 520,
+      "y": 120,
+      "w": 700,
+      "h": 72,
+      "z": 3,
+      "editable": true
+    },
+    {
+      "id": "ch2",
+      "type": "card",
+      "role": "chapter",
+      "slot": "chapters.1",
+      "x": 520,
+      "y": 208,
+      "w": 700,
+      "h": 72,
+      "z": 4,
+      "editable": true
+    },
+    {
+      "id": "ch3",
+      "type": "card",
+      "role": "chapter",
+      "slot": "chapters.2",
+      "x": 520,
+      "y": 296,
+      "w": 700,
+      "h": 72,
+      "z": 5,
+      "editable": true
+    },
+    {
+      "id": "ch4",
+      "type": "card",
+      "role": "chapter",
+      "slot": "chapters.3",
+      "x": 520,
+      "y": 384,
+      "w": 700,
+      "h": 72,
+      "z": 6,
+      "editable": true
+    },
+    {
+      "id": "ch5",
+      "type": "card",
+      "role": "chapter",
+      "slot": "chapters.4",
+      "x": 520,
+      "y": 472,
+      "w": 700,
+      "h": 72,
+      "z": 7,
+      "editable": true
+    },
+    {
+      "id": "ch6",
+      "type": "card",
+      "role": "chapter",
+      "slot": "chapters.5",
+      "x": 520,
+      "y": 560,
+      "w": 700,
+      "h": 72,
+      "z": 8,
+      "editable": true
+    }
+  ]
+}

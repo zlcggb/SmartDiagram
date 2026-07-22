@@ -12,6 +12,7 @@ export interface AuthUser {
   project_id: string;
   roles: string[];
   scopes: string[];
+  avatar_url?: string | null;
 }
 
 export interface AuthSession {
@@ -100,7 +101,41 @@ export async function validateAuthSession(session: AuthSession): Promise<AuthSes
     clearAuthSession();
     throw new Error('Session expired');
   }
-  return session;
+  const payload = (await res.json()) as { user?: AuthUser };
+  const refreshed = payload.user
+    ? { ...session, user: { ...session.user, ...payload.user } }
+    : session;
+  writeAuthSession(refreshed);
+  return refreshed;
+}
+
+export interface ProfileUpdate {
+  displayName?: string;
+  avatar?: Blob;
+  removeAvatar?: boolean;
+}
+
+export async function updateProfile(
+  session: AuthSession,
+  update: ProfileUpdate,
+): Promise<AuthSession> {
+  const body = new FormData();
+  if (update.displayName !== undefined) body.set('display_name', update.displayName);
+  if (update.avatar) body.set('avatar', update.avatar, 'avatar.jpg');
+  if (update.removeAvatar) body.set('remove_avatar', 'true');
+
+  const res = await fetch(`${API_BASE}/api/auth/me/profile`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body,
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(payload.detail || `HTTP ${res.status}`);
+  }
+  const refreshed = (await res.json()) as AuthSession;
+  writeAuthSession(refreshed);
+  return refreshed;
 }
 
 export async function registerWithPassword(

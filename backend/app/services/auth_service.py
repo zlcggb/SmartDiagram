@@ -304,6 +304,15 @@ def serialize_user(user: LocalAuthUser | dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def serialize_public_user(user: LocalAuthUser | dict[str, Any]) -> dict[str, Any]:
+    """Serialize profile fields returned to clients without bloating the bearer token."""
+
+    serialized = serialize_user(user)
+    avatar_url = str(user.get("avatar_url") or "") if isinstance(user, dict) else ""
+    serialized["avatar_url"] = avatar_url or None
+    return serialized
+
+
 # ─── Authentication ───
 
 def authenticate_local_user(email: str, password: str) -> LocalAuthUser | None:
@@ -333,6 +342,8 @@ async def authenticate_db_user(email: str, password: str, session) -> dict[str, 
     if not verify_password(password, db_user.password_hash):
         return None
 
+    from app.services.profile_service import avatar_url_from_preferences
+
     return {
         "id": db_user.id,
         "user_id": db_user.id,
@@ -344,6 +355,7 @@ async def authenticate_db_user(email: str, password: str, session) -> dict[str, 
         "project_id": f"{db_user.id}-project",
         "roles": [db_user.role],
         "scopes": ADMIN_SCOPES if db_user.role == "admin" else MEMBER_SCOPES,
+        "avatar_url": avatar_url_from_preferences(db_user.id, db_user.preferences_json),
     }
 
 
@@ -422,11 +434,12 @@ async def register_db_user(email: str, password: str, session) -> dict[str, Any]
 def issue_auth_session(user: LocalAuthUser | dict[str, Any]) -> dict[str, Any]:
     now = int(time.time())
     expires_at = now + settings.AUTH_SESSION_TTL_SECONDS
+    token_user = serialize_user(user)
     payload = {
         "iss": "smartdiagram-local-auth",
         "iat": now,
         "exp": expires_at,
-        "user": serialize_user(user),
+        "user": token_user,
     }
     payload_text = _b64_encode(
         json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -436,7 +449,7 @@ def issue_auth_session(user: LocalAuthUser | dict[str, Any]) -> dict[str, Any]:
         "access_token": token,
         "token_type": "bearer",
         "expires_at": expires_at,
-        "user": serialize_user(user),
+        "user": serialize_public_user(user),
     }
 
 
@@ -463,4 +476,3 @@ def bearer_token_from_header(authorization: str | None) -> str:
     if scheme.lower() != "bearer":
         return ""
     return token.strip()
-
