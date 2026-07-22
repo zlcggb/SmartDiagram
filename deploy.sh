@@ -494,7 +494,7 @@ deploy() {
     ok "部署完成！"
     echo ""
     echo -e "${CYAN}服务地址:${NC}"
-    echo -e "  🌐 统一入口: http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${GATEWAY_PORT:-80}"
+    echo -e "  🌐 统一入口: http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${GATEWAY_PORT:-9237}"
     echo -e "  ⚙️  后端 API: http://localhost:9236/api/health"
     echo -e "  🐘 数据库:   postgresql://localhost:5432"
     echo -e "  📊 Draw.io:  http://localhost:9022"

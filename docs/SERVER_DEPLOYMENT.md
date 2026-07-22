@@ -29,6 +29,14 @@ Docker → 设置 → 修改加速 URL → https://docker.1ms.run → 保存 →
 
 检查通过后再运行更新。部署脚本也会在备份和迁移前自动执行同一检查，因此镜像网络异常不会影响数据库和业务容器。国内环境会自动把构建所需的 `ghcr.io/astral-sh/uv` 切换为 `ghcr.1ms.run/astral-sh/uv`，并预拉取实际使用的两个 UV 镜像；海外环境保持官方 GHCR 地址。
 
+宝塔站点只需反向代理统一 gateway，不要直接代理 frontend。根目录 `.env` 保持：
+
+```dotenv
+GATEWAY_PORT=9237
+```
+
+宝塔反向代理目标为 `http://127.0.0.1:9237`。该端口由 gateway 独占，再在 Docker 内网中分流到 frontend、主 API、PPT API 和 Draw.io；frontend 不再直接发布宿主机端口。旧服务器如果 `.env` 仍是 `GATEWAY_PORT=80`，更新前必须改为 9237，否则会与宝塔 Nginx/Apache 冲突。
+
 如果使用自建 Harbor 或其他代理，可以在根目录 `.env` 覆盖：
 
 ```dotenv

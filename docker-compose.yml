@@ -125,8 +125,9 @@ services:
     depends_on:
       - backend
       - drawio
-    ports:
-      - "9237:80"
+    # 只供统一 gateway 通过 Docker 内网访问，不直接占用宿主机 9237。
+    expose:
+      - "80"
 
   # ================= PPT Agent 模块 =================
   # Node 数据/渲染侧车（Prisma + PPTX 渲染，内部 4010）
@@ -214,7 +215,8 @@ services:
       - drawio
       - ppt-python-api
     ports:
-      - "${GATEWAY_PORT:-80}:80"
+      # 宝塔反向代理的唯一入口；统一分流 SPA、主 API、PPT API 和 Draw.io。
+      - "${GATEWAY_PORT:-9237}:80"
 
   # 仅由 deploy.sh --backup/--update 临时调用。所有业务卷均只读挂载，
   # 归档写入宿主机 backups/，不会修改或删除线上用户文件。

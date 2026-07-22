@@ -96,6 +96,23 @@ runpy.run_path(str(scripts_dir / "migrate_database.py"), run_name="deployment_im
 
     assert result.returncode == 0, result.stderr
 
+
+def test_gateway_owns_default_public_port_and_frontend_is_internal_only() -> None:
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    env_example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    deploy_script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
+    frontend_compose = compose[
+        compose.index("  frontend:") : compose.index("\n  # ================= PPT Agent")
+    ]
+    gateway_compose = compose[compose.index("  gateway:") : compose.index("\n  backup-volumes:")]
+
+    assert "    ports:" not in frontend_compose
+    assert '    expose:\n      - "80"' in frontend_compose
+    assert '"${GATEWAY_PORT:-9237}:80"' in gateway_compose
+    assert "GATEWAY_PORT=9237" in env_example
+    assert '${GATEWAY_PORT:-9237}' in deploy_script
+
+
 def test_committed_ppt_migrations_are_non_destructive() -> None:
     migrations = REPO_ROOT / "ppt-agent-engine" / "prisma" / "migrations"
     sql_files = sorted(migrations.glob("*/migration.sql"))
