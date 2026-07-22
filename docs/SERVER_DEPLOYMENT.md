@@ -1,0 +1,90 @@
+# 服务器安全更新与数据库迁移
+
+`deploy.sh` 面向一台安装了 Docker Compose V2 的 Linux 服务器。更新流程遵循：
+
+1. 检查代码、环境和 Compose 配置；
+2. 使用 `pg_dump` 备份 `smartdiagram` 与 `ppt_agent`；
+3. 只读归档知识库、上传资料、PPT 音视频及导出文件卷；
+4. 构建新镜像；
+5. 检查迁移中是否含 `DROP`、`TRUNCATE` 或 `DELETE FROM`；
+6. 执行增量迁移，再替换应用容器；
+7. 检查主 API、统一网关和 PPT API。
+
+脚本不会运行 `docker compose down -v`、`docker volume prune`，也不会重建数据库卷。
+为保证数据库与文件备份处于一致时间点，备份和最终迁移切换时会短暂停止业务写入，完成后自动恢复；镜像构建期间服务仍保持在线。
+
+## 已部署服务器的一键更新
+
+在服务器项目目录运行：
+
+```bash
+cd /你的路径/SmartDiagram
+git status --short
+./deploy.sh --update --with-worker
+```
+
+如果之前启用了 Qdrant，更新时继续带上相同 profile：
+
+```bash
+./deploy.sh --update --with-worker --with-qdrant
+```
+
+`--update` 会拉取 `origin/main`，自动备份、迁移、更新并健康检查。服务器工作区有未提交修改时会主动停止，避免覆盖服务器文件。
+
+若代码已由 CI、面板或人工提前拉取，只需：
+
+```bash
+./deploy.sh --with-worker
+```
+
+## 首次部署
+
+```bash
+cp .env.example .env
+cp backend/.env.example backend/.env
+cp ppt-agent-engine/.env.example ppt-agent-engine/.env
+```
+
+填写密钥后运行：
+
+```bash
+./deploy.sh --with-worker
+```
+
+生产环境第一次初始化前必须替换根目录 `.env` 的 `DB_PASSWORD`。已经部署过的服务器必须继续使用原来的数据库密码；直接修改 Compose 环境变量不会修改 PostgreSQL 卷内保存的用户密码。
+
+## 单独备份
+
+```bash
+./deploy.sh --backup
+```
+
+每次备份位于 `backups/<UTC时间>/`，目录权限为 `0700`，包括：
+
+- `smartdiagram.dump`：主业务库；
+- `ppt_agent.dump`：PPT 项目库；
+- `roles.sql`：数据库角色与权限；
+- `user-volumes.tar.gz`：上传、知识库、PPT 生成文件和 Qdrant 文件；
+- `MANIFEST.txt` 与 `SHA256SUMS`：版本信息和完整性校验。
+
+建议定期把整个备份目录同步到另一台机器或对象存储。只把备份留在同一块服务器磁盘上，无法防止磁盘损坏。
+
+## 失败时如何处理
+
+迁移或健康检查失败时，脚本立即退出并显示备份路径，不会删除数据库或用户卷。先检查：
+
+```bash
+./deploy.sh --status
+./deploy.sh --logs
+```
+
+数据库恢复会覆盖当前状态，因此脚本不提供无确认的一键恢复。需要恢复时，应先保留故障现场，再由运维人员使用对应备份执行 `pg_restore`；不要直接删除 `pgdata`、`pptdata` 或 `knowledgedata` 卷。
+
+## 安全停止与磁盘清理
+
+```bash
+./deploy.sh --down
+./deploy.sh --clean
+```
+
+`--down` 只停止并移除容器网络，保留命名卷。`--clean` 只清理悬空镜像、旧构建缓存和停止的容器，不清理数据卷。

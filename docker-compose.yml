@@ -210,6 +210,25 @@ services:
     ports:
       - "${GATEWAY_PORT:-80}:80"
 
+  # 仅由 deploy.sh --backup/--update 临时调用。所有业务卷均只读挂载，
+  # 归档写入宿主机 backups/，不会修改或删除线上用户文件。
+  backup-volumes:
+    image: pgvector/pgvector:pg16
+    profiles:
+      - tools
+    restart: "no"
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        tar -C /source -czf /backup/user-volumes.tar.gz pptdata knowledgedata qdrantdata
+    volumes:
+      - pptdata:/source/pptdata:ro
+      - knowledgedata:/source/knowledgedata:ro
+      - qdrantdata:/source/qdrantdata:ro
+      - ${BACKUP_DIR:-./backups}:/backup
+
 volumes:
   pgdata:
   qdrantdata:

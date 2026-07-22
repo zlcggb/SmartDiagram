@@ -3,7 +3,9 @@
 # 用法: ./deploy.sh [选项]
 #
 # 选项:
-#   --pull        仅拉取最新代码，不重建
+#   --update      拉取代码、备份、迁移并更新服务（推荐）
+#   --backup      仅备份数据库和用户文件
+#   --pull        仅拉取最新代码，不部署
 #   --rebuild     强制重建所有镜像
 #   --with-worker 同时启动异步 worker
 #   --with-qdrant 同时启动 Qdrant 向量数据库
@@ -13,7 +15,7 @@
 #   --cn          强制启用中国大陆加速
 #   --no-cn       强制禁用中国大陆加速
 
-set -e
+set -Eeuo pipefail
 
 # ── 颜色 ──
 GREEN='\033[0;32m'
@@ -25,11 +27,27 @@ NC='\033[0m'
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
+BACKUP_ROOT="${BACKUP_ROOT:-$ROOT_DIR/backups}"
+LAST_BACKUP_DIR=""
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+PROFILE_ARGS=()
+PAUSED_SERVICES=()
+
 # ── 辅助函数 ──
 info()  { echo -e "${CYAN}ℹ  $1${NC}"; }
 ok()    { echo -e "${GREEN}✅ $1${NC}"; }
 warn()  { echo -e "${YELLOW}⚠️  $1${NC}"; }
 error() { echo -e "${RED}❌ $1${NC}"; exit 1; }
+
+on_error() {
+    local line="$1"
+    resume_writers
+    warn "部署在第 ${line} 行中断；数据库卷和用户文件卷均未删除。"
+    if [ -n "$LAST_BACKUP_DIR" ]; then
+        warn "本次部署前备份保存在: $LAST_BACKUP_DIR"
+    fi
+}
+trap 'on_error "$LINENO"' ERR
 
 # ── 检测中国大陆网络 ──
 # 通过尝试访问 google.com 判断（超时 3 秒），不通则认为是大陆网络
@@ -61,11 +79,14 @@ setup_docker_mirror() {
     fi
 
     local DAEMON_JSON="/etc/docker/daemon.json"
-    local NEED_RESTART=false
-
     # 检查是否已配置镜像加速
     if [ -f "$DAEMON_JSON" ] && grep -q "registry-mirrors" "$DAEMON_JSON"; then
         info "Docker 镜像加速已配置，跳过"
+        return
+    fi
+
+    if [ "$(id -u)" -ne 0 ] || ! command -v systemctl &>/dev/null; then
+        warn "当前环境不能自动修改 Docker daemon；跳过系统级镜像加速配置"
         return
     fi
 
@@ -103,6 +124,13 @@ check_docker() {
     if ! docker compose version &>/dev/null; then
         error "未安装 Docker Compose V2，请升级 Docker"
     fi
+    if ! docker info &>/dev/null; then
+        error "Docker daemon 未运行或当前用户无访问权限，请先启动 Docker 并检查 docker 用户组权限"
+    fi
+    if ! command -v curl &>/dev/null; then
+        error "未安装 curl，无法执行部署后的健康检查"
+    fi
+    docker compose config --quiet
     ok "Docker 环境就绪"
 }
 
@@ -132,8 +160,11 @@ check_env() {
 # ── 拉取代码 ──
 pull_code() {
     if [ -d ".git" ]; then
+        if ! git diff --quiet || ! git diff --cached --quiet; then
+            error "服务器工作区存在未提交修改，已停止更新以免覆盖。请先提交或备份这些修改"
+        fi
         info "拉取最新代码..."
-        git pull --ff-only origin main || {
+        git pull --ff-only origin "$DEPLOY_BRANCH" || {
             warn "Git pull 失败，可能有本地修改。请手动处理后重试"
             exit 1
         }
@@ -144,20 +175,196 @@ pull_code() {
 }
 
 # ── 构建 profiles 参数 ──
-build_profiles() {
-    PROFILES=""
+prepare_profiles() {
+    PROFILE_ARGS=()
     if [ "$WITH_WORKER" = true ]; then
-        PROFILES="$PROFILES --profile worker"
+        PROFILE_ARGS+=(--profile worker)
     fi
     if [ "$WITH_QDRANT" = true ]; then
-        PROFILES="$PROFILES --profile qdrant"
+        PROFILE_ARGS+=(--profile qdrant)
     fi
-    echo "$PROFILES"
+}
+
+compose() {
+    docker compose "${PROFILE_ARGS[@]}" "$@"
+}
+
+pause_writers() {
+    local running service
+    PAUSED_SERVICES=()
+    running="$(docker compose --profile worker --profile qdrant ps --status running --services 2>/dev/null || true)"
+
+    for service in backend worker ppt-node-api ppt-python-api qdrant; do
+        if echo "$running" | grep -qx "$service"; then
+            info "短暂停写以生成一致备份/迁移: $service"
+            docker compose --profile worker --profile qdrant pause "$service"
+            PAUSED_SERVICES+=("$service")
+        fi
+    done
+}
+
+resume_writers() {
+    local service
+    if [ "${#PAUSED_SERVICES[@]}" -eq 0 ]; then
+        return
+    fi
+    for service in "${PAUSED_SERVICES[@]}"; do
+        docker compose --profile worker --profile qdrant unpause "$service" >/dev/null 2>&1 || true
+    done
+    PAUSED_SERVICES=()
+    ok "业务写入服务已恢复"
+}
+
+wait_for_database() {
+    info "等待 PostgreSQL 就绪..."
+    local attempt
+    for attempt in $(seq 1 60); do
+        if compose exec -T db pg_isready -U postgres -d smartdiagram >/dev/null 2>&1; then
+            ok "PostgreSQL 已就绪"
+            return
+        fi
+        sleep 2
+    done
+    error "PostgreSQL 在 120 秒内未就绪"
+}
+
+prepare_databases() {
+    info "启动数据库与 Redis（保留现有命名卷）..."
+    compose up -d db redis
+    wait_for_database
+
+    # 只在不存在时创建 PPT 数据库；不会重建已有数据库。
+    compose up --no-deps ppt-db-init
+}
+
+write_checksums() {
+    local backup_dir="$1"
+    if command -v sha256sum &>/dev/null; then
+        (cd "$backup_dir" && sha256sum ./*.dump ./*.sql ./*.tar.gz MANIFEST.txt > SHA256SUMS)
+    else
+        (cd "$backup_dir" && shasum -a 256 ./*.dump ./*.sql ./*.tar.gz MANIFEST.txt > SHA256SUMS)
+    fi
+}
+
+backup_data() {
+    prepare_databases
+
+    local timestamp backup_dir revision ppt_exists
+    timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    backup_dir="$BACKUP_ROOT/$timestamp"
+    revision="unknown"
+    if [ -d .git ]; then
+        revision="$(git rev-parse HEAD)"
+    fi
+
+    umask 077
+    mkdir -p "$backup_dir"
+    chmod 700 "$backup_dir"
+    LAST_BACKUP_DIR="$backup_dir"
+
+    # 逻辑库和文件卷必须来自同一稳定时间点，避免上传过程中只备份到半个文件。
+    pause_writers
+
+    info "备份 SmartDiagram 主数据库..."
+    compose exec -T db pg_dump -U postgres -d smartdiagram \
+        --format=custom --no-owner --no-acl > "$backup_dir/smartdiagram.dump"
+    test -s "$backup_dir/smartdiagram.dump"
+
+    ppt_exists="$(compose exec -T db psql -U postgres -d postgres -tAc \
+        "SELECT 1 FROM pg_database WHERE datname = 'ppt_agent'" | tr -d '[:space:]')"
+    if [ "$ppt_exists" = "1" ]; then
+        info "备份 PPT Agent 数据库..."
+        compose exec -T db pg_dump -U postgres -d ppt_agent \
+            --format=custom --no-owner --no-acl > "$backup_dir/ppt_agent.dump"
+    else
+        # 保持校验清单结构稳定；正常情况下 ppt-db-init 已创建该库。
+        error "PPT Agent 数据库不存在，停止部署"
+    fi
+    test -s "$backup_dir/ppt_agent.dump"
+
+    info "备份数据库角色和权限..."
+    compose exec -T db pg_dumpall -U postgres --roles-only > "$backup_dir/roles.sql"
+    test -s "$backup_dir/roles.sql"
+
+    info "只读归档用户上传、知识库和 PPT 导出文件..."
+    BACKUP_DIR="$backup_dir" docker compose --profile tools run --rm --no-deps backup-volumes
+    test -s "$backup_dir/user-volumes.tar.gz"
+
+    {
+        echo "created_at_utc=$timestamp"
+        echo "git_revision=$revision"
+        echo "compose_project=$(docker compose ls --format json 2>/dev/null | tr -d '\n')"
+        echo "contains=smartdiagram.dump,ppt_agent.dump,roles.sql,user-volumes.tar.gz"
+        echo "policy=non_destructive_backup_before_migration"
+    } > "$backup_dir/MANIFEST.txt"
+    write_checksums "$backup_dir"
+    resume_writers
+
+    ok "完整备份已生成: $backup_dir"
+}
+
+audit_migrations() {
+    local findings
+    [ -d ppt-agent-engine/prisma/migrations ] || error "PPT 数据库迁移目录不存在"
+    findings="$(grep -ERin --include='migration.sql' \
+        '(^|[[:space:];])(DROP|TRUNCATE)([[:space:]]|$)|DELETE[[:space:]]+FROM' \
+        ppt-agent-engine/prisma/migrations || true)"
+    if [ -n "$findings" ]; then
+        echo "$findings"
+        error "检测到破坏性数据库语句，自动部署已停止；请人工审核并制定数据迁移方案"
+    fi
+    ok "迁移安全检查通过（未发现 DROP、TRUNCATE、DELETE FROM）"
+}
+
+migrate_databases() {
+    audit_migrations
+
+    info "执行 SmartDiagram 主数据库增量初始化..."
+    compose run --rm --no-deps backend python scripts/migrate_database.py
+
+    info "执行 PPT Agent 事务型增量迁移..."
+    compose run --rm --no-deps ppt-node-api ./node_modules/.bin/tsx prisma/apply-migrations.ts
+
+    ok "数据库迁移完成，既有表和用户数据均保留"
+}
+
+wait_for_url() {
+    local name="$1"
+    local url="$2"
+    local attempt
+    for attempt in $(seq 1 60); do
+        if curl -fsS --max-time 5 "$url" >/dev/null 2>&1; then
+            ok "$name 健康检查通过"
+            return
+        fi
+        sleep 2
+    done
+    error "$name 健康检查失败: $url"
+}
+
+verify_deployment() {
+    local gateway_port backend_port
+    gateway_port="$(compose port gateway 80 | tail -n 1 | awk -F: '{print $NF}')"
+    backend_port="$(compose port backend 8000 | tail -n 1 | awk -F: '{print $NF}')"
+    test -n "$gateway_port"
+    test -n "$backend_port"
+
+    wait_for_url "SmartDiagram API" "http://127.0.0.1:${backend_port}/api/health"
+    wait_for_url "统一网关" "http://127.0.0.1:${gateway_port}/nginx-health"
+    wait_for_url "PPT Agent API" "http://127.0.0.1:${gateway_port}/ppt-api/api/health"
 }
 
 # ── 部署 ──
 deploy() {
     check_docker
+    prepare_profiles
+
+    if [ "$UPDATE_CODE" = true ]; then
+        pull_code
+        # 新版本可能调整 Compose 或环境变量要求，拉取后重新验证。
+        docker compose config --quiet
+    fi
+
     check_env
     detect_cn
 
@@ -169,15 +376,27 @@ deploy() {
     # 导出 CN_MIRROR 供 docker-compose.yml 的 build args 读取
     export CN_MIRROR
 
-    PROFILES=$(build_profiles)
+    # 每次更新都先做逻辑数据库备份和用户文件卷只读归档。
+    # 备份成功之前不会构建、迁移或替换任何业务容器。
+    backup_data
 
     if [ "$FORCE_REBUILD" = true ]; then
         info "强制重建所有镜像..."
-        docker compose $PROFILES build --no-cache
+        compose build --no-cache
+    else
+        info "构建最新应用镜像..."
+        compose build
     fi
 
-    info "启动所有服务..."
-    docker compose $PROFILES up --build -d
+    # 构建期间保持服务在线；迁移与容器切换期间短暂停写。
+    pause_writers
+    migrate_databases
+
+    info "更新并启动所有服务（保留现有命名卷）..."
+    compose up -d --remove-orphans
+    resume_writers
+
+    verify_deployment
 
     # 自动清理：只删除悬空镜像（旧构建残留），保留构建缓存供下次复用
     info "清理悬空镜像..."
@@ -187,8 +406,8 @@ deploy() {
     ok "部署完成！"
     echo ""
     echo -e "${CYAN}服务地址:${NC}"
-    echo -e "  🌐 前端:     http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):80"
-    echo -e "  ⚙️  后端 API: http://localhost:8000"
+    echo -e "  🌐 统一入口: http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${GATEWAY_PORT:-80}"
+    echo -e "  ⚙️  后端 API: http://localhost:9236/api/health"
     echo -e "  🐘 数据库:   postgresql://localhost:5432"
     echo -e "  📊 Draw.io:  http://localhost:9022"
     if [ "$WITH_QDRANT" = true ]; then
@@ -196,24 +415,29 @@ deploy() {
     fi
     echo ""
     echo -e "${CYAN}常用命令:${NC}"
+    echo "  ./deploy.sh --update     拉取、备份、迁移并更新"
+    echo "  ./deploy.sh --backup     仅备份数据库和用户文件"
     echo "  ./deploy.sh --logs       查看实时日志"
     echo "  ./deploy.sh --status     查看服务状态"
     echo "  ./deploy.sh --down       停止所有服务"
     echo "  ./deploy.sh --rebuild    强制重建并部署"
     echo "  ./deploy.sh --clean      深度清理 Docker 磁盘空间"
+    echo ""
+    echo -e "${CYAN}本次备份:${NC} $LAST_BACKUP_DIR"
 }
 
 # ── 停止 ──
 stop_all() {
     info "停止所有服务..."
-    PROFILES=$(build_profiles)
-    docker compose $PROFILES down
-    ok "所有服务已停止"
+    prepare_profiles
+    compose down
+    ok "所有服务已停止；命名卷未删除，用户数据仍然保留"
 }
 
 # ── 日志 ──
 show_logs() {
-    docker compose logs -f --tail=100
+    prepare_profiles
+    compose logs -f --tail=100
 }
 
 # ── 状态 ──
@@ -222,7 +446,15 @@ show_status() {
     echo -e "${CYAN}║    SmartDiagram 服务状态             ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
     echo ""
-    docker compose ps
+    prepare_profiles
+    compose ps
+}
+
+backup_only() {
+    check_docker
+    prepare_profiles
+    backup_data
+    ok "备份完成；没有构建镜像、迁移数据库或重启业务服务"
 }
 
 # ── 深度清理 ──
@@ -258,6 +490,7 @@ deep_clean() {
 WITH_WORKER=false
 WITH_QDRANT=false
 FORCE_REBUILD=false
+UPDATE_CODE=false
 ACTION="deploy"
 
 for arg in "$@"; do
@@ -265,6 +498,12 @@ for arg in "$@"; do
         --pull)
             pull_code
             exit 0
+            ;;
+        --update)
+            UPDATE_CODE=true
+            ;;
+        --backup)
+            ACTION="backup"
             ;;
         --rebuild)
             FORCE_REBUILD=true
@@ -297,7 +536,9 @@ for arg in "$@"; do
             echo "用法: ./deploy.sh [选项]"
             echo ""
             echo "选项:"
-            echo "  --pull         仅拉取最新代码"
+            echo "  --update       拉取最新代码、完整备份、增量迁移并更新服务（推荐）"
+            echo "  --backup       仅备份数据库和用户文件，不更新服务"
+            echo "  --pull         仅拉取最新代码，不部署"
             echo "  --rebuild      强制重建所有镜像"
             echo "  --with-worker  同时启动异步 worker"
             echo "  --with-qdrant  同时启动 Qdrant"
@@ -307,6 +548,11 @@ for arg in "$@"; do
             echo "  --logs         查看实时日志"
             echo "  --status       查看服务状态"
             echo "  --clean        深度清理 Docker 磁盘空间"
+            echo ""
+            echo "数据安全保证:"
+            echo "  - 更新前自动备份 smartdiagram、ppt_agent 和所有用户文件卷"
+            echo "  - 迁移发现 DROP/TRUNCATE/DELETE FROM 时立即中止"
+            echo "  - 所有 down/clean 操作都不会删除 Docker 命名卷"
             exit 0
             ;;
         *)
@@ -320,5 +566,6 @@ case $ACTION in
     stop)    stop_all   ;;
     logs)    show_logs  ;;
     status)  show_status ;;
+    backup)  backup_only ;;
     clean)   deep_clean ;;
 esac

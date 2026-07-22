@@ -33,6 +33,7 @@ backend/.env
 **/.playwright-cli/
 /output/
 /tmp/
+/backups/
 playwright-report/
 test-results/
 .pytest_cache/
