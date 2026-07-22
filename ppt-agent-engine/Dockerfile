@@ -1,8 +1,7 @@
-# syntax=docker/dockerfile:1.7
-
 ARG NODE_IMAGE=node:22-bookworm-slim
 ARG PYTHON_IMAGE=python:3.12-slim-bookworm
 ARG NGINX_IMAGE=nginx:stable-alpine
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.10.5
 
 FROM ${NODE_IMAGE} AS node-deps
 
@@ -69,9 +68,11 @@ EXPOSE 4010
 
 CMD ["sh", "-c", "./node_modules/.bin/tsx prisma/apply-migrations.ts && exec node apps/api/dist/index.js"]
 
+FROM ${UV_IMAGE} AS uv-tools
+
 FROM ${PYTHON_IMAGE} AS python-api
 
-COPY --from=ghcr.io/astral-sh/uv:0.10.5 /uv /uvx /bin/
+COPY --from=uv-tools /uv /uvx /bin/
 
 ENV PYTHONUNBUFFERED=1
 ENV UV_PROJECT_ENVIRONMENT=/app/apps/api-python/.venv

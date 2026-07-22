@@ -6,6 +6,7 @@
 #   --update      拉取代码、备份、迁移并更新服务（推荐）
 #   --backup      仅备份数据库和用户文件
 #   --pull        仅拉取最新代码，不部署
+#   --check-mirror 检查宝塔/Docker 镜像加速是否可用
 #   --rebuild     强制重建所有镜像
 #   --with-worker 同时启动异步 worker
 #   --with-qdrant 同时启动 Qdrant 向量数据库
@@ -32,6 +33,7 @@ LAST_BACKUP_DIR=""
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 PROFILE_ARGS=()
 PAUSED_SERVICES=()
+LEGACY_STORAGE_FILE_COUNT=0
 
 # ── 辅助函数 ──
 info()  { echo -e "${CYAN}ℹ  $1${NC}"; }
@@ -72,48 +74,84 @@ detect_cn() {
     fi
 }
 
-# ── 配置 Docker 镜像加速 ──
-setup_docker_mirror() {
-    if [ "$CN_MIRROR" != "true" ]; then
-        return
+dotenv_value() {
+    local key="$1"
+    local value=""
+    if [ -f .env ]; then
+        value="$(sed -n "s/^${key}=//p" .env | tail -n 1)"
+        value="${value%\"}"
+        value="${value#\"}"
+        value="${value%\'}"
+        value="${value#\'}"
     fi
-
-    local DAEMON_JSON="/etc/docker/daemon.json"
-    # 检查是否已配置镜像加速
-    if [ -f "$DAEMON_JSON" ] && grep -q "registry-mirrors" "$DAEMON_JSON"; then
-        info "Docker 镜像加速已配置，跳过"
-        return
-    fi
-
-    if [ "$(id -u)" -ne 0 ] || ! command -v systemctl &>/dev/null; then
-        warn "当前环境不能自动修改 Docker daemon；跳过系统级镜像加速配置"
-        return
-    fi
-
-    info "配置 Docker 镜像加速..."
-
-    # 备份已有配置
-    if [ -f "$DAEMON_JSON" ]; then
-        cp "$DAEMON_JSON" "${DAEMON_JSON}.bak"
-    fi
-
-    # 写入镜像加速配置
-    cat > "$DAEMON_JSON" << 'EOF'
-{
-  "registry-mirrors": [
-    "https://ufzlhjz9.mirror.aliyuncs.com"
-  ]
+    echo "$value"
 }
-EOF
 
-    # 重启 Docker
-    if systemctl is-active --quiet docker; then
-        info "重启 Docker 使镜像加速生效..."
-        systemctl daemon-reload
-        systemctl restart docker
-        sleep 2
-        ok "Docker 镜像加速已生效"
+configure_build_image_sources() {
+    local configured_uv configured_uv_python
+    configured_uv="${UV_IMAGE:-$(dotenv_value UV_IMAGE)}"
+    configured_uv_python="${UV_PYTHON_IMAGE:-$(dotenv_value UV_PYTHON_IMAGE)}"
+
+    if [ "$CN_MIRROR" = "true" ]; then
+        UV_IMAGE="${configured_uv:-ghcr.1ms.run/astral-sh/uv:0.10.5}"
+        UV_PYTHON_IMAGE="${configured_uv_python:-ghcr.1ms.run/astral-sh/uv:python3.13-bookworm-slim}"
+    else
+        UV_IMAGE="${configured_uv:-ghcr.io/astral-sh/uv:0.10.5}"
+        UV_PYTHON_IMAGE="${configured_uv_python:-ghcr.io/astral-sh/uv:python3.13-bookworm-slim}"
     fi
+
+    export UV_IMAGE UV_PYTHON_IMAGE
+    info "UV 工具镜像: $UV_IMAGE"
+    info "Python 构建镜像: $UV_PYTHON_IMAGE"
+}
+
+# ── 检查 Docker 镜像加速 ──
+# 宝塔会管理 /etc/docker/daemon.json；项目只读检查，绝不覆盖面板配置。
+check_docker_mirror() {
+    local mirrors panel_hint
+    mirrors="$(docker info --format '{{range .RegistryConfig.Mirrors}}{{println .}}{{end}}' 2>/dev/null || true)"
+    panel_hint="宝塔面板 → Docker → 设置 → 修改加速 URL → https://docker.1ms.run → 保存并重启 Docker"
+
+    if [ -n "$mirrors" ]; then
+        info "Docker 当前镜像加速器: $(echo "$mirrors" | tr '\n' ' ')"
+    elif [ "$CN_MIRROR" = "true" ]; then
+        warn "国内网络未检测到 Docker registry mirror"
+        if [ -d /www/server/panel ]; then
+            warn "$panel_hint"
+        fi
+        error "请先配置国内 Docker 镜像加速并重启 Docker"
+    fi
+
+    if [ "$CN_MIRROR" = "true" ]; then
+        if [ -d /www/server/panel ] && ! echo "$mirrors" | grep -q 'docker\.1ms\.run'; then
+            warn "检测到宝塔面板，但当前不是宝塔近期推荐的合作加速节点"
+            warn "$panel_hint"
+        fi
+
+        # 使用极小的公共镜像做真实 pull，避免等到备份和大镜像构建后才发现网络失败。
+        info "验证 Docker Hub 镜像加速链路..."
+        if ! docker pull hello-world:latest >/dev/null 2>&1; then
+            warn "当前 registry mirror 无法完成 Docker Hub 拉取"
+            if [ -d /www/server/panel ]; then
+                warn "$panel_hint"
+            fi
+            error "Docker 镜像加速验证失败，尚未备份、迁移或替换业务容器"
+        fi
+        ok "Docker Hub 镜像加速链路可用"
+    fi
+
+    # GHCR 不使用 Docker Hub registry-mirrors，国内必须显式切换 ghcr.1ms.run。
+    # 这两个镜像是后续构建的真实依赖；提前拉取可缓存镜像并避免备份后才超时。
+    info "验证 GHCR UV 工具镜像..."
+    if ! docker pull "$UV_IMAGE"; then
+        error "UV 工具镜像拉取失败: $UV_IMAGE（尚未备份、迁移或替换业务容器）"
+    fi
+
+    info "验证 GHCR Python 构建镜像..."
+    if ! docker pull "$UV_PYTHON_IMAGE"; then
+        error "Python 构建镜像拉取失败: $UV_PYTHON_IMAGE（尚未备份、迁移或替换业务容器）"
+    fi
+    ok "Docker Hub 与 GHCR 镜像链路均可用"
 }
 
 # ── 检查 Docker ──
@@ -228,6 +266,52 @@ wait_for_database() {
     error "PostgreSQL 在 120 秒内未就绪"
 }
 
+detect_legacy_storage_layout() {
+    local mounted file_count
+    LEGACY_STORAGE_FILE_COUNT=0
+    if ! docker container inspect smartdiagram-backend >/dev/null 2>&1; then
+        return
+    fi
+
+    mounted="$(docker container inspect smartdiagram-backend \
+        --format '{{range .Mounts}}{{if eq .Destination "/app/storage"}}mounted{{end}}{{end}}' 2>/dev/null || true)"
+    if [ "$mounted" = "mounted" ]; then
+        return
+    fi
+
+    file_count="$(docker exec smartdiagram-backend sh -c \
+        'find /app/storage -type f 2>/dev/null | wc -l' 2>/dev/null | tr -d '[:space:]' || true)"
+    case "$file_count" in
+        ''|*[!0-9]*) file_count=0 ;;
+    esac
+    if [ "$file_count" -gt 0 ]; then
+        warn "旧 backend 容器的 /app/storage 内检测到 ${file_count} 个文件，但该目录未挂载命名卷"
+        LEGACY_STORAGE_FILE_COUNT="$file_count"
+    fi
+}
+
+migrate_legacy_storage() {
+    local backup_dir="$1"
+    local legacy_dir copied_count
+    if [ "$LEGACY_STORAGE_FILE_COUNT" -eq 0 ]; then
+        return
+    fi
+
+    legacy_dir="$backup_dir/legacy-backend-storage"
+    mkdir -p "$legacy_dir"
+    info "从旧 backend 容器备份历史上传文件..."
+    docker cp smartdiagram-backend:/app/storage/. "$legacy_dir/"
+    copied_count="$(find "$legacy_dir" -type f | wc -l | tr -d '[:space:]')"
+    if [ "$copied_count" -lt "$LEGACY_STORAGE_FILE_COUNT" ]; then
+        error "旧容器文件备份不完整（检测 ${LEGACY_STORAGE_FILE_COUNT}，复制 ${copied_count}）"
+    fi
+
+    info "将历史上传文件导入持久化命名卷（仅允许空卷）..."
+    LEGACY_STORAGE_SOURCE="$legacy_dir" \
+        docker compose --profile tools run --rm --no-deps legacy-storage-import
+    ok "历史上传文件已备份并迁移到 knowledgedata 命名卷"
+}
+
 prepare_databases() {
     info "启动数据库与 Redis（保留现有命名卷）..."
     compose up -d db redis
@@ -247,6 +331,7 @@ write_checksums() {
 }
 
 backup_data() {
+    detect_legacy_storage_layout
     prepare_databases
 
     local timestamp backup_dir revision ppt_exists
@@ -264,6 +349,9 @@ backup_data() {
 
     # 逻辑库和文件卷必须来自同一稳定时间点，避免上传过程中只备份到半个文件。
     pause_writers
+    # 暂停后再复制容器层文件，保证文件数量和内容不在迁移过程中变化。
+    # 导入工具拒绝覆盖非空目标卷。
+    migrate_legacy_storage "$backup_dir"
 
     info "备份 SmartDiagram 主数据库..."
     compose exec -T db pg_dump -U postgres -d smartdiagram \
@@ -295,6 +383,7 @@ backup_data() {
         echo "git_revision=$revision"
         echo "compose_project=$(docker compose ls --format json 2>/dev/null | tr -d '\n')"
         echo "contains=smartdiagram.dump,ppt_agent.dump,roles.sql,user-volumes.tar.gz"
+        echo "legacy_storage_files_migrated=$LEGACY_STORAGE_FILE_COUNT"
         echo "policy=non_destructive_backup_before_migration"
     } > "$backup_dir/MANIFEST.txt"
     write_checksums "$backup_dir"
@@ -367,11 +456,10 @@ deploy() {
 
     check_env
     detect_cn
+    configure_build_image_sources
 
-    # 配置 Docker 镜像加速（仅中国大陆）
-    if [ "$CN_MIRROR" = "true" ]; then
-        setup_docker_mirror
-    fi
+    # 宝塔/宿主机负责配置 daemon；这里只读验证真实 pull 能否成功。
+    check_docker_mirror
 
     # 导出 CN_MIRROR 供 docker-compose.yml 的 build args 读取
     export CN_MIRROR
@@ -457,6 +545,13 @@ backup_only() {
     ok "备份完成；没有构建镜像、迁移数据库或重启业务服务"
 }
 
+check_mirror_only() {
+    check_docker
+    detect_cn
+    configure_build_image_sources
+    check_docker_mirror
+}
+
 # ── 深度清理 ──
 deep_clean() {
     echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
@@ -505,6 +600,9 @@ for arg in "$@"; do
         --backup)
             ACTION="backup"
             ;;
+        --check-mirror)
+            ACTION="check_mirror"
+            ;;
         --rebuild)
             FORCE_REBUILD=true
             ;;
@@ -539,6 +637,7 @@ for arg in "$@"; do
             echo "  --update       拉取最新代码、完整备份、增量迁移并更新服务（推荐）"
             echo "  --backup       仅备份数据库和用户文件，不更新服务"
             echo "  --pull         仅拉取最新代码，不部署"
+            echo "  --check-mirror 检查宝塔/Docker 镜像加速是否能够真实拉取"
             echo "  --rebuild      强制重建所有镜像"
             echo "  --with-worker  同时启动异步 worker"
             echo "  --with-qdrant  同时启动 Qdrant"
@@ -567,5 +666,6 @@ case $ACTION in
     logs)    show_logs  ;;
     status)  show_status ;;
     backup)  backup_only ;;
+    check_mirror) check_mirror_only ;;
     clean)   deep_clean ;;
 esac

@@ -122,6 +122,9 @@ npm run dev:frontend
 
 # 已部署服务器一键更新：拉取、备份、增量迁移、更新、健康检查
 ./deploy.sh --update --with-worker
+
+# 国内/宝塔服务器可先独立验证 Docker 镜像加速
+./deploy.sh --check-mirror
 ```
 
 更新流程不会删除 PostgreSQL、上传资料、知识库或 PPT 生成文件卷。完整的首次部署、备份、迁移和故障处理说明见 [服务器安全更新与数据库迁移](./docs/SERVER_DEPLOYMENT.md)。

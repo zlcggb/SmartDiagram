@@ -13,6 +13,31 @@
 脚本不会运行 `docker compose down -v`、`docker volume prune`，也不会重建数据库卷。
 为保证数据库与文件备份处于一致时间点，备份和最终迁移切换时会短暂停止业务写入，完成后自动恢复；镜像构建期间服务仍保持在线。
 
+## 宝塔面板与国内镜像
+
+项目不会修改 `/etc/docker/daemon.json`，避免覆盖宝塔维护的 Docker 设置。深圳等国内服务器建议在宝塔面板进入：
+
+```text
+Docker → 设置 → 修改加速 URL → https://docker.1ms.run → 保存 → 重启 Docker
+```
+
+重启后先做真实拉取检查：
+
+```bash
+./deploy.sh --check-mirror
+```
+
+检查通过后再运行更新。部署脚本也会在备份和迁移前自动执行同一检查，因此镜像网络异常不会影响数据库和业务容器。国内环境会自动把构建所需的 `ghcr.io/astral-sh/uv` 切换为 `ghcr.1ms.run/astral-sh/uv`，并预拉取实际使用的两个 UV 镜像；海外环境保持官方 GHCR 地址。
+
+如果使用自建 Harbor 或其他代理，可以在根目录 `.env` 覆盖：
+
+```dotenv
+UV_IMAGE=你的镜像仓库/astral-sh/uv:0.10.5
+UV_PYTHON_IMAGE=你的镜像仓库/astral-sh/uv:python3.13-bookworm-slim
+```
+
+脚本还会检查旧版 `smartdiagram-backend` 是否把上传文件留在容器内部。如果 `/app/storage` 有文件但没有挂载命名卷，会先复制到本次备份目录，再仅在 `knowledgedata` 目标卷为空时自动导入。目标卷已有内容时会停止，绝不覆盖现有文件。
+
 ## 已部署服务器的一键更新
 
 在服务器项目目录运行：
