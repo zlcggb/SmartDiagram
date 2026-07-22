@@ -205,6 +205,7 @@ services:
       dockerfile: Dockerfile
       args:
         CN_MIRROR: ${CN_MIRROR:-false}
+        UV_PYTHON_IMAGE: ${UV_PYTHON_IMAGE:-ghcr.io/astral-sh/uv:python3.13-bookworm-slim}
     container_name: deepdiagram-gateway
     restart: always
     depends_on:

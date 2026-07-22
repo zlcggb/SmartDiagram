@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -43,7 +45,9 @@ def test_china_deploy_uses_configurable_ghcr_mirror_before_backup() -> None:
     compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     backend_dockerfile = (REPO_ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     frontend_dockerfile = (REPO_ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+    gateway_dockerfile = (REPO_ROOT / "gateway" / "Dockerfile").read_text(encoding="utf-8")
     ppt_dockerfile = (REPO_ROOT / "ppt-agent-engine" / "Dockerfile").read_text(encoding="utf-8")
+    gateway_compose = compose[compose.index("  gateway:") : compose.index("\n  backup-volumes:")]
 
     assert "configure_build_image_sources" in script
     assert "ghcr.1ms.run/astral-sh/uv:0.10.5" in script
@@ -57,9 +61,40 @@ def test_china_deploy_uses_configurable_ghcr_mirror_before_backup() -> None:
     assert "FROM ${UV_PYTHON_IMAGE}" in backend_dockerfile
     assert "ARG UV_PYTHON_IMAGE=ghcr.io/astral-sh/uv:python3.13-bookworm-slim" in frontend_dockerfile
     assert "FROM ${UV_PYTHON_IMAGE}" in frontend_dockerfile
+    assert "UV_PYTHON_IMAGE" in gateway_compose
+    assert "ARG UV_PYTHON_IMAGE=ghcr.io/astral-sh/uv:python3.13-bookworm-slim" in gateway_dockerfile
+    assert "FROM ${UV_PYTHON_IMAGE}" in gateway_dockerfile
     assert "ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.10.5" in ppt_dockerfile
     assert "FROM ${UV_IMAGE} AS uv-tools" in ppt_dockerfile
     assert "COPY --from=uv-tools /uv /uvx /bin/" in ppt_dockerfile
+
+
+def test_database_migration_script_imports_app_when_executed_by_path() -> None:
+    backend_dir = REPO_ROOT / "backend"
+    import_check = """
+import runpy
+import sys
+from pathlib import Path
+
+backend_dir = Path(sys.argv[1]).resolve()
+scripts_dir = backend_dir / "scripts"
+sys.path = [str(scripts_dir)] + [
+    entry
+    for entry in sys.path
+    if entry and Path(entry).resolve() != backend_dir
+]
+runpy.run_path(str(scripts_dir / "migrate_database.py"), run_name="deployment_import_check")
+"""
+
+    result = subprocess.run(
+        [sys.executable, "-c", import_check, str(backend_dir)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 def test_committed_ppt_migrations_are_non_destructive() -> None:
     migrations = REPO_ROOT / "ppt-agent-engine" / "prisma" / "migrations"

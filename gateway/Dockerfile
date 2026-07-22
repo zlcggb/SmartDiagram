@@ -1,6 +1,7 @@
 # 聚合网关：nginx 按路径分流（/ → 统一前端 SPA，/api、/ppt-api → 各后端）
-# 与 frontend/Dockerfile 一致，使用 ghcr.io 基础镜像 + apt 安装 nginx（避开被墙的 docker.io）
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+# 国内部署由 deploy.sh 切换为 ghcr.1ms.run，国际环境仍使用 ghcr.io。
+ARG UV_PYTHON_IMAGE=ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+FROM ${UV_PYTHON_IMAGE}
 
 ARG CN_MIRROR=false
 RUN if [ "$CN_MIRROR" = "true" ]; then \
