@@ -38,7 +38,6 @@ def test_baota_mirror_is_checked_without_overwriting_daemon_config() -> None:
     assert 'cat > "$DAEMON_JSON"' not in script
     assert "# syntax=docker/dockerfile" not in ppt_dockerfile
 
-
 def test_china_deploy_uses_configurable_ghcr_mirror_before_backup() -> None:
     script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
     compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
@@ -61,7 +60,6 @@ def test_china_deploy_uses_configurable_ghcr_mirror_before_backup() -> None:
     assert "ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.10.5" in ppt_dockerfile
     assert "FROM ${UV_IMAGE} AS uv-tools" in ppt_dockerfile
     assert "COPY --from=uv-tools /uv /uvx /bin/" in ppt_dockerfile
-
 
 def test_committed_ppt_migrations_are_non_destructive() -> None:
     migrations = REPO_ROOT / "ppt-agent-engine" / "prisma" / "migrations"
