@@ -8300,3 +8300,346 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
     align-items: stretch;
   }
 }
+
+/* Mobile workspace polish: keep every PPT stage usable inside the fixed app shell. */
+@media (max-width: 640px) {
+  .ppt-root {
+    --ppt-mobile-gutter: 0.875rem;
+  }
+
+  .ppt-root .home-main {
+    width: 100%;
+    padding-right: var(--ppt-mobile-gutter);
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+    padding-left: var(--ppt-mobile-gutter);
+  }
+
+  .ppt-root .home-topbar__inner {
+    min-height: 52px;
+    padding-inline: var(--ppt-mobile-gutter);
+  }
+
+  .ppt-root .home-navlink,
+  .ppt-root .home-tool,
+  .ppt-root .home-send,
+  .ppt-root .home-starters button,
+  .ppt-root .home-retry {
+    min-height: 44px;
+  }
+
+  .ppt-root .home-starters {
+    gap: 7px;
+  }
+
+  .ppt-root .home-starters > span {
+    width: 100%;
+    text-align: center;
+  }
+
+  .ppt-root .home-starters button {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .ppt-root .home-project-card {
+    min-height: 112px;
+    grid-template-columns: 5.4rem minmax(0, 1fr);
+  }
+
+  .ppt-root .home-project-card__cover {
+    min-height: 86px;
+  }
+
+  .ppt-root .studio-shell {
+    min-width: 0;
+  }
+
+  .ppt-root .studio-shell .workspace-header__main,
+  .ppt-root .studio-shell .workspace-header__nav-row,
+  .ppt-root .workspace-header__main,
+  .ppt-root .workspace-header__nav-row {
+    width: 100%;
+    padding-inline: var(--ppt-mobile-gutter);
+  }
+
+  .ppt-root .studio-shell .workspace-header__main,
+  .ppt-root .workspace-header__main {
+    min-height: 58px;
+    align-items: center;
+  }
+
+  .ppt-root .studio-shell .workspace-header__identity,
+  .ppt-root .workspace-header__identity {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .ppt-root .studio-shell .project-switcher,
+  .ppt-root .project-switcher {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .ppt-root .studio-shell .project-switcher__trigger,
+  .ppt-root .project-switcher__trigger {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .ppt-root .studio-shell .project-switcher__popover,
+  .ppt-root .project-switcher__popover {
+    position: fixed;
+    top: calc(var(--mac-menu-bar-height) + 66px);
+    right: var(--ppt-mobile-gutter);
+    left: var(--ppt-mobile-gutter);
+    width: auto;
+    max-height: calc(100dvh - var(--mac-menu-bar-height) - 82px);
+  }
+
+  .ppt-root .studio-shell .workspace-header__actions,
+  .ppt-root .workspace-header__actions {
+    flex: 0 0 auto;
+  }
+
+  .ppt-root .studio-shell .workspace-generate-button,
+  .ppt-root .workspace-generate-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .ppt-root .studio-shell .workspace-header__nav-row,
+  .ppt-root .workspace-header__nav-row {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .ppt-root .studio-shell .workspace-nav,
+  .ppt-root .workspace-nav {
+    width: max-content;
+    min-width: 100%;
+    flex: 0 0 auto;
+  }
+
+  .ppt-root .studio-shell .workspace-nav__item,
+  .ppt-root .workspace-nav__item {
+    min-width: 76px;
+    min-height: 44px;
+    padding-inline: 0.7rem;
+  }
+
+  .ppt-root .studio-shell main {
+    width: 100%;
+    padding: 1rem var(--ppt-mobile-gutter) calc(1.5rem + env(safe-area-inset-bottom));
+  }
+
+  .ppt-root .intent-space {
+    gap: 1rem;
+  }
+
+  .ppt-root .intent-space__heading-row {
+    gap: 0.85rem;
+  }
+
+  .ppt-root .intent-space__heading-row h1 {
+    font-size: 1.35rem;
+  }
+
+  .ppt-root .intent-step {
+    min-height: 52px;
+    grid-template-columns: 1.55rem minmax(0, 1fr);
+    gap: 0.35rem;
+    padding-inline: 0.35rem;
+  }
+
+  .ppt-root .intent-step__number {
+    width: 1.55rem;
+    height: 1.55rem;
+  }
+
+  .ppt-root .intent-step__copy strong {
+    font-size: 0.64rem;
+    line-height: 1.25;
+  }
+
+  .ppt-root .brief-dialog-card__title,
+  .ppt-root .brief-dialog-card__footer,
+  .ppt-root .brief-question-list {
+    padding-inline: 0.75rem;
+  }
+
+  .ppt-root .source-material-card,
+  .ppt-root .source-facts-card {
+    min-height: min(30rem, 62dvh);
+  }
+
+  .ppt-root .structure-space > div:first-child {
+    align-items: stretch;
+  }
+
+  .ppt-root .structure-space > div:first-child > div:last-child {
+    width: 100%;
+  }
+
+  .ppt-root .structure-space > div:first-child button {
+    min-height: 42px;
+    flex: 1 1 auto;
+  }
+
+  .ppt-root .sticky-board-layout {
+    gap: 0.75rem;
+  }
+
+  .ppt-root .studio-shell.structure-route .sticky-board-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .ppt-root .studio-shell.structure-route .sticky-board-contents {
+    width: 100%;
+    height: auto;
+    max-height: 8.5rem;
+  }
+
+  .ppt-root .studio-shell.structure-route .sticky-board-canvas {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .ppt-root .sticky-board-contents-list {
+    max-height: 7.5rem;
+  }
+
+  .ppt-root .sticky-board-card,
+  .ppt-root .sticky-section-card {
+    min-height: 112px;
+  }
+
+  .ppt-root .sticky-card-toolbar button,
+  .ppt-root .sticky-board-contents-toggle,
+  .ppt-root .sticky-edit-modal-close {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .ppt-root .sticky-edit-modal {
+    width: calc(100vw - 1.5rem);
+    max-height: calc(100dvh - 1.5rem);
+  }
+
+  .ppt-root .sticky-edit-modal-body {
+    overflow-y: auto;
+  }
+
+  .ppt-root .studio-phase-nav {
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    border-radius: 14px;
+    scrollbar-width: none;
+  }
+
+  .ppt-root .studio-phase-nav > span {
+    flex: 0 0 auto;
+  }
+
+  .ppt-root .studio-phase-nav button {
+    min-height: 42px;
+    padding-inline: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .ppt-root .studio-toolbar-actions {
+    width: 100%;
+  }
+
+  .ppt-root .studio-toolbar-actions > button,
+  .ppt-root .studio-toolbar-actions > a {
+    min-height: 42px;
+    flex: 1 1 auto;
+  }
+
+  .ppt-root .studio-columns {
+    gap: 0.75rem;
+  }
+
+  .ppt-root .studio-slide-rail {
+    display: flex;
+    max-height: none;
+    gap: 0.5rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.65rem;
+    scrollbar-width: none;
+  }
+
+  .ppt-root .studio-slide-rail > button {
+    width: 9.5rem;
+    min-width: 9.5rem;
+    min-height: 68px;
+  }
+
+  .ppt-root .studio-stage-panel {
+    max-height: none;
+    padding: 0.9rem;
+  }
+
+  .ppt-root .studio-stage-panel iframe {
+    height: auto;
+    min-height: 190px;
+    aspect-ratio: 16 / 9;
+  }
+
+  .ppt-root .agent-execution-panel-embedded {
+    max-height: 48dvh;
+  }
+
+  .ppt-root .director-space {
+    padding: 1rem;
+  }
+
+  .ppt-root .director-scope {
+    width: 100%;
+    min-width: 0;
+    align-items: stretch;
+  }
+
+  .ppt-root .director-scope > label {
+    flex: 1 1 8rem;
+  }
+
+  .ppt-root .director-scope select {
+    width: 100%;
+    min-height: 42px;
+  }
+
+  .ppt-root .director-scope > div {
+    width: 100%;
+    min-width: 0;
+    padding-top: 0.65rem;
+    padding-left: 0;
+    border-top: 1px solid var(--k-studio-line);
+    border-left: 0;
+  }
+
+  .ppt-root .studio-shell input,
+  .ppt-root .studio-shell textarea,
+  .ppt-root .studio-shell select,
+  .ppt-root .home-shell textarea {
+    font-size: 16px;
+  }
+
+  .ppt-root .studio-shell .primary-button,
+  .ppt-root .studio-shell .secondary-button,
+  .ppt-root .studio-shell .text-button {
+    min-height: 42px;
+  }
+
+  .ppt-root audio {
+    width: 100%;
+  }
+}

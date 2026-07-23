@@ -352,6 +352,28 @@ textarea::placeholder {
     padding-left: 1rem !important;
     padding-right: 1rem !important;
   }
+
+  .sd-mobile-tab-bar {
+    min-height: 58px;
+    padding-top: 4px;
+  }
+
+  .sd-mobile-tab {
+    min-width: 96px;
+    min-height: 48px;
+    justify-content: center;
+    padding: 5px 20px;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  [role='dialog'] {
+    max-width: calc(100vw - 20px);
+  }
 }
 
 /* ══════════════════════════════════════════════════

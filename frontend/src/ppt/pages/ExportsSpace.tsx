@@ -199,7 +199,7 @@ export function ExportsSpace() {
         </ul>
       )}
     </section> : null}
-    {isDirectorRoute ? <section className="rounded-2xl border border-line bg-white p-6 shadow-soft">
+    {isDirectorRoute ? <section className="director-space rounded-2xl border border-line bg-white p-6 shadow-soft">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -211,7 +211,7 @@ export function ExportsSpace() {
           </div>
           <p className="mt-1 text-sm text-muted">逐页生成演讲稿与配音，批量 TTS 支持 1–5 路受控并发，再按真实音频时长导出 1080p MP4。</p>
         </div>
-        <div className="flex min-w-[19rem] flex-wrap items-end gap-2 rounded-xl border border-line bg-card px-3 py-2" aria-label="页面范围">
+        <div className="director-scope flex min-w-[19rem] flex-wrap items-end gap-2 rounded-xl border border-line bg-card px-3 py-2" aria-label="页面范围">
           <ListFilter className="mb-2 h-4 w-4 text-primary" />
           <label className="text-[11px] font-medium text-muted">
             页面范围

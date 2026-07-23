@@ -649,7 +649,7 @@ export function StudioSpace() {
   return (
     <div className="space-y-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center rounded-full border border-[rgba(0,0,0,0.13)] bg-white p-1 shadow-[0_5px_16px_-4px_rgba(0,0,0,0.07)]">
+        <div className="studio-phase-nav flex items-center rounded-full border border-[rgba(0,0,0,0.13)] bg-white p-1 shadow-[0_5px_16px_-4px_rgba(0,0,0,0.07)]">
           {phases.map((phase, idx) => {
             // 判断该阶段是否已完成
             const isDone = phase.id === "search"
@@ -679,7 +679,7 @@ export function StudioSpace() {
             );
           })}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="studio-toolbar-actions flex flex-wrap gap-2">
           {currentPhase === "search" ? (
             <button
               type="button"
@@ -769,7 +769,7 @@ export function StudioSpace() {
 
       {/* 大屏三列锁定视口高度：长内容只在栏内滚，避免整页被撑开 */}
       <div className="studio-columns grid gap-4 lg:h-[calc(100dvh-12.5rem)] lg:grid-cols-[220px_minmax(0,1fr)_280px] lg:items-stretch">
-        <aside className="max-h-[50vh] space-y-2 overflow-y-auto rounded-2xl border border-[rgba(0,0,0,0.13)] bg-white p-3 shadow-[0_5px_16px_-4px_rgba(0,0,0,0.07)] lg:min-h-0 lg:max-h-none lg:h-full">
+        <aside className="studio-slide-rail max-h-[50vh] space-y-2 overflow-y-auto rounded-2xl border border-[rgba(0,0,0,0.13)] bg-white p-3 shadow-[0_5px_16px_-4px_rgba(0,0,0,0.07)] lg:min-h-0 lg:max-h-none lg:h-full">
           {slides.map((slide) => (
             <button
               key={slide.id}
@@ -794,7 +794,7 @@ export function StudioSpace() {
           ))}
         </aside>
 
-        <section className="max-h-[70vh] overflow-y-auto rounded-2xl border border-[rgba(0,0,0,0.13)] bg-white p-5 shadow-[0_5px_16px_-4px_rgba(0,0,0,0.07)] lg:min-h-0 lg:max-h-none lg:h-full">
+        <section className="studio-stage-panel max-h-[70vh] overflow-y-auto rounded-2xl border border-[rgba(0,0,0,0.13)] bg-white p-5 shadow-[0_5px_16px_-4px_rgba(0,0,0,0.07)] lg:min-h-0 lg:max-h-none lg:h-full">
           {!selected ? (
             <p className="py-20 text-center text-[rgba(0,0,0,0.45)]">请先在便利贴墙生成页面</p>
           ) : currentPhase === "search" ? (

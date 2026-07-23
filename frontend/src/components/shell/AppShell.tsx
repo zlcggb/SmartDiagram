@@ -11,6 +11,7 @@ import {
 } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  CalendarDays,
   ChevronRight,
   CircleUserRound,
   Command,
@@ -905,6 +906,22 @@ function AppShell() {
           <NavLink to="/" className="mac-brand-control" aria-label="桌面" title="桌面">
             <MenuBarArtwork size={menuBarArtworkSize} />
           </NavLink>
+        )}
+        mobileUtilities={(
+          <>
+            <button type="button" onClick={() => openShellPanel("network")}>
+              {online ? <Wifi /> : <WifiOff />}<span>{online ? "网络已连接" : "网络已断开"}</span>
+            </button>
+            <button type="button" onClick={() => openShellPanel("control-center")}>
+              <SlidersHorizontal /><span>控制中心</span>
+            </button>
+            <button type="button" onClick={() => openShellPanel("spotlight")}>
+              <Search /><span>搜索</span>
+            </button>
+            <button type="button" onClick={() => openShellPanel("calendar")}>
+              <CalendarDays /><span>日历</span>
+            </button>
+          </>
         )}
         trailing={(
           <>
