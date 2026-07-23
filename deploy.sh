@@ -18,6 +18,8 @@
 
 set -Eeuo pipefail
 
+ORIGINAL_ARGS=("$@")
+
 # ── 颜色 ──
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -198,15 +200,27 @@ check_env() {
 # ── 拉取代码 ──
 pull_code() {
     if [ -d ".git" ]; then
+        local before_revision after_revision
         if ! git diff --quiet || ! git diff --cached --quiet; then
             error "服务器工作区存在未提交修改，已停止更新以免覆盖。请先提交或备份这些修改"
         fi
+        before_revision="$(git rev-parse HEAD)"
         info "拉取最新代码..."
         git pull --ff-only origin "$DEPLOY_BRANCH" || {
             warn "Git pull 失败，可能有本地修改。请手动处理后重试"
             exit 1
         }
+        after_revision="$(git rev-parse HEAD)"
         ok "代码已更新到最新版本"
+
+        if [ "$before_revision" != "$after_revision" ] && \
+            ! git diff --quiet "$before_revision" "$after_revision" -- deploy.sh; then
+            if [ "${SMARTDIAGRAM_DEPLOY_REEXECED:-false}" = "true" ]; then
+                error "部署脚本连续自更新，已停止以避免重复执行"
+            fi
+            info "检测到部署脚本已更新，正在使用新版本继续..."
+            SMARTDIAGRAM_DEPLOY_REEXECED=true exec "$ROOT_DIR/deploy.sh" "${ORIGINAL_ARGS[@]}"
+        fi
     else
         warn "不是 Git 仓库，跳过代码拉取"
     fi
@@ -251,6 +265,25 @@ resume_writers() {
     done
     PAUSED_SERVICES=()
     ok "业务写入服务已恢复"
+}
+
+ensure_no_paused_services() {
+    local paused service
+    paused="$(docker compose --profile worker --profile qdrant ps --status paused --services 2>/dev/null || true)"
+    if [ -z "$paused" ]; then
+        return
+    fi
+
+    while IFS= read -r service; do
+        [ -n "$service" ] || continue
+        info "恢复仍处于暂停状态的 Compose 服务: $service"
+        docker compose --profile worker --profile qdrant unpause "$service"
+    done <<< "$paused"
+
+    paused="$(docker compose --profile worker --profile qdrant ps --status paused --services 2>/dev/null || true)"
+    if [ -n "$paused" ]; then
+        error "仍有服务处于暂停状态，停止容器切换: $(echo "$paused" | tr '\n' ' ')"
+    fi
 }
 
 wait_for_database() {
@@ -479,10 +512,12 @@ deploy() {
     # 构建期间保持服务在线；迁移与容器切换期间短暂停写。
     pause_writers
     migrate_databases
+    # Compose 无法直接重建 paused 容器；迁移完成后先恢复，再执行容器切换。
+    resume_writers
+    ensure_no_paused_services
 
     info "更新并启动所有服务（保留现有命名卷）..."
     compose up -d --remove-orphans
-    resume_writers
 
     verify_deployment
 

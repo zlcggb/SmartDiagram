@@ -135,6 +135,31 @@ def test_ppt_shared_volume_permissions_are_initialized_before_services() -> None
     assert "ppt-storage-init:\n        condition: service_completed_successfully" in python_compose
 
 
+def test_deploy_resumes_paused_services_before_compose_recreates_containers() -> None:
+    script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
+    deploy_body = script[script.index("deploy() {") : script.index("\n# ── 停止 ──")]
+
+    migrate_at = deploy_body.index("migrate_databases")
+    resume_at = deploy_body.index("resume_writers", migrate_at)
+    ensure_at = deploy_body.index("ensure_no_paused_services", resume_at)
+    compose_up_at = deploy_body.index("compose up -d --remove-orphans", ensure_at)
+
+    assert migrate_at < resume_at < ensure_at < compose_up_at
+    assert "ps --status paused --services" in script
+    assert 'unpause "$service"' in script
+    assert "仍有服务处于暂停状态，停止容器切换" in script
+
+
+def test_update_reexecutes_when_deploy_script_itself_changes() -> None:
+    script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
+    pull_body = script[script.index("pull_code() {") : script.index("\n# ── 构建 profiles 参数 ──")]
+
+    assert 'ORIGINAL_ARGS=("$@")' in script
+    assert 'git diff --quiet "$before_revision" "$after_revision" -- deploy.sh' in pull_body
+    assert 'SMARTDIAGRAM_DEPLOY_REEXECED=true exec "$ROOT_DIR/deploy.sh" "${ORIGINAL_ARGS[@]}"' in pull_body
+    assert "部署脚本连续自更新，已停止以避免重复执行" in pull_body
+
+
 def test_committed_ppt_migrations_are_non_destructive() -> None:
     migrations = REPO_ROOT / "ppt-agent-engine" / "prisma" / "migrations"
     sql_files = sorted(migrations.glob("*/migration.sql"))
