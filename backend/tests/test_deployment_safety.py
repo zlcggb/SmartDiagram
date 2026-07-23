@@ -113,6 +113,28 @@ def test_gateway_owns_default_public_port_and_frontend_is_internal_only() -> Non
     assert '${GATEWAY_PORT:-9237}' in deploy_script
 
 
+def test_ppt_shared_volume_permissions_are_initialized_before_services() -> None:
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    init_compose = compose[
+        compose.index("  ppt-storage-init:") : compose.index("\n  ppt-node-api:")
+    ]
+    node_compose = compose[
+        compose.index("  ppt-node-api:") : compose.index("\n  # FastAPI")
+    ]
+    python_compose = compose[
+        compose.index("  ppt-python-api:") : compose.index("\n  # PPT Agent 前端")
+    ]
+
+    assert "user: \"0:0\"" in init_compose
+    assert "pptdata:/data" in init_compose
+    assert "mkdir -p /data/storage /data/langgraph" in init_compose
+    assert "chown -R 1000:1000 /data/storage" in init_compose
+    assert "chown -R 10001:10001 /data/langgraph" in init_compose
+    assert "rm " not in init_compose
+    assert "ppt-storage-init:\n        condition: service_completed_successfully" in node_compose
+    assert "ppt-storage-init:\n        condition: service_completed_successfully" in python_compose
+
+
 def test_committed_ppt_migrations_are_non_destructive() -> None:
     migrations = REPO_ROOT / "ppt-agent-engine" / "prisma" / "migrations"
     sql_files = sorted(migrations.glob("*/migration.sql"))
