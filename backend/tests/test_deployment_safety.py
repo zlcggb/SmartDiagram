@@ -127,6 +127,29 @@ def test_local_dev_bootstraps_ppt_secret_before_compose_actions() -> None:
     assert source_at < ensure_at
 
 
+def test_deploy_prunes_only_current_project_unused_images_above_85_percent() -> None:
+    script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
+    deploy_body = script[script.index("deploy() {") : script.index("backup_only() {")]
+
+    assert "root_disk_usage_percent" in script
+    assert "compose_project_name" in script
+    assert "prune_unused_images_when_disk_is_high" in script
+    assert 'if [ "$usage_percent" -le 85 ]' in script
+    assert "docker compose config --format json" in script
+    assert "docker image prune -a -f --filter" in script
+    assert '"label=com.docker.compose.project=${project_name}"' in script
+
+    cleanup_at = deploy_body.index("prune_unused_images_when_disk_is_high")
+    mirror_at = deploy_body.index("check_docker_mirror")
+    backup_at = deploy_body.index("backup_data")
+    assert cleanup_at < mirror_at < backup_at
+    assert deploy_body.count("prune_unused_images_when_disk_is_high") == 2
+    assert "docker image prune" not in deploy_body
+
+    assert "docker volume prune" not in script
+    assert "docker system prune --volumes" not in script
+
+
 def test_deploy_script_never_removes_named_volumes() -> None:
     script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
 

@@ -174,6 +174,40 @@ check_docker() {
     ok "Docker 环境就绪"
 }
 
+# ── 部署前磁盘保护 ──
+root_disk_usage_percent() {
+    df -P / | awk 'NR == 2 { gsub(/%/, "", $5); print $5 }'
+}
+
+compose_project_name() {
+    docker compose config --format json \
+        | awk -F'"' 'project == "" && /^[[:space:]]*"name":/ { project = $4 } END { print project }'
+}
+
+prune_unused_images_when_disk_is_high() {
+    local usage_percent project_name remaining_percent
+    usage_percent="$(root_disk_usage_percent)"
+    case "$usage_percent" in
+        ''|*[!0-9]*) error "无法读取根分区磁盘使用率，已停止部署" ;;
+    esac
+
+    if [ "$usage_percent" -le 85 ]; then
+        info "根分区使用率 ${usage_percent}%，无需清理未使用镜像"
+        return
+    fi
+
+    project_name="$(compose_project_name)"
+    [ -n "$project_name" ] \
+        || error "无法识别当前 Compose 项目，已停止镜像清理和部署"
+
+    warn "根分区使用率 ${usage_percent}% 超过 85%，清理 ${project_name} 项目的未使用历史镜像..."
+    docker image prune -a -f --filter \
+        "label=com.docker.compose.project=${project_name}"
+
+    remaining_percent="$(root_disk_usage_percent)"
+    ok "${project_name} 项目的未使用镜像清理完成，根分区使用率 ${remaining_percent}%"
+}
+
 # ── 检查 .env ──
 check_env() {
     if [ ! -f "backend/.env" ]; then
@@ -490,6 +524,7 @@ verify_deployment() {
 deploy() {
     check_docker
     prepare_profiles
+    prune_unused_images_when_disk_is_high
 
     if [ "$UPDATE_CODE" = true ]; then
         pull_code
@@ -531,9 +566,8 @@ deploy() {
 
     verify_deployment
 
-    # 自动清理：只删除悬空镜像（旧构建残留），保留构建缓存供下次复用
-    info "清理悬空镜像..."
-    docker image prune -f > /dev/null 2>&1 || true
+    # 构建可能再次推高磁盘使用率；收尾时仍只清理当前 Compose 项目。
+    prune_unused_images_when_disk_is_high
 
     echo ""
     ok "部署完成！"
