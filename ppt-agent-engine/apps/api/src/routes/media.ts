@@ -16,6 +16,7 @@ import {
 import { formatSlide } from "../lib/format.js";
 import { normalizeConcurrency, runWithConcurrency } from "../lib/concurrency.js";
 import { assertDesignedSlides, MediaScopeError, selectScopedSlides } from "../lib/mediaScope.js";
+import { createProtectedExportUrl } from "../lib/exportAccess.js";
 import { exportsDir } from "../lib/paths.js";
 import { prisma } from "../lib/prisma.js";
 import { emitProgress } from "../lib/progressEmitter.js";
@@ -39,7 +40,7 @@ function safePart(value: string) {
 }
 
 function downloadUrl(filePath?: string | null) {
-  return filePath ? `/exports/${encodeURIComponent(path.basename(filePath))}` : null;
+  return filePath ? createProtectedExportUrl(filePath) : null;
 }
 
 function subtitlePathForVideo(videoPath: string) {

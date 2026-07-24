@@ -70,6 +70,8 @@ import {
   formatProjectMaterialGatewayFailure,
   formatStoredProjectMaterial
 } from "./materials.js";
+import { getPptPrincipal } from "../lib/pptAuthorization.js";
+import { projectOwnerData, projectOwnerWhere } from "../lib/pptAccess.js";
 
 const adapter = createAiAdapter();
 const orchestration = getOrchestrationBackend();
@@ -618,9 +620,18 @@ async function getProjectSlides(projectId: string) {
 }
 
 export async function projectRoutes(app: FastifyInstance) {
-  app.get("/api/projects", async (_request, reply) => {
+  app.get("/api/projects", async (request, reply) => {
     try {
+      const principal = getPptPrincipal(request);
+      if (principal.kind === "internal") {
+        return reply.status(403).send(fail("内部服务不能列出项目"));
+      }
+      // 访客历史由浏览器 IndexedDB 提供；服务端只保存短期运行副本。
+      if (principal.kind === "guest") {
+        return reply.send(ok([]));
+      }
       const projects = await prisma.project.findMany({
+        where: projectOwnerWhere(principal),
         orderBy: { updatedAt: "desc" },
         take: 40
       });
@@ -634,8 +645,18 @@ export async function projectRoutes(app: FastifyInstance) {
   app.post("/api/projects", async (request, reply) => {
     const input = createProjectSchema.parse(request.body);
     try {
+      const principal = getPptPrincipal(request);
+      if (principal.kind === "internal") {
+        return reply.status(403).send(fail("内部服务不能创建项目"));
+      }
+      if (principal.kind === "guest") {
+        await prisma.project.deleteMany({
+          where: { ownerType: "guest", expiresAt: { lte: new Date() } }
+        });
+      }
       const project = await prisma.project.create({
         data: {
+          ...projectOwnerData(principal),
           name: input.name,
           reportType: input.reportType,
           audience: input.audience,

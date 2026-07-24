@@ -19,6 +19,8 @@ import type { AiUsageSummary } from "../lib/api";
 import { api, collectExportPageGrades, collectExportWarnings, getApiBase, triggerBrowserDownload } from "../lib/api";
 import type { EditableGrade } from "../lib/exportMode";
 import { upsertProjectMaterial } from "../components/materials/materialUploadModel";
+import { guestProjectRepository } from "../lib/guestProjectStore";
+import { isPptGuest } from "../lib/pptRequestContext";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 type Direction = "up" | "down";
@@ -939,7 +941,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         exportPageGrades: collectExportPageGrades(exportRecord)
       });
       if (exportRecord.downloadUrl) {
-        triggerBrowserDownload(exportRecord.downloadUrl, `${exportRecord.versionName || "export"}.pptx`);
+        void triggerBrowserDownload(exportRecord.downloadUrl, `${exportRecord.versionName || "export"}.pptx`).catch(
+          (error) => useWorkbenchStore.setState({ error: errorMessage(error) })
+        );
         get().pushAgentLog(
           options?.slideIds?.length === 1
             ? "已导出当前页并开始下载 PPTX"
@@ -1094,3 +1098,33 @@ useWorkbenchStore.subscribe(
     }
   }
 );
+
+// 访客项目的持久副本只写入浏览器 IndexedDB。服务端项目仅作为短期生成运行态。
+let guestSnapshotTimer: ReturnType<typeof setTimeout> | null = null;
+useWorkbenchStore.subscribe((state, previous) => {
+  if (!isPptGuest() || !state.project) return;
+  const changed =
+    state.project !== previous.project ||
+    state.latestSourceText !== previous.latestSourceText ||
+    state.facts !== previous.facts ||
+    state.slides !== previous.slides ||
+    state.exports !== previous.exports ||
+    state.materials !== previous.materials;
+  if (!changed) return;
+  if (guestSnapshotTimer) clearTimeout(guestSnapshotTimer);
+  guestSnapshotTimer = setTimeout(() => {
+    guestSnapshotTimer = null;
+    const current = useWorkbenchStore.getState();
+    if (!current.project || !isPptGuest()) return;
+    void guestProjectRepository
+      .save({
+        project: current.project,
+        latestSourceText: current.latestSourceText,
+        facts: current.facts,
+        slides: current.slides,
+        exports: current.exports,
+        materials: current.materials
+      })
+      .catch(() => undefined);
+  }, 250);
+});

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     api_port: int = 4000
     legacy_api_url: str = "http://127.0.0.1:4010"
     legacy_api_timeout_seconds: float = 600.0
+    ppt_internal_api_secret: str = ""
     graph_max_concurrency: int = 3
     graph_recursion_limit: int = 32
     graph_checkpoint_path: str = str(APP_ROOT / "storage" / "langgraph" / "checkpoints.sqlite")

@@ -10,8 +10,10 @@ import { projectRoutes } from "./routes/projects.js";
 import { progressRoutes } from "./routes/progress.js";
 import { mediaRoutes } from "./routes/media.js";
 import { materialRoutes } from "./routes/materials.js";
+import { installPptAuthorization, type PptAuthorizationOptions } from "./lib/pptAuthorization.js";
+import { installProtectedExports } from "./lib/exportAccess.js";
 
-export async function buildApp() {
+export async function buildApp(authOptions: PptAuthorizationOptions = {}) {
   ensureStorageDirs();
   configureResearchAdapter();
 
@@ -23,11 +25,15 @@ export async function buildApp() {
     origin: true
   });
 
+  installProtectedExports(app);
+
   await app.register(staticPlugin, {
     root: exportsDir,
     prefix: "/exports/",
     decorateReply: false
   });
+
+  installPptAuthorization(app, authOptions);
 
   app.get("/api/health", async (_request, reply) => {
     try {

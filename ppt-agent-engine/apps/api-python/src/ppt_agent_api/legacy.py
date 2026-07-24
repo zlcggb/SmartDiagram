@@ -17,8 +17,9 @@ class LegacyApiError(RuntimeError):
 class LegacyApiClient:
     """Typed boundary around the transitional Node data/rendering sidecar."""
 
-    def __init__(self, base_url: str, timeout: float = 600.0) -> None:
+    def __init__(self, base_url: str, timeout: float = 600.0, internal_secret: str = "") -> None:
         self.base_url = base_url.rstrip("/")
+        self.internal_secret = internal_secret
         # This client only talks to the internal Node sidecar. Inheriting desktop
         # HTTP(S)_PROXY variables can route binary uploads through an unrelated
         # outbound proxy, which may disconnect on Office/PDF payloads.
@@ -39,8 +40,12 @@ class LegacyApiClient:
         content: bytes | None = None,
         params: Any = None,
         headers: dict[str, str] | None = None,
+        internal: bool = True,
     ) -> httpx.Response:
-        return await self._client.request(method, path, content=content, params=params, headers=headers)
+        request_headers = dict(headers or {})
+        if internal and self.internal_secret:
+            request_headers["x-ppt-internal-secret"] = self.internal_secret
+        return await self._client.request(method, path, content=content, params=params, headers=request_headers)
 
     async def stream_request(
         self,
@@ -50,18 +55,23 @@ class LegacyApiClient:
         content: bytes | AsyncIterable[bytes] | None = None,
         params: Any = None,
         headers: dict[str, str] | None = None,
+        internal: bool = False,
     ) -> httpx.Response:
+        request_headers = dict(headers or {})
+        if internal and self.internal_secret:
+            request_headers["x-ppt-internal-secret"] = self.internal_secret
         request = self._client.build_request(
             method,
             path,
             content=content,
             params=params,
-            headers=headers,
+            headers=request_headers,
         )
         return await self._client.send(request, stream=True)
 
     async def request(self, method: str, path: str, json_body: Any = None) -> Any:
-        response = await self._client.request(method, path, json=json_body)
+        headers = {"x-ppt-internal-secret": self.internal_secret} if self.internal_secret else None
+        response = await self._client.request(method, path, json=json_body, headers=headers)
         try:
             payload = response.json()
         except json.JSONDecodeError as error:
@@ -74,7 +84,13 @@ class LegacyApiClient:
         return await self.request("GET", f"/api/projects/{project_id}")
 
     async def stream_progress(self, project_id: str) -> AsyncIterator[str]:
-        async with self._client.stream("GET", f"/api/projects/{project_id}/progress", timeout=None) as response:
+        headers = {"x-ppt-internal-secret": self.internal_secret} if self.internal_secret else None
+        async with self._client.stream(
+            "GET",
+            f"/api/projects/{project_id}/progress",
+            timeout=None,
+            headers=headers,
+        ) as response:
             if response.is_error:
                 return
             async for line in response.aiter_lines():

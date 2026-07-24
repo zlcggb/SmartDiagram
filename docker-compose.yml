@@ -19,7 +19,8 @@ services:
 
   # 无论是全新卷还是旧卷，都以幂等方式确保 PPT 独立库存在。
   ppt-db-init:
-    image: pgvector/pgvector:pg16
+    # 这里只需要 psql 客户端；使用标准镜像可避免本地开发重复拉取 pgvector。
+    image: postgres:16-alpine
     restart: "no"
     depends_on:
       db:
@@ -182,6 +183,9 @@ services:
       - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/ppt_agent?schema=public
       - STORAGE_DIR=/data/storage
       - MATERIAL_GATEWAY_URL=http://backend:8000
+      - AUTH_SERVICE_URL=http://backend:8000
+      - PPT_INTERNAL_API_SECRET=${PPT_INTERNAL_API_SECRET:?Set PPT_INTERNAL_API_SECRET to a long random value}
+      - PPT_GUEST_PROJECT_TTL_SECONDS=${PPT_GUEST_PROJECT_TTL_SECONDS:-86400}
     volumes:
       - pptdata:/data
     expose:
@@ -213,6 +217,7 @@ services:
       - API_PORT=4000
       - LEGACY_API_URL=http://ppt-node-api:4010
       - GRAPH_CHECKPOINT_PATH=/data/langgraph/checkpoints.sqlite
+      - PPT_INTERNAL_API_SECRET=${PPT_INTERNAL_API_SECRET:?Set PPT_INTERNAL_API_SECRET to a long random value}
     volumes:
       - pptdata:/data
     expose:

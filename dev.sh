@@ -7,7 +7,8 @@
 #     ├─ /api      → SmartDiagram 后端  http://localhost:8000
 #     └─ /ppt-api  → PPT Agent 后端     http://127.0.0.1:4000（+ Node 渲染侧车 :4010）
 #
-# 基础设施（PostgreSQL / Redis / drawio）复用 docker 容器，已在运行则跳过。
+# 基础设施（PostgreSQL / Redis / drawio）复用 Docker 命名卷和容器。
+# 镜像变化时 Compose 只替换容器，既有 pgdata 数据卷不会删除。
 
 set -e
 
@@ -36,6 +37,94 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
+show_database_diagnostics() {
+  echo -e "${YELLOW}── PostgreSQL 容器状态 ──${NC}"
+  docker compose ps -a db || true
+  echo -e "${YELLOW}── PostgreSQL 最近日志 ──${NC}"
+  docker compose logs --tail=80 db || true
+}
+
+infrastructure_is_healthy() {
+  [ "$(docker inspect -f '{{.State.Running}}' smartdiagram-db 2>/dev/null || true)" = "true" ] \
+    && [ "$(docker inspect -f '{{.State.Running}}' smartdiagram-redis 2>/dev/null || true)" = "true" ] \
+    && [ "$(docker inspect -f '{{.State.Running}}' smartdiagram-drawio 2>/dev/null || true)" = "true" ] \
+    && docker exec smartdiagram-db pg_isready -U postgres -d smartdiagram >/dev/null 2>&1
+}
+
+start_infrastructure() {
+  command -v docker >/dev/null || {
+    echo -e "${RED}❌ 未安装 Docker Desktop，npm run dev 需要本地 PostgreSQL / Redis${NC}"
+    exit 1
+  }
+  docker info >/dev/null 2>&1 || {
+    echo -e "${RED}❌ Docker 未运行，请先启动 Docker Desktop 后重试${NC}"
+    exit 1
+  }
+
+  if infrastructure_is_healthy; then
+    echo -e "${GREEN}   ✅ 复用已就绪的基础设施容器 (db / redis / drawio)${NC}"
+    return 0
+  fi
+
+  echo -e "${CYAN}🐳 启动基础设施容器 (db / redis / drawio)...${NC}"
+  if ! docker compose up -d db redis drawio; then
+    echo -e "${RED}❌ 基础设施启动失败${NC}"
+    show_database_diagnostics
+    exit 1
+  fi
+}
+
+wait_for_database() {
+  local timeout_seconds="${LOCAL_DB_WAIT_SECONDS:-120}"
+  local started_at="$SECONDS"
+
+  echo -e "${CYAN}⏳ 等待 PostgreSQL 就绪...${NC}"
+  while (( SECONDS - started_at < timeout_seconds )); do
+    if docker compose exec -T db pg_isready -U postgres -d smartdiagram >/dev/null 2>&1; then
+      echo -e "${GREEN}   ✅ PostgreSQL 已就绪${NC}"
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo -e "${RED}❌ 数据库未能在 ${timeout_seconds} 秒内就绪${NC}"
+  show_database_diagnostics
+  exit 1
+}
+
+port_is_in_use() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    nc -z 127.0.0.1 "$port" >/dev/null 2>&1 \
+      || nc -z ::1 "$port" >/dev/null 2>&1
+  fi
+}
+
+check_required_ports() {
+  local ports=(5173 8000 4000 4010)
+  local labels=("统一前端" "SmartDiagram 后端" "PPT Agent 后端" "PPT Node 侧车")
+  local conflict=0
+  local index port
+
+  for ((index = 0; index < ${#ports[@]}; index++)); do
+    port="${ports[$index]}"
+    if port_is_in_use "$port"; then
+      echo -e "${RED}❌ ${labels[$index]}端口 ${port} 已被占用${NC}"
+      if command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP:"$port" -sTCP:LISTEN || true
+      fi
+      conflict=1
+    fi
+  done
+
+  if [ "$conflict" -ne 0 ]; then
+    echo -e "${YELLOW}请先在旧的 npm run dev 终端按 Ctrl+C，再重新运行。${NC}"
+    exit 1
+  fi
+}
+
 echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║   ◈ DeepDiagram Pro  统一平台 Dev Mode    ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════╝${NC}"
@@ -55,24 +144,28 @@ if [ ! -f "$PPT_DIR/.env" ]; then
   exit 1
 fi
 
-# ────────── 基础设施：db / redis / drawio（已在运行则跳过） ──────────
-if command -v docker >/dev/null; then
-  RUNNING_CONTAINERS="$(docker ps --format '{{.Names}}' 2>/dev/null || true)"
-  if echo "$RUNNING_CONTAINERS" | grep -q 'smartdiagram-db' \
-    && echo "$RUNNING_CONTAINERS" | grep -q 'smartdiagram-redis' \
-    && echo "$RUNNING_CONTAINERS" | grep -q 'smartdiagram-drawio'; then
-    echo -e "${GREEN}   ✅ 基础设施容器已在运行 (db / redis / drawio)${NC}"
-  else
-    echo -e "${CYAN}🐳 启动基础设施容器 (db / redis / drawio)...${NC}"
-    docker compose up -d db redis drawio >/dev/null 2>&1 \
-      && echo -e "${GREEN}   ✅ 基础设施就绪${NC}" \
-      || echo -e "${YELLOW}   ⚠️  docker compose 启动失败，若后端报数据库错误请手动检查${NC}"
-  fi
-fi
+# Docker Compose 和本地 PPT 子进程必须共用同一个内部密钥。
+# 需在第一次 Compose 调用前完成初始化并导出，否则就绪检查会被必填变量拦截。
+source "$ROOT_DIR/scripts/ensure-deploy-secret.sh"
+ensure_ppt_internal_api_secret "$ROOT_DIR/.env"
+case "${PPT_SECRET_BOOTSTRAP_STATUS:-}" in
+  generated) echo -e "${GREEN}   ✅ 已生成 PPT 内部密钥并保存到根目录 .env${NC}" ;;
+  environment) echo -e "${GREEN}   ✅ 已使用环境中的 PPT 内部密钥${NC}" ;;
+  file) echo -e "${GREEN}   ✅ 已加载根目录 .env 中的 PPT 内部密钥${NC}" ;;
+esac
+
+# ────────── 基础设施：db / redis / drawio ──────────
+check_required_ports
+start_infrastructure
+wait_for_database
 
 # ────────── 依赖准备（幂等，已就绪则秒过） ──────────
 echo -e "${CYAN}📦 检查依赖...${NC}"
 (cd "$BACKEND_DIR" && uv sync --quiet) && echo -e "${GREEN}   ✅ SmartDiagram 后端依赖${NC}"
+
+echo -e "${CYAN}🗃️  初始化本地数据库（只增量建表，不删除数据）...${NC}"
+(cd "$BACKEND_DIR" && uv run python scripts/migrate_database.py) \
+  && echo -e "${GREEN}   ✅ SmartDiagram 数据库就绪${NC}"
 
 if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
   (cd "$FRONTEND_DIR" && npm install --silent)
@@ -82,8 +175,10 @@ echo -e "${GREEN}   ✅ 统一前端依赖${NC}"
 if [ ! -d "$PPT_DIR/node_modules" ]; then
   (cd "$PPT_DIR" && corepack pnpm install --silent)
 fi
-(cd "$PPT_DIR" && corepack pnpm db:generate >/dev/null 2>&1 && corepack pnpm db:migrate >/dev/null 2>&1) \
-  && echo -e "${GREEN}   ✅ PPT 数据库就绪${NC}"
+(cd "$PPT_DIR" && corepack pnpm db:generate >/dev/null)
+docker compose run --rm --no-deps ppt-db-init
+(cd "$PPT_DIR" && corepack pnpm db:migrate) \
+  && echo -e "${GREEN}   ✅ PPT Agent 数据库就绪${NC}"
 (cd "$PPT_DIR" && uv sync --project apps/api-python --quiet) \
   && echo -e "${GREEN}   ✅ PPT Python 依赖${NC}"
 

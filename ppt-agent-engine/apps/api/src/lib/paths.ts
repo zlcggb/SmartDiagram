@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createProtectedExportUrl } from "./exportAccess.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const packageRoot = path.resolve(path.dirname(currentFile), "../..");
@@ -16,5 +17,5 @@ export function ensureStorageDirs() {
 }
 
 export function exportDownloadUrl(pptxPath: string) {
-  return `/exports/${encodeURIComponent(path.basename(pptxPath))}`;
+  return createProtectedExportUrl(pptxPath);
 }

@@ -32,6 +32,8 @@ import type {
 } from "../shared";
 import type { PageRenderResultWithGrade } from "./exportMode";
 import { collectPageGrades } from "./exportMode";
+import { guestProjectRepository } from "./guestProjectStore";
+import { currentPptIdentityHeaders, isPptGuest } from "./pptRequestContext";
 
 /** 与业务请求、SSE 进度共用；勿再写第二套 VITE_API_BASE */
 export function getApiBase() {
@@ -162,7 +164,10 @@ export function parseAiUsageSummary(payload: unknown): AiUsageSummary | null {
 
 async function fetchJsonLoose(apiPath: string): Promise<unknown | null> {
   try {
-    const response = await fetch(`${API_BASE}${apiPath}`);
+    const response = await fetch(`${API_BASE}${apiPath}`, {
+      headers: currentPptIdentityHeaders(),
+      credentials: "include"
+    });
     if (!response.ok) return null;
     return (await response.json()) as unknown;
   } catch {
@@ -181,15 +186,20 @@ async function requestWith<T>(
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers =
     options.body === undefined || isFormData
-      ? options.headers
+      ? {
+          ...currentPptIdentityHeaders(),
+          ...options.headers
+        }
       : {
           "Content-Type": "application/json",
+          ...currentPptIdentityHeaders(),
           ...options.headers
         };
 
   const response = await fetcher(`${apiBase}${apiPath}`, {
     ...options,
-    headers
+    headers,
+    credentials: "include"
   });
   const responseText = await response.text();
   let payload: ApiResponse<T>;
@@ -235,14 +245,25 @@ function json(method: string, body?: unknown): RequestInit {
 }
 
 export const api = {
-  listProjects() {
+  async listProjects() {
+    if (isPptGuest()) return guestProjectRepository.list();
     return request<ProjectDto[]>("/api/projects");
   },
   createProject(input: CreateProjectInput) {
     return request<ProjectDto>("/api/projects", json("POST", input));
   },
-  getProject(projectId: string) {
-    return request<ProjectDetailDto>(`/api/projects/${projectId}`);
+  async getProject(projectId: string) {
+    try {
+      const detail = await request<ProjectDetailDto>(`/api/projects/${projectId}`);
+      if (isPptGuest()) await guestProjectRepository.save(detail).catch(() => undefined);
+      return detail;
+    } catch (error) {
+      if (isPptGuest()) {
+        const local = await guestProjectRepository.get(projectId).catch(() => null);
+        if (local) return local;
+      }
+      throw error;
+    }
   },
   updateProject(projectId: string, input: UpdateProjectInput) {
     return request<ProjectDto>(`/api/projects/${projectId}`, json("PATCH", input));
@@ -441,8 +462,13 @@ export function absoluteDownloadUrl(url: string) {
 }
 
 /** 触发浏览器下载（导出成功后自动拉文件；兼容相对路径） */
-export function triggerBrowserDownload(url: string, fileName?: string) {
-  const href = absoluteDownloadUrl(url);
+export async function triggerBrowserDownload(url: string, fileName?: string) {
+  const response = await fetch(absoluteDownloadUrl(url), {
+    headers: currentPptIdentityHeaders(),
+    credentials: "include"
+  });
+  if (!response.ok) throw new Error(`下载失败（HTTP ${response.status}）`);
+  const href = URL.createObjectURL(await response.blob());
   const anchor = document.createElement("a");
   anchor.href = href;
   anchor.download = fileName ?? "";
@@ -451,4 +477,5 @@ export function triggerBrowserDownload(url: string, fileName?: string) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
+  URL.revokeObjectURL(href);
 }

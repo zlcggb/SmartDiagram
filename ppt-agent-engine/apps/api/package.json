@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:intent": "node --import tsx --test src/lib/intentContext.test.ts"
+    "test:intent": "node --import tsx --test src/lib/intentContext.test.ts",
+    "test:security": "node --import tsx --test src/lib/exportAccess.test.ts src/lib/pptAccess.test.ts src/lib/pptAuthorization.test.ts src/lib/pptPrincipal.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",

@@ -9,6 +9,10 @@ datasource db {
 
 model Project {
   id           String        @id @default(cuid())
+  ownerType    String        @default("legacy")
+  tenantId     String?
+  ownerKey     String?
+  expiresAt    DateTime?
   name         String
   reportType   String
   audience     String
@@ -27,6 +31,9 @@ model Project {
   exports      Export[]
   mediaExports MediaExport[]
   materials    ProjectMaterial[]
+
+  @@index([ownerType, tenantId, ownerKey, updatedAt])
+  @@index([ownerType, expiresAt])
 }
 
 model SourceText {

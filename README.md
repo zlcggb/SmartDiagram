@@ -65,19 +65,24 @@ cp backend/.env.example backend/.env
 
 ### 2. 一键启动（推荐）
 
+先启动 Docker Desktop，然后在项目根目录执行：
+
 ```bash
 npm run dev
 ```
 
-这会同时启动前后端：
+脚本会复用或启动 PostgreSQL、Redis 与 draw.io，等待数据库健康，执行非破坏性
+增量迁移，再启动全部开发服务：
 - 🖥 前端 → http://localhost:5173
 - ⚙️ 后端 → http://localhost:8000
+- 🎞 PPT Agent → http://localhost:4000（Node 侧车 → http://localhost:4010）
 
-按 `Ctrl+C` 停止所有服务。
+按 `Ctrl+C` 停止应用服务；数据库等 Docker 基础设施会保持运行，下次启动直接复用。
+如果脚本提示端口被占用，先在之前运行 `npm run dev` 的终端按 `Ctrl+C`，再重新执行。
 
 ### 3. 启动本地数据库（企业能力验证）
 
-本项目的会话持久化、知识库检索、审计日志和版本化导出依赖 PostgreSQL；多实例限流和队列 worker 可使用 Redis。开发机不需要单独安装 PostgreSQL 或 Redis，直接使用 Docker Compose 启动项目自带基础设施：
+本项目的会话持久化、知识库检索、审计日志和版本化导出依赖 PostgreSQL；多实例限流和队列 worker 可使用 Redis。开发机不需要单独安装 PostgreSQL 或 Redis；`npm run dev` 已自动处理基础设施。需要只启动数据库和 Redis 做专项验证时，可执行：
 
 ```bash
 npm run db:up

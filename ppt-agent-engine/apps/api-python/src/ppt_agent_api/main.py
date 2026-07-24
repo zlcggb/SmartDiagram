@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
@@ -28,7 +29,11 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    client = LegacyApiClient(settings.legacy_api_url, settings.legacy_api_timeout_seconds)
+    client = LegacyApiClient(
+        settings.legacy_api_url,
+        settings.legacy_api_timeout_seconds,
+        internal_secret=settings.ppt_internal_api_secret,
+    )
     checkpoint_path = Path(settings.graph_checkpoint_path).expanduser().resolve()
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     async with AsyncSqliteSaver.from_conn_string(str(checkpoint_path)) as checkpointer:
@@ -140,6 +145,7 @@ async def _merged_progress_stream(request: Request, project_id: str) -> AsyncIte
 
 @app.get("/api/projects/{project_id}/progress")
 async def project_progress(request: Request, project_id: str) -> StreamingResponse:
+    await _authorize_project(request, project_id)
     return StreamingResponse(
         _merged_progress_stream(request, project_id),
         media_type="text/event-stream",
@@ -149,11 +155,15 @@ async def project_progress(request: Request, project_id: str) -> StreamingRespon
 
 @app.post("/api/projects/{project_id}/run-pipeline")
 async def run_pipeline(request: Request, project_id: str, body: PipelineRequest) -> JSONResponse:
+    await _authorize_project(request, project_id)
     lock = project_run_locks.for_project(project_id)
     if lock.locked():
         return JSONResponse(status_code=409, content=fail("该项目已有一条流水线正在执行，请等待完成"))
 
-    thread_id = body.threadId or f"project:{project_id}:run:{uuid4().hex}"
+    identity_material = request.headers.get("authorization") or request.headers.get("x-ppt-guest-token") or "missing"
+    identity_scope = hashlib.sha256(identity_material.encode("utf-8")).hexdigest()[:20]
+    requested_thread = body.threadId.strip() if body.threadId else f"run:{uuid4().hex}"
+    thread_id = f"ppt:{identity_scope}:project:{project_id}:{requested_thread[:120]}"
     config = {
         "configurable": {"thread_id": thread_id},
         "recursion_limit": settings.graph_recursion_limit,
@@ -220,13 +230,47 @@ HOP_BY_HOP_HEADERS = {
     "upgrade",
 }
 
+UNTRUSTED_INTERNAL_HEADERS = {
+    "x-ppt-internal-secret",
+    "x-user-id",
+    "x-tenant-id",
+    "x-team-id",
+    "x-roles",
+    "x-scopes",
+}
 
-async def _proxy(request: Request, upstream_path: str) -> Response:
-    headers = {
+
+def _forward_headers(request: Request) -> dict[str, str]:
+    return {
         key: value
         for key, value in request.headers.items()
-        if key.lower() not in HOP_BY_HOP_HEADERS and key.lower() not in {"host", "content-length"}
+        if key.lower() not in HOP_BY_HOP_HEADERS
+        and key.lower() not in UNTRUSTED_INTERNAL_HEADERS
+        and key.lower() not in {"host", "content-length"}
     }
+
+
+async def _authorize_project(request: Request, project_id: str) -> None:
+    response = await legacy(request).raw_request(
+        "GET",
+        f"/api/projects/{project_id}",
+        headers=_forward_headers(request),
+        internal=False,
+    )
+    if not response.is_error:
+        return
+    try:
+        payload = response.json()
+        message = payload.get("message") or "未找到项目"
+        data = payload.get("data")
+    except (json.JSONDecodeError, TypeError):
+        message = "项目访问验证失败"
+        data = None
+    raise LegacyApiError(message, response.status_code, data)
+
+
+async def _proxy(request: Request, upstream_path: str) -> Response:
+    headers = _forward_headers(request)
     response = await legacy(request).stream_request(
         request.method,
         upstream_path,

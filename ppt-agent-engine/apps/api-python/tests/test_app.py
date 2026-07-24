@@ -6,7 +6,7 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from ppt_agent_api.legacy import LegacyApiClient
-from ppt_agent_api.main import _proxy, app
+from ppt_agent_api.main import _authorize_project, _proxy, app
 
 
 class TrackingStream(httpx.AsyncByteStream):
@@ -60,6 +60,7 @@ def streaming_request(legacy: FakeStreamingLegacy) -> Request:
             (b"host", b"ppt-agent.test"),
             (b"content-length", b"7"),
             (b"x-request-id", b"request-1"),
+            (b"x-ppt-internal-secret", b"attacker-controlled"),
         ],
         "client": ("127.0.0.1", 12345),
         "server": ("ppt-agent.test", 80),
@@ -164,6 +165,56 @@ async def test_legacy_internal_client_ignores_environment_proxies() -> None:
         assert legacy._client._trust_env is False
     finally:
         await legacy.close()
+
+
+@pytest.mark.asyncio
+async def test_legacy_pipeline_calls_include_internal_service_secret() -> None:
+    captured: httpx.Request | None = None
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured
+        captured = request
+        return httpx.Response(200, json={"success": True, "data": {"project": {"id": "p-1"}}})
+
+    legacy = LegacyApiClient("http://legacy.test", internal_secret="server-secret")
+    await legacy._client.aclose()
+    legacy._client = httpx.AsyncClient(base_url="http://legacy.test", transport=httpx.MockTransport(handler))
+    try:
+        await legacy.get_project("p-1")
+        assert captured is not None
+        assert captured.headers["x-ppt-internal-secret"] == "server-secret"
+    finally:
+        await legacy.close()
+
+
+class FakeAuthorizationLegacy:
+    def __init__(self, status_code: int) -> None:
+        self.status_code = status_code
+        self.headers: dict[str, str] | None = None
+
+    async def raw_request(self, method, path, *, content=None, params=None, headers=None, internal=True):
+        self.headers = headers
+        return httpx.Response(
+            self.status_code,
+            json={"success": self.status_code == 200, "message": "not found"},
+            request=httpx.Request(method, f"http://legacy.test{path}"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_project_authorization_forwards_user_identity_but_strips_internal_header() -> None:
+    legacy = FakeAuthorizationLegacy(200)
+    request = streaming_request(legacy)  # type: ignore[arg-type]
+    await _authorize_project(request, "project-1")
+    assert legacy.headers == {"x-request-id": "request-1"}
+
+
+@pytest.mark.asyncio
+async def test_project_authorization_rejects_inaccessible_project() -> None:
+    legacy = FakeAuthorizationLegacy(404)
+    request = streaming_request(legacy)  # type: ignore[arg-type]
+    with pytest.raises(Exception):
+        await _authorize_project(request, "project-other")
 
 
 @pytest.mark.asyncio

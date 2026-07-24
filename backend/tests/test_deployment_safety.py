@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -8,6 +9,122 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DESTRUCTIVE_SQL = re.compile(r"\b(?:DROP|TRUNCATE)\b|\bDELETE\s+FROM\b", re.IGNORECASE)
+
+
+def _run_secret_bootstrap(env_file: Path, *, secret: str | None = None) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment.pop("PPT_INTERNAL_API_SECRET", None)
+    if secret is not None:
+        environment["PPT_INTERNAL_API_SECRET"] = secret
+    return subprocess.run(
+        ["bash", str(REPO_ROOT / "scripts" / "ensure-deploy-secret.sh"), str(env_file)],
+        cwd=REPO_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _dotenv_values(env_file: Path, key: str) -> list[str]:
+    prefix = f"{key}="
+    return [
+        line.removeprefix(prefix).strip().strip("\"'")
+        for line in env_file.read_text(encoding="utf-8").splitlines()
+        if line.startswith(prefix)
+    ]
+
+
+def test_deploy_secret_bootstrap_generates_once_with_private_permissions(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+
+    first = _run_secret_bootstrap(env_file)
+
+    assert first.returncode == 0, first.stderr
+    values = _dotenv_values(env_file, "PPT_INTERNAL_API_SECRET")
+    assert len(values) == 1
+    assert re.fullmatch(r"[0-9a-f]{64}", values[0])
+    assert env_file.stat().st_mode & 0o777 == 0o600
+    assert values[0] not in first.stdout
+    assert values[0] not in first.stderr
+
+    second = _run_secret_bootstrap(env_file)
+
+    assert second.returncode == 0, second.stderr
+    assert _dotenv_values(env_file, "PPT_INTERNAL_API_SECRET") == values
+
+
+def test_deploy_secret_bootstrap_replaces_placeholders_and_deduplicates_key(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "OTHER_SETTING=keep-me\n"
+        "PPT_INTERNAL_API_SECRET=\n"
+        "ANOTHER_SETTING=also-keep\n"
+        "PPT_INTERNAL_API_SECRET=replace-with-a-long-random-value\n",
+        encoding="utf-8",
+    )
+
+    result = _run_secret_bootstrap(env_file)
+
+    assert result.returncode == 0, result.stderr
+    content = env_file.read_text(encoding="utf-8")
+    values = _dotenv_values(env_file, "PPT_INTERNAL_API_SECRET")
+    assert len(values) == 1
+    assert re.fullmatch(r"[0-9a-f]{64}", values[0])
+    assert "OTHER_SETTING=keep-me" in content
+    assert "ANOTHER_SETTING=also-keep" in content
+
+
+def test_deploy_secret_bootstrap_rejects_short_existing_secret_without_rewriting(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    original = "OTHER_SETTING=keep-me\nPPT_INTERNAL_API_SECRET=too-short\n"
+    env_file.write_text(original, encoding="utf-8")
+
+    result = _run_secret_bootstrap(env_file)
+
+    assert result.returncode != 0
+    assert "32" in result.stderr
+    assert env_file.read_text(encoding="utf-8") == original
+
+
+def test_deploy_secret_bootstrap_respects_external_secret_without_writing_file(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    external_secret = "x" * 32
+
+    result = _run_secret_bootstrap(env_file, secret=external_secret)
+
+    assert result.returncode == 0, result.stderr
+    assert not env_file.exists()
+    assert external_secret not in result.stdout
+    assert external_secret not in result.stderr
+
+
+def test_deploy_bootstraps_ppt_secret_before_compose_actions() -> None:
+    script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
+
+    assert 'source "$ROOT_DIR/scripts/ensure-deploy-secret.sh"' in script
+    assert 'ensure_ppt_internal_api_secret "$ROOT_DIR/.env"' in script
+    bootstrap_at = script.index('ensure_ppt_internal_api_secret "$ROOT_DIR/.env"')
+    dispatch_at = script.rindex("case $ACTION in")
+    assert bootstrap_at < dispatch_at
+    pre_dispatch = script[script.rindex("# Compose ", 0, dispatch_at) : dispatch_at]
+    assert "ensure_deploy_environment" in pre_dispatch
+
+
+def test_local_dev_bootstraps_ppt_secret_before_compose_actions() -> None:
+    script = (REPO_ROOT / "dev.sh").read_text(encoding="utf-8")
+    env_checks_at = script.index("检查 .env")
+    infrastructure_at = script.index("基础设施：db / redis / drawio", env_checks_at)
+    bootstrap_block = script[env_checks_at:infrastructure_at]
+
+    source_at = bootstrap_block.index(
+        'source "$ROOT_DIR/scripts/ensure-deploy-secret.sh"'
+    )
+    ensure_at = bootstrap_block.index(
+        'ensure_ppt_internal_api_secret "$ROOT_DIR/.env"', source_at
+    )
+
+    assert source_at < ensure_at
 
 
 def test_deploy_script_never_removes_named_volumes() -> None:
@@ -20,6 +137,51 @@ def test_deploy_script_never_removes_named_volumes() -> None:
     assert "migrate_databases" in script
     assert "detect_legacy_storage_layout" in script
     assert "migrate_legacy_storage" in script
+
+
+def test_local_dev_waits_for_database_and_migrates_before_starting_apps() -> None:
+    script = (REPO_ROOT / "dev.sh").read_text(encoding="utf-8")
+
+    infrastructure_at = script.index("start_infrastructure")
+    wait_at = script.index("wait_for_database", infrastructure_at)
+    main_migration_at = script.index("uv run python scripts/migrate_database.py", wait_at)
+    ppt_database_at = script.index(
+        "docker compose run --rm --no-deps ppt-db-init", main_migration_at
+    )
+    ppt_migration_at = script.index("corepack pnpm db:migrate", ppt_database_at)
+    backend_start_at = script.index("# ────────── 启动后端服务")
+
+    assert infrastructure_at < wait_at < main_migration_at
+    assert main_migration_at < ppt_database_at < ppt_migration_at < backend_start_at
+    assert "docker compose up -d db redis drawio" in script
+    assert "docker compose exec -T db pg_isready" in script
+    assert "docker compose logs --tail=80 db" in script
+    assert "docker compose down -v" not in script
+
+
+def test_ppt_database_initializer_uses_lightweight_postgres_client() -> None:
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    init_compose = compose[compose.index("  ppt-db-init:") : compose.index("\n  redis:")]
+
+    assert "image: postgres:16-alpine" in init_compose
+    assert "CREATE DATABASE ppt_agent" in init_compose
+
+
+def test_local_dev_fails_fast_when_docker_or_database_is_unavailable() -> None:
+    script = (REPO_ROOT / "dev.sh").read_text(encoding="utf-8")
+    main_flow_at = script.index("# ────────── 基础设施：db / redis / drawio")
+    port_check_at = script.index("check_required_ports", main_flow_at)
+    infrastructure_at = script.index("start_infrastructure", port_check_at)
+
+    assert "command -v docker" in script
+    assert "docker info" in script
+    assert "infrastructure_is_healthy" in script
+    assert "复用已就绪的基础设施容器" in script
+    assert port_check_at < infrastructure_at
+    assert "端口 ${port} 已被占用" in script
+    assert "旧的 npm run dev" in script
+    assert "数据库未能在" in script
+    assert "若后端报数据库错误请手动检查" not in script
 
 
 def test_user_volume_backup_mounts_are_read_only() -> None:

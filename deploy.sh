@@ -197,6 +197,16 @@ check_env() {
     ok "环境变量配置就绪"
 }
 
+ensure_deploy_environment() {
+    source "$ROOT_DIR/scripts/ensure-deploy-secret.sh"
+    ensure_ppt_internal_api_secret "$ROOT_DIR/.env"
+    case "${PPT_SECRET_BOOTSTRAP_STATUS:-}" in
+        generated) ok "已生成 PPT 内部密钥并安全写入根目录 .env" ;;
+        environment) ok "PPT 内部密钥已由外部环境提供" ;;
+        *) ok "PPT 内部密钥已就绪" ;;
+    esac
+}
+
 # ── 拉取代码 ──
 pull_code() {
     if [ -d ".git" ]; then
@@ -694,6 +704,14 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Compose 会在执行任何子命令前校验必填变量，因此密钥必须
+# 在 check_docker 和主动作分发之前就完成初始化。
+case "$ACTION" in
+    deploy|stop|logs|status|backup|check_mirror)
+        ensure_deploy_environment
+        ;;
+esac
 
 case $ACTION in
     deploy)  deploy     ;;
