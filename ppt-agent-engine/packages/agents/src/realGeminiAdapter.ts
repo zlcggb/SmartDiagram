@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 import type {
   ExtractedFactDraft,
@@ -7,7 +8,8 @@ import type {
   PptExportTheme,
   ProjectDto,
   SlideDto,
-  SlidePlanDto
+  SlidePlanDto,
+  SpeechWritingStyleId
 } from "@ppt-agent/shared";
 import {
   applyCopyBudgetsToBlockItems,
@@ -23,14 +25,16 @@ import {
   buildExtractFactsPrompt,
   buildOutlinePrompt,
   buildSlidePlanPrompt,
+  buildSpeechScriptPrompt,
   buildSvgPreviewPrompt,
   extractFactsSystemPrompt,
   outlineSystemPrompt,
   slidePlanSystemPrompt,
+  speechScriptSystemPrompt,
   svgPreviewSystemPrompt
 } from "./prompts.js";
 import { normalizeSlideDesignGuide } from "./studioHelpers.js";
-import type { GeminiAdapter, SvgGenerationOptions } from "./types.js";
+import type { GeminiAdapter, ModelUsageEvent, ModelUsageReporter, ModelUsageStage, SvgGenerationOptions } from "./types.js";
 
 const GEMINI_INTERACTIONS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions";
 const defaultModel = "gemini-3.1-flash-lite";
@@ -43,7 +47,39 @@ type RequestInteractionOptions = {
   model?: string;
   temperature?: number;
   thinkingLevel?: "low" | "medium" | "high";
+  stage?: ModelUsageStage;
 };
+
+export interface GeminiUsageSnapshot {
+  promptTokens: number;
+  completionTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+}
+
+function numericValue(object: JsonObject, ...keys: string[]) {
+  for (const key of keys) {
+    if (typeof object[key] === "number") return Math.max(0, Number(object[key]));
+  }
+  return 0;
+}
+
+export function extractGeminiUsageFromPayload(payload: unknown): GeminiUsageSnapshot | null {
+  if (!payload || typeof payload !== "object") return null;
+  const root = payload as JsonObject;
+  const candidate = root.usageMetadata ?? root.usage_metadata ?? root.usage;
+  if (!candidate || typeof candidate !== "object") return null;
+  const usage = candidate as JsonObject;
+  const promptTokens = numericValue(usage, "promptTokenCount", "prompt_token_count", "inputTokens", "input_tokens");
+  const completionTokens = numericValue(usage, "candidatesTokenCount", "candidates_token_count", "outputTokens", "output_tokens");
+  const cachedTokens = Math.min(promptTokens, numericValue(usage, "cachedContentTokenCount", "cached_content_token_count", "cachedTokens", "cached_tokens"));
+  const reasoningTokens = numericValue(usage, "thoughtsTokenCount", "thoughts_token_count", "reasoningTokens", "reasoning_tokens");
+  const explicitTotal = numericValue(usage, "totalTokenCount", "total_token_count", "totalTokens", "total_tokens");
+  const totalTokens = explicitTotal || promptTokens + completionTokens;
+  if (!promptTokens && !completionTokens && !totalTokens) return null;
+  return { promptTokens, completionTokens, cachedTokens, reasoningTokens, totalTokens };
+}
 
 const factDraftSchema = {
   type: "object",
@@ -211,6 +247,7 @@ function outputTextFromInteraction(payload: unknown) {
 export function parseInteractionSseBuffer(buffer: string) {
   const deltas: string[] = [];
   let error = "";
+  let usagePayload: JsonObject | null = null;
   let cursor = 0;
 
   while (cursor < buffer.length) {
@@ -233,6 +270,9 @@ export function parseInteractionSseBuffer(buffer: string) {
 
     try {
       const payload = JSON.parse(data) as JsonObject;
+      if (payload.usageMetadata || payload.usage_metadata || payload.usage) {
+        usagePayload = payload;
+      }
       const eventType = asString(payload.event_type);
       const delta = typeof payload.delta === "object" && payload.delta !== null ? (payload.delta as JsonObject) : {};
       if (eventType === "step.delta" && delta.type === "text" && typeof delta.text === "string") {
@@ -246,7 +286,7 @@ export function parseInteractionSseBuffer(buffer: string) {
     }
   }
 
-  return { deltas, error, remaining: buffer.slice(cursor) };
+  return { deltas, error, usagePayload, remaining: buffer.slice(cursor) };
 }
 
 function normalizeProxyUrl(value: string) {
@@ -466,12 +506,61 @@ export class RealGeminiAdapter implements GeminiAdapter {
   private readonly model: string;
   private readonly designModel: string;
   private readonly designModels: string[];
+  private readonly reporter?: ModelUsageReporter;
+  private readonly fetcher: typeof undiciFetch;
 
-  constructor(options: { apiKey?: string; model?: string } = {}) {
+  constructor(options: {
+    apiKey?: string;
+    model?: string;
+    designModel?: string;
+    reporter?: ModelUsageReporter;
+    fetcher?: typeof undiciFetch;
+  } = {}) {
     this.apiKey = options.apiKey ?? process.env.GEMINI_API_KEY ?? "";
     this.model = options.model ?? process.env.GEMINI_MODEL ?? defaultModel;
-    this.designModel = process.env.GEMINI_DESIGN_MODEL ?? defaultDesignModel;
+    this.designModel = options.designModel ?? process.env.GEMINI_DESIGN_MODEL ?? defaultDesignModel;
     this.designModels = [...new Set([this.designModel, this.model, defaultModel])];
+    this.reporter = options.reporter;
+    this.fetcher = options.fetcher ?? undiciFetch;
+  }
+
+  private async reportUsage(input: {
+    model: string;
+    stage: ModelUsageStage;
+    status: "succeeded" | "failed";
+    usage: GeminiUsageSnapshot | null;
+    startedAt: Date;
+    httpStatus?: number;
+    error?: unknown;
+  }) {
+    if (!this.reporter) return;
+    const endedAt = new Date();
+    const usage = input.usage;
+    const error = input.error instanceof Error ? input.error : null;
+    const event: ModelUsageEvent = {
+      externalEventId: randomUUID(),
+      provider: "gemini",
+      model: input.model,
+      stage: input.stage,
+      status: input.status,
+      inputTokens: usage?.promptTokens ?? 0,
+      outputTokens: usage?.completionTokens ?? 0,
+      cachedTokens: usage?.cachedTokens ?? 0,
+      reasoningTokens: usage?.reasoningTokens ?? 0,
+      totalTokens: usage?.totalTokens ?? 0,
+      usageAvailable: usage !== null,
+      durationMs: Math.max(0, endedAt.getTime() - input.startedAt.getTime()),
+      httpStatus: input.httpStatus,
+      errorCode: error?.name,
+      errorMessage: error?.message.slice(0, 500),
+      startedAt: input.startedAt.toISOString(),
+      endedAt: endedAt.toISOString()
+    };
+    try {
+      await this.reporter(event);
+    } catch {
+      // Observability failure must not discard generated content.
+    }
   }
 
   private ensureConfigured() {
@@ -483,7 +572,7 @@ export class RealGeminiAdapter implements GeminiAdapter {
   private async requestInteraction(input: string, systemInstruction: string, responseFormat?: unknown, options: RequestInteractionOptions = {}): Promise<GeminiResponse> {
     this.ensureConfigured();
     try {
-      return await undiciFetch(
+      return await this.fetcher(
         GEMINI_INTERACTIONS_ENDPOINT,
         buildFetchOptions(this.apiKey, {
           model: options.model ?? this.model,
@@ -504,7 +593,7 @@ export class RealGeminiAdapter implements GeminiAdapter {
   private async requestStreamingInteraction(input: string, systemInstruction: string, options: RequestInteractionOptions = {}): Promise<GeminiResponse> {
     this.ensureConfigured();
     try {
-      return await undiciFetch(
+      return await this.fetcher(
         `${GEMINI_INTERACTIONS_ENDPOINT}?alt=sse`,
         buildFetchOptions(this.apiKey, {
           model: options.model ?? this.model,
@@ -528,9 +617,11 @@ export class RealGeminiAdapter implements GeminiAdapter {
     const decoder = new TextDecoder();
     let buffer = "";
     let output = "";
+    let usage: GeminiUsageSnapshot | null = null;
 
     const consume = (value: string) => {
       const parsed = parseInteractionSseBuffer(value);
+      if (parsed.usagePayload) usage = extractGeminiUsageFromPayload(parsed.usagePayload);
       for (const delta of parsed.deltas) {
         output += delta;
         onToken(delta);
@@ -547,65 +638,112 @@ export class RealGeminiAdapter implements GeminiAdapter {
     }
     buffer += decoder.decode();
     if (buffer.trim()) consume(`${buffer}\n\n`);
-    return output;
+    return { text: output, usage };
   }
 
   private async generateJson<T>(input: string, schema: unknown, systemInstruction: string, options: RequestInteractionOptions = {}, onToken?: (token: string) => void): Promise<T> {
-    const response = await this.requestInteraction(input, systemInstruction, {
-      type: "text",
-      mime_type: "application/json",
-      schema
-    }, options);
+    const startedAt = new Date();
+    const model = options.model ?? this.model;
+    const stage = options.stage ?? "main";
+    let response: GeminiResponse;
+    try {
+      response = await this.requestInteraction(input, systemInstruction, {
+        type: "text",
+        mime_type: "application/json",
+        schema
+      }, options);
+    } catch (error) {
+      await this.reportUsage({ model, stage, status: "failed", usage: null, startedAt, error });
+      throw error;
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(explainGeminiApiError(response.status, errorText));
+      const error = new Error(explainGeminiApiError(response.status, errorText));
+      await this.reportUsage({ model, stage, status: "failed", usage: null, startedAt, httpStatus: response.status, error });
+      throw error;
     }
 
     const payload = (await response.json()) as unknown;
+    const usage = extractGeminiUsageFromPayload(payload);
     const outputText = outputTextFromInteraction(payload);
     if (!outputText) {
-      throw new Error("Gemini 没有返回可用内容。");
+      const error = new Error("Gemini 没有返回可用内容。");
+      await this.reportUsage({ model, stage, status: "failed", usage, startedAt, httpStatus: response.status, error });
+      throw error;
     }
     if (onToken) {
       // Gemini interactions 当前非流式；返回后一次性回调，保持接口兼容
       onToken(outputText);
     }
-    return parseModelJson(outputText) as T;
+    try {
+      const parsed = parseModelJson(outputText) as T;
+      await this.reportUsage({ model, stage, status: "succeeded", usage, startedAt, httpStatus: response.status });
+      return parsed;
+    } catch (error) {
+      await this.reportUsage({ model, stage, status: "failed", usage, startedAt, httpStatus: response.status, error });
+      throw error;
+    }
   }
 
-  private async generateText(input: string, systemInstruction: string, onToken?: (token: string) => void): Promise<string> {
+  private async generateText(input: string, systemInstruction: string, options: RequestInteractionOptions = {}, onToken?: (token: string) => void): Promise<string> {
     const failures: string[] = [];
+    // 显式指定 model 时只打该模型（演讲稿走主模型）；未指定则沿用设计模型 fallback 列表（SVG）。
+    const models = options.model ? [options.model] : this.designModels;
 
-    for (const model of this.designModels) {
-      const requestOptions = { model, temperature: 0.72, thinkingLevel: "low" } as const;
-      const response = onToken
-        ? await this.requestStreamingInteraction(input, systemInstruction, requestOptions)
-        : await this.requestInteraction(input, systemInstruction, undefined, requestOptions);
+    for (const model of models) {
+      const startedAt = new Date();
+      const stage = options.stage ?? "svg";
+      const requestOptions = {
+        model,
+        temperature: options.temperature ?? 0.72,
+        thinkingLevel: options.thinkingLevel ?? "low",
+        stage
+      } as const;
+      let response: GeminiResponse;
+      try {
+        response = onToken
+          ? await this.requestStreamingInteraction(input, systemInstruction, requestOptions)
+          : await this.requestInteraction(input, systemInstruction, undefined, requestOptions);
+      } catch (error) {
+        await this.reportUsage({ model, stage, status: "failed", usage: null, startedAt, error });
+        throw error;
+      }
       if (!response.ok) {
         const errorText = await response.text();
         const message = explainGeminiApiError(response.status, errorText);
+        await this.reportUsage({ model, stage, status: "failed", usage: null, startedAt, httpStatus: response.status, error: new Error(message) });
         failures.push(`${model}: ${message}`);
         if (![400, 429, 503].includes(response.status)) {
           throw new Error(message);
         }
         continue;
       }
-      const outputText = onToken
-        ? await this.readStreamingInteraction(response, onToken)
-        : outputTextFromInteraction((await response.json()) as unknown);
+      let outputText = "";
+      let usage: GeminiUsageSnapshot | null = null;
+      if (onToken) {
+        const streamed = await this.readStreamingInteraction(response, onToken);
+        outputText = streamed.text;
+        usage = streamed.usage;
+      } else {
+        const payload = (await response.json()) as unknown;
+        outputText = outputTextFromInteraction(payload);
+        usage = extractGeminiUsageFromPayload(payload);
+      }
       if (!outputText) {
+        await this.reportUsage({ model, stage, status: "failed", usage, startedAt, httpStatus: response.status, error: new Error("Gemini 没有返回可用内容。") });
         failures.push(`${model}: Gemini 没有返回可用内容。`);
         continue;
       }
+      await this.reportUsage({ model, stage, status: "succeeded", usage, startedAt, httpStatus: response.status });
       return outputText;
     }
 
-    throw new Error(`Gemini 页面设计生成失败：已尝试 ${this.designModels.join("、")}。${failures.join("；")}`);
+    throw new Error(`Gemini 文本生成失败：已尝试 ${models.join("、")}。${failures.join("；")}`);
   }
 
   async extractFacts(text: string): Promise<ExtractFactsResult> {
-    const result = await this.generateJson<unknown>(buildExtractFactsPrompt(text), extractFactsSchema, extractFactsSystemPrompt);
+    const result = await this.generateJson<unknown>(buildExtractFactsPrompt(text), extractFactsSchema, extractFactsSystemPrompt, { stage: "facts" });
     return normalizeFactsResult(result);
   }
 
@@ -614,20 +752,35 @@ export class RealGeminiAdapter implements GeminiAdapter {
     confirmedFacts: FactDto[]
   ): Promise<OutlineSlideDraft[]> {
     const allowedFactIds = new Set(confirmedFacts.map((fact) => fact.id));
-    const result = await this.generateJson<unknown>(buildOutlinePrompt(project, confirmedFacts), outlineSchema, outlineSystemPrompt);
+    const result = await this.generateJson<unknown>(buildOutlinePrompt(project, confirmedFacts), outlineSchema, outlineSystemPrompt, { stage: "outline" });
     return normalizeOutline(result, allowedFactIds, Math.max(1, Math.min(12, project.pageCount || 6)));
   }
 
   async generateSlidePlan(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void): Promise<SlidePlanDto> {
     const allowedFactIds = new Set(facts.map((fact) => fact.id));
-    const result = await this.generateJson<unknown>(buildSlidePlanPrompt(slide, facts, theme), slidePlanSchema, slidePlanSystemPrompt, {}, onToken);
+    const result = await this.generateJson<unknown>(buildSlidePlanPrompt(slide, facts, theme), slidePlanSchema, slidePlanSystemPrompt, { stage: "plan" }, onToken);
     return normalizeSlidePlan(result, slide, allowedFactIds);
   }
 
 
   async generateSvgPreview(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void, options?: SvgGenerationOptions): Promise<string> {
-    const result = await this.generateText(buildSvgPreviewPrompt(slide, facts, theme, options?.surfaceId, options?.revisionNotes, options?.accentId), svgPreviewSystemPrompt, onToken);
+    const result = await this.generateText(buildSvgPreviewPrompt(slide, facts, theme, options?.surfaceId, options?.revisionNotes, options?.accentId), svgPreviewSystemPrompt, { stage: "svg" }, onToken);
     return sanitizeSvgOutput(result);
+  }
+
+  async generateSpeechScript(
+    slide: SlideDto,
+    context: { index: number; total: number; prevTitle?: string; nextTitle?: string; style: SpeechWritingStyleId },
+    onToken?: (token: string) => void
+  ): Promise<string> {
+    // 演讲稿固定主模型；禁止落入 designModels 优先逻辑。
+    const result = await this.generateText(
+      buildSpeechScriptPrompt(slide, context),
+      speechScriptSystemPrompt(context.style),
+      { stage: "main", model: this.model, temperature: 0.35, thinkingLevel: "low" },
+      onToken
+    );
+    return result.replace(/\r\n/g, "\n").replace(/^#+\s.*$/gm, "").replace(/\*\*/g, "").trim();
   }
 
   async startBrief(topic: string) {
@@ -655,7 +808,8 @@ export class RealGeminiAdapter implements GeminiAdapter {
       const result = await this.generateJson<{ questions?: Array<{ id?: string; question?: string; placeholder?: string }> }>(
         buildBriefStartPrompt(topic),
         schema,
-        briefSystemPrompt
+        briefSystemPrompt,
+        { stage: "brief" }
       );
       const questions = (result.questions ?? [])
         .filter((item) => item.id && item.question)
@@ -694,7 +848,7 @@ export class RealGeminiAdapter implements GeminiAdapter {
         purpose?: string;
         pageCount?: number;
         styleNotes?: string;
-      }>(buildBriefFinalizePrompt(topic, answers), schema, briefSystemPrompt, {}, onToken);
+      }>(buildBriefFinalizePrompt(topic, answers), schema, briefSystemPrompt, { stage: "brief" }, onToken);
       const fallback = mockFinalizeBrief(topic, answers);
       return {
         ...fallback,
@@ -737,7 +891,7 @@ export class RealGeminiAdapter implements GeminiAdapter {
         summary?: string;
         bullets?: string[];
         sources?: Array<{ title?: string; snippet?: string; url?: string }>;
-      }>(buildResearchPrompt(topic, briefSummary), schema, researchSystemPrompt, {}, onToken);
+      }>(buildResearchPrompt(topic, briefSummary), schema, researchSystemPrompt, { stage: "research" }, onToken);
       const fallback = mockResearch(topic, briefSummary);
       return {
         summary: result.summary || fallback.summary,
@@ -807,7 +961,7 @@ export class RealGeminiAdapter implements GeminiAdapter {
           caveats?: string[];
         };
         notes?: string;
-      }>(buildPageSearchPrompt(slide, context), schema, pageSearchSystemPrompt, {}, onToken);
+      }>(buildPageSearchPrompt(slide, context), schema, pageSearchSystemPrompt, { stage: "search" }, onToken);
       return normalizeAiPageSearch(slide, result);
     } catch {
       return mockPageSearch(slide);

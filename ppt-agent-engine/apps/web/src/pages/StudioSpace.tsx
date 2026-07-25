@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Download, Search, WandSparkles } from "lucide-react";
+import DOMPurify from "dompurify";
 import type { PptExportTheme, SlidePlanDto } from "@ppt-agent/shared";
 import {
   fitSvgTextToBounds,
@@ -513,7 +514,8 @@ export function StudioSpace() {
   const themedSvgPreview = useMemo(() => {
     if (!svgEditorSource) return null;
     const fittedSvg = fitSvgTextToBounds(svgEditorSource).svg;
-    return recolorSvgPreview(fittedSvg, exportTheme, { accentId: themeAccentId });
+    const recoloredSvg = recolorSvgPreview(fittedSvg, exportTheme, { accentId: themeAccentId });
+    return DOMPurify.sanitize(recoloredSvg, { USE_PROFILES: { svg: true } });
   }, [svgEditorSource, exportTheme, themeAccentId]);
 
   const editorThemeStyle = useMemo(() => {

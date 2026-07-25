@@ -35,6 +35,7 @@ from app.services.profile_service import (
     validate_display_name,
 )
 from app.services.rate_limit import check_auth_rate_limit
+from app.services.budget_service import get_budget_metrics_snapshot
 
 router = APIRouter(tags=["auth"])
 
@@ -202,6 +203,21 @@ async def current_user(
 ):
     token_user, db_user = await _authenticated_db_user(request, session)
     return {"user": serialize_public_user(_auth_payload_from_db(db_user, token_user))}
+
+@router.get("/billing/me")
+async def current_user_billing(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    token_user, db_user = await _authenticated_db_user(request, session)
+    permission_context = user_to_permission_context(serialize_user(token_user))
+    # Allow fetching limits as we assume User = Tenant in B2C
+    budget = await get_budget_metrics_snapshot(
+        session,
+        permission_context,
+        include_tenant_limits=True
+    )
+    return {"budget": budget}
 
 
 @router.patch("/auth/me/profile")

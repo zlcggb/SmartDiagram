@@ -12,7 +12,7 @@ async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False
 def import_model_modules() -> None:
     """Import table modules so SQLModel metadata is complete in every process."""
 
-    from app.models import audit, conversation, diagram, export, knowledge, project, tenant, usage  # noqa: F401
+    from app.models import audit, conversation, diagram, export, knowledge, model_pricing, model_usage, project, tenant, usage  # noqa: F401
 
 
 import_model_modules()

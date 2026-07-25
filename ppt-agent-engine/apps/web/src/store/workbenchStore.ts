@@ -406,7 +406,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     }),
   async refreshAiUsage() {
     try {
-      const aiUsageSummary = await api.getAiUsageSummary();
+      const projectId = get().project?.id;
+      const aiUsageSummary = await api.getAiUsageSummary(projectId);
       set({ aiUsageSummary });
     } catch {
       set({ aiUsageSummary: null });

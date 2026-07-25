@@ -4,6 +4,7 @@ import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { workspaceRoot } from "./paths.js";
 
 const apiRoot = path.resolve(workspaceRoot, "apps/api");
+const repositoryRoot = path.resolve(workspaceRoot, "..");
 const defaultDatabasePath = path.resolve(workspaceRoot, "prisma/dev.db");
 
 function stripQuotes(value: string) {
@@ -65,6 +66,7 @@ function normalizeDatabaseUrl() {
 
 const originalEnvKeys = new Set(Object.keys(process.env));
 loadEnvFile(path.join(workspaceRoot, ".env"), originalEnvKeys, false);
+loadEnvFile(path.join(repositoryRoot, ".env"), originalEnvKeys, false);
 loadEnvFile(path.join(apiRoot, ".env"), originalEnvKeys, true);
 fs.mkdirSync(path.dirname(defaultDatabasePath), { recursive: true });
 normalizeDatabaseUrl();

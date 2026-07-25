@@ -1,4 +1,4 @@
-import type { FactDto, ProjectDto, PptExportTheme, SlideDto, ThemeSurfaceId } from "@ppt-agent/shared";
+import type { FactDto, ProjectDto, PptExportTheme, SlideDto, SpeechWritingStyleId, ThemeSurfaceId } from "@ppt-agent/shared";
 import {
   blueprintForLayout,
   formatCopyBudgetCatalog,
@@ -17,6 +17,7 @@ import {
   queryLayouts,
   recommendedLayoutEnumValues,
   searchReferenceForDraft,
+  speechWritingStylePresets,
   themeFamily
 } from "@ppt-agent/shared";
 import { buildDesignRecipeInstruction, designRecipeMeta } from "./designKnowledge/index.js";
@@ -152,6 +153,49 @@ export function buildPageSearchPrompt(slide: SlideDto, context: { topic?: string
       2
     )
   ].join("\n\n");
+}
+
+export interface SpeechScriptContext {
+  index: number;
+  total: number;
+  prevTitle?: string;
+  nextTitle?: string;
+  style: SpeechWritingStyleId;
+}
+
+/** 写稿风格对应的 system prompt（决定「稿子怎么写」，与 TTS 朗读 prompt 解耦）。 */
+export function speechScriptSystemPrompt(style: SpeechWritingStyleId): string {
+  const preset = speechWritingStylePresets.find((item) => item.id === style) ?? speechWritingStylePresets[0];
+  return preset.writingPrompt;
+}
+
+export function buildSpeechScriptPrompt(slide: SlideDto, context: SpeechScriptContext) {
+  const isFirst = context.index === 0;
+  const isLast = context.index === context.total - 1;
+  const positionHint = isFirst
+    ? "这是整场的第 1 页，请写一个自然的开场。"
+    : isLast
+      ? "这是整场的最后一页，请写一个自然的收尾。"
+      : `这是第 ${context.index + 1} 页（共 ${context.total} 页），承上启下即可。`;
+  const transitionHint = context.nextTitle && !isLast ? `下一页将讲「${context.nextTitle}」，结尾可自然过渡。` : "";
+  return [
+    "请把下面这页幻灯片改写成一段口播稿。",
+    positionHint,
+    transitionHint,
+    "页面信息：",
+    JSON.stringify(
+      {
+        title: slide.planJson?.title || slide.title,
+        keyMessage: slide.planJson?.keyMessage || slide.keyMessage,
+        contentPoints: slide.planJson?.contentBlocks?.flatMap((block) => block.items) || slide.contentPoints,
+        slideGoal: slide.slideGoal
+      },
+      null,
+      2
+    )
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export function buildOutlinePrompt(

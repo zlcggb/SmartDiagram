@@ -12,6 +12,8 @@ import { mediaRoutes } from "./routes/media.js";
 import { materialRoutes } from "./routes/materials.js";
 import { installPptAuthorization, type PptAuthorizationOptions } from "./lib/pptAuthorization.js";
 import { installProtectedExports } from "./lib/exportAccess.js";
+import { getPptPrincipal } from "./lib/pptAuthorization.js";
+import { enterModelUsageContext } from "./lib/modelUsageContext.js";
 
 export async function buildApp(authOptions: PptAuthorizationOptions = {}) {
   ensureStorageDirs();
@@ -34,6 +36,26 @@ export async function buildApp(authOptions: PptAuthorizationOptions = {}) {
   });
 
   installPptAuthorization(app, authOptions);
+
+  app.addHook("preHandler", async (request) => {
+    try {
+      const principal = getPptPrincipal(request);
+      if (principal.kind !== "user") return;
+      const params = request.params as { id?: unknown; slideId?: unknown } | undefined;
+      const authorization = typeof request.headers.authorization === "string"
+        ? request.headers.authorization
+        : request.headers.authorization?.[0];
+      enterModelUsageContext({
+        authorization,
+        tenantId: principal.tenantId,
+        userId: principal.userId,
+        projectId: typeof params?.id === "string" ? params.id : undefined,
+        slideId: typeof params?.slideId === "string" ? params.slideId : undefined
+      });
+    } catch {
+      // Public endpoints and internal calls do not have a personal usage context.
+    }
+  });
 
   app.get("/api/health", async (_request, reply) => {
     try {

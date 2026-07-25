@@ -88,6 +88,8 @@ interface WorkbenchState {
   exportWarnings: string[];
   exportPageGrades: ExportPageGrade[];
   aiUsageSummary: AiUsageSummary | null;
+  /** 导演页 TTS 配音模型（来自 /api/media/status），用于顶部 chip 展示 */
+  ttsModel: string | null;
   selectedSlideId: string | null;
   exportTheme: PptExportTheme;
   /** 主题包内 accent 预设 id（会话级；换色预览/导出前应用到 SVG） */
@@ -325,6 +327,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   exportWarnings: [],
   exportPageGrades: [],
   aiUsageSummary: null,
+  ttsModel: null,
   selectedSlideId: null,
   exportTheme: "white-blue",
   themeAccentId: "primary",
@@ -410,7 +413,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     }),
   async refreshAiUsage() {
     try {
-      const aiUsageSummary = await api.getAiUsageSummary();
+      const projectId = get().project?.id;
+      const aiUsageSummary = await api.getAiUsageSummary(projectId);
       set({ aiUsageSummary });
     } catch {
       set({ aiUsageSummary: null });

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type RefObject } from 'react';
-import { Camera, Check, ImagePlus, LoaderCircle, Trash2 } from 'lucide-react';
-import { updateProfile } from '../../config/auth';
+import { Camera, Check, ImagePlus, LoaderCircle, Trash2, Zap } from 'lucide-react';
+import { fetchBillingData, updateProfile, type BudgetMetrics } from '../../config/auth';
 import { usePlatformAuth } from '../../store/authStore';
 import { MacWindow } from '../shell/MacWindow';
 import { UserAvatar } from './UserAvatar';
@@ -25,6 +25,13 @@ export function ProfileWindow({ onClose, triggerRef }: ProfileWindowProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [budget, setBudget] = useState<BudgetMetrics | null>(null);
+
+  useEffect(() => {
+    if (session) {
+      fetchBillingData(session).then(setBudget).catch(console.error);
+    }
+  }, [session]);
 
   useEffect(() => () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
@@ -180,6 +187,24 @@ export function ProfileWindow({ onClose, triggerRef }: ProfileWindowProps) {
               <output>{roleLabel}</output>
             </label>
           </div>
+
+          {budget && (
+            <div className="mac-profile-readonly-grid" style={{ marginTop: '16px' }}>
+              <label>
+                <span>本月 Token 消耗</span>
+                <output style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Zap size={14} color={(budget as any).budget?.hard_limit_enabled ? '#f59e0b' : '#ef4444'} />
+                  <span style={{ fontWeight: 500 }}>
+                    {((budget as any).usage?.estimated_total_tokens ?? 0).toLocaleString()} / {((budget as any).budget?.monthly_token_limit ?? 0).toLocaleString()}
+                  </span>
+                </output>
+              </label>
+              <label>
+                <span>AI 生成次数</span>
+                <output>{(budget as any).usage?.run_count ?? 0}</output>
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="mac-profile-feedback" aria-live="polite">

@@ -7,7 +7,8 @@ import type {
   PptExportTheme,
   ProjectDto,
   SlideDto,
-  SlidePlanDto
+  SlidePlanDto,
+  SpeechWritingStyleId
 } from "@ppt-agent/shared";
 import { factCategories, getThemePack, normalizePptExportTheme, themeFamily } from "@ppt-agent/shared";
 import { selectDesignRecipe } from "./designKnowledge/index.js";
@@ -209,6 +210,27 @@ export class MockGeminiAdapter implements GeminiAdapter {
   async startBrief(topic: string) {
     const { mockBriefQuestions } = await import("./studioHelpers.js");
     return { questions: mockBriefQuestions(topic), source: "fallback" as const };
+  }
+
+  async generateSpeechScript(
+    slide: SlideDto,
+    context: { index: number; total: number; prevTitle?: string; nextTitle?: string; style: SpeechWritingStyleId },
+    _onToken?: (token: string) => void
+  ): Promise<string> {
+    // Mock：不依赖真实模型，按风格前缀 + 模板生成可预测的稿子，保证 dev/test 可用
+    const title = slide.planJson?.title || slide.title;
+    const message = slide.planJson?.keyMessage || slide.keyMessage || "";
+    const items = (slide.planJson?.contentBlocks?.flatMap((block) => block.items) || slide.contentPoints).filter(Boolean).slice(0, 3);
+    const stylePrefix: Record<SpeechWritingStyleId, string> = {
+      "formal-report": "各位好，",
+      "clear-explainer": "我们来看，",
+      storytelling: "先从一个切入点说起，",
+      "casual-vlog": "哈喽，"
+    };
+    const opening = context.index === 0 ? `${stylePrefix[context.style]}今天我们围绕“${title}”展开。` : `接着看“${title}”。`;
+    const body = `${message ? `核心观点是：${message}。` : ""}${items.length ? `重点包括：${items.join("；")}。` : ""}`;
+    const closing = context.nextTitle ? `接下来我们看“${context.nextTitle}”。` : "以上就是本次分享，谢谢大家。";
+    return `${opening}${body}${closing}`.replace(/。+/g, "。").slice(0, 480);
   }
 
   async finalizeBrief(topic: string, answers: Record<string, string>, _onToken?: (token: string) => void) {

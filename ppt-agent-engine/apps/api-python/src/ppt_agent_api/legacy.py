@@ -2,9 +2,26 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterable, AsyncIterator
+from contextvars import ContextVar, Token
 from typing import Any
 
 import httpx
+
+
+_request_headers: ContextVar[dict[str, str] | None] = ContextVar(
+    "ppt_legacy_request_headers",
+    default=None,
+)
+
+
+def set_legacy_request_headers(headers: dict[str, str]) -> Token:
+    """Attach sanitized end-user headers to internal pipeline sidecar calls."""
+
+    return _request_headers.set(dict(headers))
+
+
+def reset_legacy_request_headers(token: Token) -> None:
+    _request_headers.reset(token)
 
 
 class LegacyApiError(RuntimeError):
@@ -70,7 +87,10 @@ class LegacyApiClient:
         return await self._client.send(request, stream=True)
 
     async def request(self, method: str, path: str, json_body: Any = None) -> Any:
-        headers = {"x-ppt-internal-secret": self.internal_secret} if self.internal_secret else None
+        contextual_headers = _request_headers.get()
+        headers = dict(contextual_headers or {})
+        if not headers and self.internal_secret:
+            headers["x-ppt-internal-secret"] = self.internal_secret
         response = await self._client.request(method, path, json=json_body, headers=headers)
         try:
             payload = response.json()

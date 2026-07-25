@@ -1,7 +1,13 @@
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+_REPOSITORY_ROOT = _BACKEND_ROOT.parent
+load_dotenv(_BACKEND_ROOT / ".env")
+load_dotenv(_REPOSITORY_ROOT / ".env")
 
 
 class Settings:
@@ -40,6 +46,14 @@ class Settings:
     USAGE_ROLLUP_SCHEDULER_ENABLED: bool = os.getenv("USAGE_ROLLUP_SCHEDULER_ENABLED", "false").lower() == "true"
     USAGE_ROLLUP_REFRESH_ON_STARTUP: bool = os.getenv("USAGE_ROLLUP_REFRESH_ON_STARTUP", "false").lower() == "true"
     USAGE_ROLLUP_REFRESH_INTERVAL_SECONDS: int = int(os.getenv("USAGE_ROLLUP_REFRESH_INTERVAL_SECONDS", "900"))
+    PPT_INTERNAL_API_SECRET: str = os.getenv("PPT_INTERNAL_API_SECRET", "")
+    MODEL_USAGE_PRICING_JSON: str = os.getenv(
+        "MODEL_USAGE_PRICING_JSON",
+        '{"gpt-5.3-codex-spark":{"input":18,"output":72,"cache":9,"currency":"CNY"},'
+        '"gpt-5.6-sol":{"input":18,"output":72,"cache":9,"currency":"CNY"},'
+        '"gpt-5.6-terra":{"input":18,"output":72,"cache":9,"currency":"CNY"},'
+        '"gemini-3.6-flash-high":{"input":0.5,"output":2,"cache":0.125,"currency":"CNY"}}',
+    )
     WORKER_STALE_JOB_TIMEOUT_SECONDS: int = int(os.getenv("WORKER_STALE_JOB_TIMEOUT_SECONDS", "1800"))
     WORKER_STALE_JOB_ACTION: str = os.getenv("WORKER_STALE_JOB_ACTION", "requeue")
 

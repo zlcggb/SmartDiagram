@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { fitSvgTextToBounds, getThemeSurfacePreset, recolorSvgPreview } from "@ppt-agent/shared";
+import DOMPurify from "dompurify";
 import { useWorkbenchStore } from "../../store/workbenchStore";
 
 interface LiveSvgPreviewProps {
@@ -17,7 +18,9 @@ function tryCompleteSvg(text: string): string | null {
 
   // 去掉 markdown 代码块残留
   svg = svg.replace(/```(?:svg|xml)?/gi, "").replace(/```/g, "").trim();
-  return svg;
+  
+  // XSS 消毒，保留 SVG 相关的标签，剥离 script 标签
+  return DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true } });
 }
 
 export function LiveSvgPreview({ slideId }: LiveSvgPreviewProps) {

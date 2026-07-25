@@ -182,3 +182,24 @@ export async function fetchCaptchaConfig(): Promise<CaptchaConfig> {
     return { provider: 'altcha', challenge_url: '', turnstile_site_key: '', enabled: false, show_demo_presets: false };
   }
 }
+
+export interface BudgetMetrics {
+  allowed: boolean;
+  estimated_cost: number;
+  monthly_cost_limit: number;
+  estimated_total_tokens: number;
+  monthly_token_limit: number;
+  hard_limit_enabled: boolean;
+  run_count: number;
+}
+
+export async function fetchBillingData(session: AuthSession): Promise<BudgetMetrics> {
+  const res = await fetch(`${API_BASE}/api/billing/me`, {
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch billing data');
+  }
+  const data = await res.json();
+  return data.budget;
+}

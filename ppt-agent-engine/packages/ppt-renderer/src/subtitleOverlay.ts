@@ -8,6 +8,10 @@ export interface SubtitleOverlayOptions {
   fontFamily: string;
   fontSize?: number;
   style?: SubtitleStyle;
+  /** 字幕条带高度占画面宽度比例，须与合成端底部边距一致（默认 0.065）。 */
+  bandHeightRatio?: number;
+  /** 基础字号占画面宽度比例（默认 0.0177）：越小字越小。 */
+  fontScaleRatio?: number;
 }
 
 export type SubtitleStyle = "minimal-outline" | "soft-capsule" | "brand-accent";
@@ -32,8 +36,8 @@ function visualUnits(value: string) {
 
 export function buildSubtitleOverlaySvg(text: string, options: SubtitleOverlayOptions) {
   const width = options.width ?? 1920;
-  const height = Math.round(width * 0.065);
-  const baseFontSize = options.fontSize ?? Math.round(width * 0.0177);
+  const height = Math.round(width * (options.bandHeightRatio ?? 0.065));
+  const baseFontSize = options.fontSize ?? Math.round(width * (options.fontScaleRatio ?? 0.0177));
   const style = options.style ?? "minimal-outline";
   const lines = wrapSubtitleOverlayLines(text);
   const longestLineUnits = Math.max(...lines.map(visualUnits), 1);

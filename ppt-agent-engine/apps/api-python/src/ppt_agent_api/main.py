@@ -16,7 +16,12 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from starlette.background import BackgroundTask
 
-from .legacy import LegacyApiClient, LegacyApiError
+from .legacy import (
+    LegacyApiClient,
+    LegacyApiError,
+    reset_legacy_request_headers,
+    set_legacy_request_headers,
+)
 from .locks import project_run_locks
 from .progress import progress_hub
 from .schemas import PipelineRequest, ProgressEvent, fail, ok
@@ -183,6 +188,7 @@ async def run_pipeline(request: Request, project_id: str, body: PipelineRequest)
     }
 
     async with lock:
+        identity_token = set_legacy_request_headers(_forward_headers(request))
         try:
             async for part in request.app.state.pipeline.astream(
                 initial_state,
@@ -217,6 +223,8 @@ async def run_pipeline(request: Request, project_id: str, body: PipelineRequest)
                 ProgressEvent(stage="pipeline", status="error", message=f"流水线失败：{error}", node="runtime"),
             )
             raise HTTPException(status_code=502, detail=f"LangGraph 流水线失败：{error}") from error
+        finally:
+            reset_legacy_request_headers(identity_token)
 
 
 HOP_BY_HOP_HEADERS = {

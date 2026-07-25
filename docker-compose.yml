@@ -84,6 +84,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/smartdiagram
       - REDIS_URL=redis://redis:6379/0
       - LANGCHAIN_TRACING_V2=false
+      - PPT_INTERNAL_API_SECRET=${PPT_INTERNAL_API_SECRET:?Set PPT_INTERNAL_API_SECRET to a long random value}
     volumes:
       # local ObjectStorage 必须与独立 worker 共享；生产可改用 S3 兼容存储。
       - knowledgedata:/app/storage

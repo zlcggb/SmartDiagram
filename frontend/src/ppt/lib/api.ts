@@ -24,6 +24,8 @@ import type {
   SlidePlanDto,
   SlideSearchJson,
   SourceTextDto,
+  SpeechScriptRequestInput,
+  SubtitleLayout,
   SubtitleStyleId,
   TtsPreviewInput,
   UpdateFactInput,
@@ -34,6 +36,7 @@ import type { PageRenderResultWithGrade } from "./exportMode";
 import { collectPageGrades } from "./exportMode";
 import { guestProjectRepository } from "./guestProjectStore";
 import { currentPptIdentityHeaders, isPptGuest } from "./pptRequestContext";
+import { parseModelUsageDashboard, type ModelUsageEventDto } from "./modelUsage";
 
 /** 与业务请求、SSE 进度共用；勿再写第二套 VITE_API_BASE */
 export function getApiBase() {
@@ -65,6 +68,31 @@ export interface AiUsageSummary {
   callCount: number;
   label: string;
   provider?: string;
+  model: string;
+  designModel?: string;
+  projectRunCount?: number;
+  totalTokens?: number;
+  limitTokens?: number;
+  isHardLimit?: boolean;
+  monthlyUsedTokens?: number;
+  monthlyRemainingTokens?: number;
+  monthlyUsedPercent?: number;
+  monthlyRemainingPercent?: number;
+  period?: string;
+  estimatedCost?: number;
+  currency?: string;
+  cachedTokens?: number;
+  reasoningTokens?: number;
+  unpricedCount?: number;
+  events?: ModelUsageEventDto[];
+  usageError?: string;
+  /** 来自 ppt-agent-engine 的真实 Token 用量 */
+  tokenUsage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    callCount: number;
+  };
 }
 
 /** 从导出响应收集可展示的提示文案（去重） */
@@ -136,13 +164,30 @@ export function parseAiUsageSummary(payload: unknown): AiUsageSummary | null {
     root.usage && typeof root.usage === "object" ? (root.usage as Record<string, unknown>) : null;
   const candidates = [data, usage, root].filter(Boolean) as Record<string, unknown>[];
 
+  // 提取 tokenUsage（来自 AiUsageDto.tokenUsage）
+  let tokenUsage: AiUsageSummary["tokenUsage"] | undefined;
+  for (const candidate of candidates) {
+    const tu = candidate.tokenUsage as Record<string, unknown> | undefined;
+    if (tu && typeof tu === "object" && typeof tu.totalTokens === "number" && tu.totalTokens > 0) {
+      tokenUsage = {
+        promptTokens: typeof tu.promptTokens === "number" ? tu.promptTokens : 0,
+        completionTokens: typeof tu.completionTokens === "number" ? tu.completionTokens : 0,
+        totalTokens: typeof tu.totalTokens === "number" ? tu.totalTokens : 0,
+        callCount: typeof tu.callCount === "number" ? tu.callCount : 0,
+      };
+      break;
+    }
+  }
+
   for (const candidate of candidates) {
     const fromCounts = sumAiUsageCounts(candidate.counts);
     if (fromCounts !== null) {
       return {
         callCount: fromCounts,
         label: `本次会话 AI 调用约 ${fromCounts} 次`,
-        provider: pickProvider(root, candidate)
+        provider: pickProvider(root, candidate),
+        model: (typeof root.model === "string" ? root.model : undefined) || "AI",
+        tokenUsage,
       };
     }
   }
@@ -154,7 +199,9 @@ export function parseAiUsageSummary(payload: unknown): AiUsageSummary | null {
       return {
         callCount,
         label: `本次会话 AI 调用约 ${callCount} 次`,
-        provider: pickProvider(root, candidate)
+        provider: pickProvider(root, candidate),
+        model: (typeof root.model === "string" ? root.model : undefined) || "AI",
+        tokenUsage,
       };
     }
   }
@@ -369,13 +416,68 @@ export const api = {
     return request<SlideDto>(`/api/projects/${projectId}/slides/${slideId}`, json("PATCH", { renderStrategy }));
   },
   /**
-   * 轻量用量摘要：优先 /api/ai/usage，再回落 /api/ai/status。
-   * 无调用次数字段或请求失败时返回 null（不抛错）。
+   * 轻量用量摘要：从 /api/ai/status 获取模型配置，从 /api/billing/me 获取用户额度，
+   * 从项目数据推算当前项目 AI 交互次数。
    */
-  async getAiUsageSummary(): Promise<AiUsageSummary | null> {
-    const fromUsage = parseAiUsageSummary(await fetchJsonLoose("/api/ai/usage"));
-    if (fromUsage) return fromUsage;
-    return parseAiUsageSummary(await fetchJsonLoose("/api/ai/status"));
+  async getAiUsageSummary(projectId?: string): Promise<AiUsageSummary | null> {
+    const status = (await fetchJsonLoose("/api/ai/status")) as Record<string, unknown> | null;
+    const modelName = (typeof status?.model === "string" ? status.model : null) ||
+                      (typeof status?.provider === "string" ? status.provider : "AI");
+    const designModelName = typeof status?.designModel === "string" ? status.designModel : modelName;
+    let dashboard = parseModelUsageDashboard({ project_summary: {}, events: [] });
+    let usageError: string | undefined;
+    try {
+      const raw = window.localStorage.getItem("smartdiagram.auth.session");
+      const token = raw ? (JSON.parse(raw) as { access_token?: string }).access_token : undefined;
+      if (!token) {
+        usageError = "登录后才会持久化并显示项目调用明细";
+      } else {
+        const platformBase = String(import.meta.env?.VITE_PLATFORM_API_BASE_URL ?? (import.meta.env?.DEV ? "http://localhost:8000" : "")).replace(/\/$/, "");
+        const query = new URLSearchParams({ limit: "100" });
+        if (projectId) query.set("project_id", projectId);
+        const response = await fetch(`${platformBase}/api/billing/me/model-usage?${query}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        dashboard = parseModelUsageDashboard(await response.json());
+      }
+    } catch {
+      usageError = "项目用量明细暂时无法读取，请稍后刷新";
+    }
+
+    const project = dashboard.project;
+    const label = `${modelName} · 项目 ${project.callCount} 次`;
+
+    return {
+      callCount: project.callCount,
+      label,
+      provider: typeof status?.provider === "string" ? status.provider : undefined,
+      model: modelName,
+      designModel: designModelName,
+      projectRunCount: project.callCount,
+      totalTokens: project.totalTokens,
+      limitTokens: dashboard.limitTokens,
+      isHardLimit: dashboard.isHardLimit,
+      monthlyUsedTokens: dashboard.monthlyQuota.usedTokens,
+      monthlyRemainingTokens: dashboard.monthlyQuota.remainingTokens,
+      monthlyUsedPercent: dashboard.monthlyQuota.usedPercent,
+      monthlyRemainingPercent: dashboard.monthlyQuota.remainingPercent,
+      period: dashboard.period,
+      estimatedCost: project.estimatedCost,
+      currency: project.currency,
+      cachedTokens: project.cachedTokens,
+      reasoningTokens: project.reasoningTokens,
+      unpricedCount: project.unpricedCount,
+      events: dashboard.events,
+      usageError,
+      tokenUsage: {
+        promptTokens: project.inputTokens,
+        completionTokens: project.outputTokens,
+        totalTokens: project.totalTokens,
+        callCount: project.callCount,
+      },
+    };
   },
   startBrief(projectId: string) {
     return request<{ questions: BriefQuestion[]; project: ProjectDto }>(
@@ -437,6 +539,12 @@ export const api = {
   generateNarrations(projectId: string, input: NarrationOptionsInput = {}) {
     return request<SlideNarrationDto[]>(`/api/projects/${projectId}/narrations/generate`, json("POST", input));
   },
+  writeNarrations(projectId: string, input: SpeechScriptRequestInput) {
+    return request<SlideNarrationDto[]>(`/api/projects/${projectId}/narrations/write`, json("POST", input));
+  },
+  writeNarration(projectId: string, slideId: string, input: Omit<SpeechScriptRequestInput, "slideIds">) {
+    return request<SlideNarrationDto>(`/api/projects/${projectId}/slides/${slideId}/write-narration`, json("POST", input));
+  },
   applyNarrationStyle(projectId: string, input: NarrationStyleInput) {
     return request<SlideNarrationDto[]>(`/api/projects/${projectId}/narrations/style`, json("PATCH", input));
   },
@@ -452,7 +560,7 @@ export const api = {
   getMediaExports(projectId: string) {
     return request<MediaExportDto[]>(`/api/projects/${projectId}/media-exports`);
   },
-  exportVideo(projectId: string, input: NarrationOptionsInput & { subtitles?: boolean; subtitleFont?: string; subtitleStyle?: SubtitleStyleId } = {}) {
+  exportVideo(projectId: string, input: NarrationOptionsInput & { subtitles?: boolean; subtitleFont?: string; subtitleStyle?: SubtitleStyleId; subtitleLayout?: SubtitleLayout } = {}) {
     return request<MediaExportDto>(`/api/projects/${projectId}/export-video`, json("POST", { ...input, width: 1920, height: 1080, fps: 30 }));
   }
 };

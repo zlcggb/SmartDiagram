@@ -4,6 +4,7 @@ import {
   AlertCircle,
   CheckCircle,
   ChevronRight,
+  Coins,
   Languages,
   LogOut,
   Loader2,
@@ -22,12 +23,13 @@ import { useT } from '../../i18n';
 import OpsDashboard from '../ops/OpsDashboard';
 import DiagramPreferencesPanel from './DiagramPreferencesPanel';
 import UserManagementPanel from './UserManagementPanel';
+import PricingPanel from './PricingPanel';
 import { canReadOps } from '../../config/enterpriseContext';
 import { isAdminSession, type AuthSession } from '../../config/auth';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { UserAvatar } from '../profile/UserAvatar';
 
-type SettingsSection = 'appearance' | 'model' | 'preferences' | 'ops' | 'users' | 'session';
+type SettingsSection = 'appearance' | 'model' | 'preferences' | 'ops' | 'users' | 'pricing' | 'session';
 
 interface SettingsModalProps {
   open: boolean;
@@ -108,6 +110,12 @@ export default function SettingsModal({
         icon: Users,
         label: t('settings.nav.users'),
         description: t('settings.usersDescription'),
+      });
+      items.push({
+        id: 'pricing',
+        icon: Coins,
+        label: t('settings.nav.pricing'),
+        description: t('pricing.description'),
       });
     }
     items.push({
@@ -445,6 +453,9 @@ export default function SettingsModal({
     }
     if (activeSection === 'users') {
       return <UserManagementPanel open onClose={() => setActiveSection('appearance')} embedded />;
+    }
+    if (activeSection === 'pricing') {
+      return <PricingPanel open onClose={() => setActiveSection('appearance')} embedded />;
     }
     return renderSession();
   };

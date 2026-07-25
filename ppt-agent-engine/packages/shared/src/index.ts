@@ -180,6 +180,20 @@ export const ttsPreviewSchema = narrationStyleSchema.omit({ slideIds: true }).ex
 export const subtitleStyleIds = ["minimal-outline", "soft-capsule", "brand-accent"] as const;
 export const SubtitleStyleSchema = z.enum(subtitleStyleIds);
 export type SubtitleStyleId = (typeof subtitleStyleIds)[number];
+
+/** 字幕布局：位置（底部边距 / 水平偏移）与字号，均为占画面比例，可持久化进导出 options。 */
+export const subtitleLayoutSchema = z.object({
+  /** 底部边距占画面高度比例：越大字幕越往上（默认贴近底部安全区）。 */
+  bottomRatio: z.coerce.number().min(0).max(0.35).optional().default(0.02),
+  /** 水平偏移占画面宽度比例：负向左、正向右。 */
+  offsetXRatio: z.coerce.number().min(-0.35).max(0.35).optional().default(-0.02),
+  /** 基础字号占画面宽度比例：越小字越小。 */
+  fontScaleRatio: z.coerce.number().min(0.01).max(0.03).optional().default(0.023)
+});
+export type SubtitleLayoutInput = z.input<typeof subtitleLayoutSchema>;
+export type SubtitleLayout = z.infer<typeof subtitleLayoutSchema>;
+/** 默认字幕布局：底部 2% 边距、水平左偏 2%、字号 2.3%（用户调试后选定的观感最佳值）。 */
+export const defaultSubtitleLayout: SubtitleLayout = { bottomRatio: 0.02, offsetXRatio: -0.02, fontScaleRatio: 0.023 };
 export const subtitleStylePresets: Array<{ id: SubtitleStyleId; label: string; description: string }> = [
   { id: "minimal-outline", label: "轻描边", description: "单行长字幕，无底板" },
   { id: "soft-capsule", label: "柔和胶囊", description: "单行字幕的半透明底" },
@@ -222,6 +236,74 @@ export type NarrationStyleInput = z.input<typeof narrationStyleSchema>;
 export type TtsPreviewInput = z.input<typeof ttsPreviewSchema>;
 export type NarrationStylePresetId = (typeof narrationStylePresets)[number]["id"] | "custom";
 
+/**
+ * 演讲稿「写稿风格」预设 —— 控制主模型如何把页面内容写成口播稿。
+ * 与上面的 narrationStylePresets（TTS 朗读 prompt，决定「怎么念」）完全解耦：
+ * 这里决定「稿子内容怎么写」。writingPrompt 是写稿 system prompt，不是朗读指令。
+ */
+export const speechWritingStylePresets = [
+  {
+    id: "formal-report",
+    label: "正式汇报",
+    description: "沉稳、有逻辑、用词规范，适合商务与正式汇报",
+    writingPrompt: [
+      "你是一位资深的中文商务演讲撰稿人。请把给定幻灯片的内容改写成一段适合正式汇报场合的口播稿。",
+      "要求：语气沉稳、专业、可信；逻辑清晰、层次分明；用词规范、克制，不口语化、不夸张；",
+      "开场与结尾得体，页间过渡自然；只依据提供的标题、要点与核心信息撰写，不编造任何事实或数据；",
+      "输出为连贯的口播正文，不含标题、不含页码标签、不含 Markdown、不含任何解释性文字；长度约 150–220 字。"
+    ].join("")
+  },
+  {
+    id: "clear-explainer",
+    label: "清晰讲解",
+    description: "循循善诱、把概念讲清楚，适合教学与培训",
+    writingPrompt: [
+      "你是一位擅长把复杂概念讲清楚的中文讲师。请把给定幻灯片的内容改写成一段清晰易懂的讲解式口播稿。",
+      "要求：循循善诱、循序渐进；先点明这一页要讲什么，再逐条把要点解释清楚，必要时用通俗的说法帮助理解；",
+      "语气亲切、耐心、有条理；只依据提供的标题、要点与核心信息撰写，不编造任何事实或数据；",
+      "输出为连贯的口播正文，不含标题、不含页码标签、不含 Markdown、不含任何解释性文字；长度约 150–220 字。"
+    ].join("")
+  },
+  {
+    id: "storytelling",
+    label: "故事化叙述",
+    description: "有叙事线与画面感，适合演讲与路演",
+    writingPrompt: [
+      "你是一位善于讲故事的中文演讲撰稿人。请把给定幻灯片的内容改写成一段有叙事感、有画面感的口播稿。",
+      "要求：用叙事的方式组织内容，有铺垫、有推进、有情绪节奏；适当运用具象的表达和过渡，让听众有代入感；",
+      "但不得脱离原意、不得编造事实、数据或情节；保持内容准确是首要约束；",
+      "输出为连贯的口播正文，不含标题、不含页码标签、不含 Markdown、不含任何解释性文字；长度约 150–220 字。"
+    ].join("")
+  },
+  {
+    id: "casual-vlog",
+    label: "轻松口播",
+    description: "口语化、节奏快、有网感，适合短视频与博主口播",
+    writingPrompt: [
+      "你是一位中文短视频口播撰稿人。请把给定幻灯片的内容改写成一段轻松、有网感的口播稿。",
+      "要求：口语化、节奏明快、像和朋友聊天一样自然；句子短、有呼吸感，可适当使用口语连接词；",
+      "开头能抓住注意力，重点突出；只依据提供的标题、要点与核心信息撰写，不编造任何事实或数据，不堆砌网络流行语；",
+      "输出为连贯的口播正文，不含标题、不含页码标签、不含 Markdown、不含任何解释性文字；长度约 130–200 字。"
+    ].join("")
+  }
+] as const;
+
+export type SpeechWritingStyleId = (typeof speechWritingStylePresets)[number]["id"];
+
+export const speechWritingStyleIds = speechWritingStylePresets.map((preset) => preset.id) as [
+  SpeechWritingStyleId,
+  ...SpeechWritingStyleId[]
+];
+
+export const SpeechWritingStyleIdSchema = z.enum(speechWritingStyleIds);
+
+export const speechScriptRequestSchema = z.object({
+  slideIds: slideIdScopeSchema.optional(),
+  style: SpeechWritingStyleIdSchema,
+  force: z.boolean().optional().default(false)
+});
+export type SpeechScriptRequestInput = z.input<typeof speechScriptRequestSchema>;
+
 export const updateNarrationSchema = z.object({
   scriptText: z.string().min(1).max(4000),
   ttsText: z.string().min(1).max(4000).optional(),
@@ -237,7 +319,8 @@ export const videoExportSchema = narrationOptionsSchema.extend({
   fps: z.coerce.number().int().min(15).max(60).default(30),
   subtitles: z.boolean().optional().default(false),
   subtitleFont: z.enum(["noto-sans-cjk-sc"]).optional().default("noto-sans-cjk-sc"),
-  subtitleStyle: SubtitleStyleSchema.optional().default("minimal-outline")
+  subtitleStyle: SubtitleStyleSchema.optional().default("soft-capsule"),
+  subtitleLayout: subtitleLayoutSchema.optional()
 });
 
 export type FactCategory = z.infer<typeof FactCategorySchema>;
@@ -718,6 +801,14 @@ export interface AiExportUsageSummary {
 export interface AiUsageDto {
   counts: AiUsageCounts;
   lastExportSummary: AiExportUsageSummary | null;
+  /** 真实 Token 用量（来自 API 响应 usage 字段） */
+  tokenUsage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    /** 有 usage 数据的 API 调用次数 */
+    callCount: number;
+  };
 }
 
 export interface ExportDto {
@@ -758,6 +849,7 @@ export interface MediaExportDto {
   subtitles?: boolean;
   subtitleFont?: string | null;
   subtitleStyle?: SubtitleStyleId | null;
+  subtitleLayout?: SubtitleLayout | null;
   previewUrl?: string | null;
   downloadUrl?: string | null;
   subtitleUrl?: string | null;

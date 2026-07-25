@@ -6,13 +6,17 @@ import { renderSlidePng, renderSubtitleOverlayPng } from "@ppt-agent/ppt-rendere
 import {
   narrationOptionsSchema,
   narrationStyleSchema,
+  speechScriptRequestSchema,
   ttsPreviewSchema,
   updateNarrationSchema,
   videoExportSchema,
   type MediaExportDto,
   type SlideDto,
-  type SlideNarrationDto
+  type SlideNarrationDto,
+  type SpeechWritingStyleId,
+  type SubtitleLayout
 } from "@ppt-agent/shared";
+import { createAiAdapter } from "../lib/ai.js";
 import { formatSlide } from "../lib/format.js";
 import { normalizeConcurrency, runWithConcurrency } from "../lib/concurrency.js";
 import { assertDesignedSlides, MediaScopeError, selectScopedSlides } from "../lib/mediaScope.js";
@@ -24,7 +28,7 @@ import { fail, ok } from "../lib/response.js";
 import { synthesizeToFile, ttsCatalog, ttsRuntimeStatus } from "../lib/tts.js";
 import { resolveSubtitleFont, subtitleFontCatalog } from "../lib/subtitleFonts.js";
 import { buildSubtitleCues, subtitleCuesToSrt, type SubtitleCue } from "../lib/subtitles.js";
-import { assertFfmpegAvailable, concatVideoClips, renderNarratedClip } from "../lib/video.js";
+import { assertFfmpegAvailable, concatVideoClips, renderNarratedClip, SUBTITLE_BOTTOM_MARGIN } from "../lib/video.js";
 
 type ProjectParams = { id: string };
 type SlideParams = { id: string; slideId: string };
@@ -76,7 +80,7 @@ function mediaExportDto(row: {
   id: string; projectId: string; kind: string; status: string; progress: number; outputPath: string | null;
   optionsJson: string; error: string | null; createdAt: Date; updatedAt: Date;
 }): MediaExportDto {
-  let options: { subtitles?: boolean; subtitleFont?: string; subtitleStyle?: MediaExportDto["subtitleStyle"] } = {};
+  let options: { subtitles?: boolean; subtitleFont?: string; subtitleStyle?: MediaExportDto["subtitleStyle"]; subtitleLayout?: SubtitleLayout } = {};
   try {
     options = JSON.parse(row.optionsJson) as typeof options;
   } catch {
@@ -92,6 +96,7 @@ function mediaExportDto(row: {
     subtitles: Boolean(options.subtitles),
     subtitleFont: options.subtitleFont || null,
     subtitleStyle: options.subtitleStyle || null,
+    subtitleLayout: options.subtitleLayout || null,
     previewUrl: downloadUrl(row.outputPath),
     downloadUrl: row.outputPath ? `/api/projects/${row.projectId}/media-exports/${row.id}/download` : null,
     subtitleUrl: subtitlePath && fs.existsSync(subtitlePath)
@@ -103,9 +108,10 @@ function mediaExportDto(row: {
   };
 }
 
-function sourceHash(slide: SlideDto) {
+function sourceHash(slide: SlideDto, style?: string) {
   return crypto.createHash("sha256").update(JSON.stringify({
     narrationTemplateVersion,
+    style: style ?? null,
     title: slide.title,
     goal: slide.slideGoal,
     keyMessage: slide.keyMessage,
@@ -174,6 +180,52 @@ async function ensureNarrations(projectId: string, options: ReturnType<typeof na
     where: { slide: { projectId }, slideId: { in: slides.map((slide) => slide.id) } },
     orderBy: { slide: { sortOrder: "asc" } }
   });
+}
+
+/**
+ * 用主模型按风格为单页写口播稿并 upsert；模型失败回退模板，保证不空。
+ * 返回是否走了模板兜底。跳过逻辑（sourceHash 未变且非 force）返回 "skipped"。
+ */
+async function writeSlideScriptNarration(
+  slide: SlideDto,
+  allSlides: SlideDto[],
+  style: SpeechWritingStyleId,
+  force: boolean
+): Promise<"written" | "fallback" | "skipped"> {
+  const projectIndex = allSlides.findIndex((candidate) => candidate.id === slide.id);
+  const hash = sourceHash(slide, style);
+  const existing = await prisma.slideNarration.findUnique({ where: { slideId: slide.id } });
+  if (existing && existing.sourceHash === hash && !force) return "skipped";
+  const runtime = ttsRuntimeStatus();
+  let scriptText: string;
+  let usedFallback = false;
+  try {
+    scriptText = await createAiAdapter().generateSpeechScript(slide, {
+      index: projectIndex,
+      total: allSlides.length,
+      prevTitle: allSlides[projectIndex - 1]?.title,
+      nextTitle: allSlides[projectIndex + 1]?.title,
+      style
+    });
+    if (!scriptText.trim()) throw new Error("空稿");
+  } catch {
+    usedFallback = true;
+    scriptText = buildSpeakerScript(slide, projectIndex, allSlides);
+  }
+  await prisma.slideNarration.upsert({
+    where: { slideId: slide.id },
+    create: {
+      slideId: slide.id, scriptText, ttsText: scriptText,
+      voice: existing?.voice || runtime.voice, model: existing?.model || runtime.model,
+      prompt: existing?.prompt || "用自然、专业、清晰的中文演讲语气朗读",
+      languageCode: existing?.languageCode || runtime.languageCode, sourceHash: hash, status: "draft"
+    },
+    update: {
+      scriptText, ttsText: scriptText,
+      sourceHash: hash, audioPath: null, audioDurationMs: null, status: "draft"
+    }
+  });
+  return usedFallback ? "fallback" : "written";
 }
 
 async function ensureAudio(projectId: string, options: ReturnType<typeof narrationOptionsSchema.parse>) {
@@ -280,6 +332,47 @@ export async function mediaRoutes(app: FastifyInstance) {
       if (error instanceof MediaScopeError) return reply.status(error.statusCode).send(fail(error.message));
       throw error;
     }
+  });
+
+  // 按「写稿风格」调用主模型生成口播稿；模型失败时回退到模板，保证不空。
+  app.post<{ Params: ProjectParams }>("/api/projects/:id/narrations/write", async (request, reply) => {
+    const project = await prisma.project.findUnique({ where: { id: request.params.id } });
+    if (!project) return reply.status(404).send(fail("未找到项目"));
+    const input = speechScriptRequestSchema.parse(request.body || {});
+    try {
+      const allSlides = await projectSlides(project.id);
+      const slides = selectScopedSlides(allSlides, input.slideIds);
+      let fallbackCount = 0;
+      // 并发写稿（最多 3 路），每页内部失败回退模板，不影响其他页
+      await runWithConcurrency(slides, 3, async (slide) => {
+        const result = await writeSlideScriptNarration(slide, allSlides, input.style, input.force);
+        if (result === "fallback") fallbackCount += 1;
+      });
+      const rows = await prisma.slideNarration.findMany({
+        where: { slide: { projectId: project.id }, slideId: { in: slides.map((slide) => slide.id) } },
+        orderBy: { slide: { sortOrder: "asc" } }
+      });
+      const suffix = fallbackCount > 0 ? `（${fallbackCount} 页模型不可用，已用模板兜底）` : "";
+      return reply.send(ok(rows.map(narrationDto), `已按风格生成 ${rows.length} 页演讲稿${suffix}`));
+    } catch (error) {
+      if (error instanceof MediaScopeError) return reply.status(error.statusCode).send(fail(error.message));
+      throw error;
+    }
+  });
+
+  // 单页按风格重写演讲稿（用于「重新生成」某一页）
+  app.post<{ Params: SlideParams }>("/api/projects/:id/slides/:slideId/write-narration", async (request, reply) => {
+    const project = await prisma.project.findUnique({ where: { id: request.params.id } });
+    if (!project) return reply.status(404).send(fail("未找到项目"));
+    const input = speechScriptRequestSchema.omit({ slideIds: true }).parse(request.body || {});
+    const allSlides = await projectSlides(project.id);
+    const slide = allSlides.find((candidate) => candidate.id === request.params.slideId);
+    if (!slide) return reply.status(404).send(fail("未找到页面"));
+    const result = await writeSlideScriptNarration(slide, allSlides, input.style, true);
+    const row = await prisma.slideNarration.findUnique({ where: { slideId: slide.id } });
+    if (!row) return reply.status(500).send(fail("演讲稿生成失败"));
+    const suffix = result === "fallback" ? "（模型不可用，已用模板兜底）" : "";
+    return reply.send(ok(narrationDto(row), `本页演讲稿已重新生成${suffix}`));
   });
 
   app.patch<{ Params: ProjectParams }>("/api/projects/:id/narrations/style", async (request, reply) => {
@@ -429,6 +522,14 @@ export async function mediaRoutes(app: FastifyInstance) {
       fs.mkdirSync(workDir, { recursive: true });
       const clips: string[] = [];
       const subtitleFont = options.subtitles ? resolveSubtitleFont(options.subtitleFont) : null;
+      const subtitleLayout = options.subtitleLayout;
+      const subtitlePlacement = {
+        bottomRatio: subtitleLayout?.bottomRatio ?? SUBTITLE_BOTTOM_MARGIN,
+        offsetXRatio: subtitleLayout?.offsetXRatio ?? -0.02
+      };
+      // 条带高度须覆盖字号所需高度（行高 + 内边距），否则小号字在高边距下会被裁掉。
+      const fontScale = subtitleLayout?.fontScaleRatio ?? 0.023;
+      const bandHeightRatio = Math.max(subtitlePlacement.bottomRatio, fontScale * 2);
       const subtitleCues: SubtitleCue[] = [];
       let timelineMs = 0;
       for (const [index, slide] of slides.entries()) {
@@ -447,7 +548,9 @@ export async function mediaRoutes(app: FastifyInstance) {
             width: options.width,
             fontPath: subtitleFont!.fontPath,
             fontFamily: subtitleFont!.family,
-            style: options.subtitleStyle
+            style: options.subtitleStyle,
+            bandHeightRatio,
+            fontScaleRatio: fontScale
           });
           return { imagePath: overlayPath, startMs: cue.startMs, endMs: cue.endMs };
         });
@@ -463,7 +566,8 @@ export async function mediaRoutes(app: FastifyInstance) {
           width: options.width,
           height: options.height,
           fps: options.fps,
-          subtitleOverlays
+          subtitleOverlays,
+          subtitlePlacement
         });
         timelineMs += durationMs;
         clips.push(clipPath);

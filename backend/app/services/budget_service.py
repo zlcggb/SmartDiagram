@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.audit import AgentRun
+from app.models.model_usage import ModelUsageEvent
 from app.models.common import new_id, utc_now
 from app.models.tenant import Tenant
 from app.models.usage import TenantUsageBudget, TenantUsageRollup
@@ -187,6 +188,14 @@ async def _aggregate_agent_run_usage(
         statement = statement.where(AgentRun.project_id == project_id)
 
     runs = list((await session.execute(statement)).scalars().all())
+    event_statement = select(ModelUsageEvent).where(
+        ModelUsageEvent.tenant_id == tenant_id,
+        ModelUsageEvent.started_at >= period_start,
+        ModelUsageEvent.started_at < period_end,
+    )
+    if project_id:
+        event_statement = event_statement.where(ModelUsageEvent.project_id == project_id)
+    model_events = list((await session.execute(event_statement)).scalars().all())
     total_cost = 0.0
     total_tokens = 0
     total_input_tokens = 0
@@ -200,12 +209,21 @@ async def _aggregate_agent_run_usage(
         total_input_tokens += int(token_usage.get("estimated_input_tokens") or 0)
         total_output_tokens += int(token_usage.get("estimated_output_tokens") or 0)
 
+    for event in model_events:
+        status_counts[event.status] = status_counts.get(event.status, 0) + 1
+        total_cost += float(event.estimated_cost or 0.0)
+        total_tokens += int(event.total_tokens or 0)
+        total_input_tokens += int(event.input_tokens or 0)
+        total_output_tokens += int(event.output_tokens or 0)
+
     return {
         "period": period,
         "scope": "project" if project_id else "tenant",
         "tenant_id": tenant_id,
         "project_id": project_id,
-        "run_count": len(runs),
+        "run_count": len(runs) + len(model_events),
+        "agent_run_count": len(runs),
+        "model_call_count": len(model_events),
         "status_counts": status_counts,
         "estimated_cost": round(total_cost, 8),
         "estimated_total_tokens": total_tokens,

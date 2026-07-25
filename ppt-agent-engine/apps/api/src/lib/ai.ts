@@ -6,7 +6,8 @@ import {
   TavilyResearchAdapter
 } from "@ppt-agent/agents";
 import type { GeminiAdapter } from "@ppt-agent/agents";
-import { getAiUsage, wrapAdapterWithUsage } from "./aiUsage.js";
+import { getAiUsage, recordModelUsageEvent, wrapAdapterWithUsage } from "./aiUsage.js";
+import { createModelUsageReporter } from "./modelUsageReporter.js";
 
 export type AiProvider = "gemini" | "openai-compatible" | "mock";
 export type ResearchProvider = "tavily" | "ai-knowledge";
@@ -102,11 +103,16 @@ export function aiRuntimeStatus() {
 
 export function createAiAdapter(): GeminiAdapter {
   const provider = configuredAiProvider();
+  const ledgerReporter = createModelUsageReporter();
+  const reporter = async (event: import("@ppt-agent/agents").ModelUsageEvent) => {
+    recordModelUsageEvent(event);
+    await ledgerReporter(event);
+  };
   const base =
     provider === "openai-compatible"
-      ? new OpenAiCompatibleAdapter()
+      ? new OpenAiCompatibleAdapter({ reporter })
       : provider === "gemini"
-        ? new RealGeminiAdapter()
+        ? new RealGeminiAdapter({ reporter })
         : new MockGeminiAdapter();
   return wrapAdapterWithUsage(base);
 }

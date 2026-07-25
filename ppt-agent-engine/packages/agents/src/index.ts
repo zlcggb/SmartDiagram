@@ -1,7 +1,8 @@
-export type { GeminiAdapter } from "./types.js";
+export type { GeminiAdapter, ModelUsageEvent, ModelUsageReporter, ModelUsageStage } from "./types.js";
 export { MockGeminiAdapter } from "./mockGeminiAdapter.js";
 export { RealGeminiAdapter } from "./realGeminiAdapter.js";
 export { OpenAiCompatibleAdapter } from "./openaiCompatibleAdapter.js";
+export type { TokenUsageSnapshot } from "./openaiCompatibleAdapter.js";
 export type { ResearchAdapter, ResearchAdapterKind } from "./researchAdapter.js";
 export { getResearchAdapter, setResearchAdapter } from "./researchAdapter.js";
 export { TavilyResearchAdapter, type TavilyResearchAdapterOptions } from "./tavilyResearchAdapter.js";

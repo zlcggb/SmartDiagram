@@ -22,6 +22,14 @@ export interface SubtitleOverlay {
   endMs: number;
 }
 
+/** 字幕放置参数（占画面比例），与前端字幕位置预览一致。 */
+export interface SubtitlePlacement {
+  /** 底部边距占画面高度比例：越大字幕越往上。 */
+  bottomRatio: number;
+  /** 水平偏移占画面宽度比例：负向左、正向右。 */
+  offsetXRatio: number;
+}
+
 export interface NarratedClipInput {
   imagePath: string;
   audioPath: string;
@@ -30,11 +38,15 @@ export interface NarratedClipInput {
   height: number;
   fps: number;
   subtitleOverlays?: SubtitleOverlay[];
+  subtitlePlacement?: SubtitlePlacement;
 }
 
 function seconds(valueMs: number) {
   return (valueMs / 1_000).toFixed(3);
 }
+
+/** 字幕条底部安全边距（占画面高度比例）：越大字幕越往上。须与渲染端条带高度一致，避免条带在预留空间内下沉。 */
+export const SUBTITLE_BOTTOM_MARGIN = 0.02;
 
 export function buildNarratedClipArgs(input: NarratedClipInput) {
   const videoFilter = `scale=${input.width}:${input.height}:force_original_aspect_ratio=decrease,pad=${input.width}:${input.height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
@@ -48,13 +60,16 @@ export function buildNarratedClipArgs(input: NarratedClipInput) {
     args.push("-loop", "1", "-framerate", String(input.fps), "-i", overlay.imagePath);
   }
   if (overlays.length) {
+    const placement = input.subtitlePlacement ?? { bottomRatio: SUBTITLE_BOTTOM_MARGIN, offsetXRatio: 0 };
+    const xExpr = Math.round(input.width * placement.offsetXRatio);
+    const yExpr = `H-h-${Math.round(input.height * placement.bottomRatio)}`;
     const filters = [`[0:v]${videoFilter}[base]`];
     let previous = "base";
     overlays.forEach((overlay, index) => {
       const subtitle = `subtitle${index}`;
       const video = `video${index}`;
       filters.push(`[${index + 2}:v]format=rgba[${subtitle}]`);
-      filters.push(`[${previous}][${subtitle}]overlay=0:H-h-${Math.round(input.height * 0.065)}:enable='between(t,${seconds(overlay.startMs)},${seconds(overlay.endMs)})'[${video}]`);
+      filters.push(`[${previous}][${subtitle}]overlay=${xExpr}:${yExpr}:enable='between(t,${seconds(overlay.startMs)},${seconds(overlay.endMs)})'[${video}]`);
       previous = video;
     });
     filters.push(`[${previous}]format=yuv420p[outv]`);

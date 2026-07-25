@@ -1,10 +1,13 @@
 import { Link, useLocation, useParams } from "react-router-dom";
 import type { ReactNode } from "react";
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { LoaderCircle, Sparkles, Activity, Cpu } from "lucide-react";
 import { AppLogoMark } from "../AppLogo";
 import { useWorkbenchStore } from "../../store/workbenchStore";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { WorkspaceNav } from "./WorkspaceNav";
+import { TokenDashboardModal } from "../studio/TokenDashboardModal";
+import { startAiUsageAutoRefresh } from "../../lib/usageRefresh";
 
 export function ProjectShell({ children }: { children: ReactNode }) {
   const { projectId } = useParams();
@@ -18,6 +21,17 @@ export function ProjectShell({ children }: { children: ReactNode }) {
   const aiUsageSummary = useWorkbenchStore((s) => s.aiUsageSummary);
   const latestSourceText = useWorkbenchStore((s) => s.latestSourceText);
   const runPipeline = useWorkbenchStore((s) => s.runPipeline);
+  const refreshAiUsage = useWorkbenchStore((s) => s.refreshAiUsage);
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+
+  useEffect(() => {
+    return startAiUsageAutoRefresh({
+      busy: Boolean(busy),
+      refresh: refreshAiUsage,
+      schedule: (callback, intervalMs) => window.setInterval(callback, intervalMs),
+      cancel: (handle) => window.clearInterval(handle as number),
+    });
+  }, [busy, refreshAiUsage]);
 
   return (
     <div
@@ -39,12 +53,22 @@ export function ProjectShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="workspace-header__actions">
-            {aiUsageSummary ? (
-              <span className="workspace-usage-pill">
-                <Sparkles className="h-3.5 w-3.5" />
-                {aiUsageSummary.label}
+            <button
+              type="button"
+              className="workspace-usage-pill cursor-pointer hover:bg-black/5 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200/80 bg-white/90 backdrop-blur-sm text-xs font-medium text-gray-700 shadow-sm transition-all hover:border-gray-300 hover:shadow-md"
+              onClick={() => setDashboardOpen(true)}
+              title="查看当前项目的模型调用、Token 与费用明细"
+            >
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold border border-blue-100">
+                <Cpu className="h-3.5 w-3.5 text-blue-600" />
+                {aiUsageSummary?.model || "AI Model"}
               </span>
-            ) : null}
+              <span className="text-gray-300">|</span>
+              <span className="inline-flex items-center gap-1.5 text-gray-600">
+                <Activity className="h-3.5 w-3.5 text-emerald-500" />
+                <span>项目 <strong>{aiUsageSummary?.projectRunCount ?? 0}</strong> 次</span>
+              </span>
+            </button>
             <button
               type="button"
               className="primary-button workspace-generate-button"
@@ -86,6 +110,8 @@ export function ProjectShell({ children }: { children: ReactNode }) {
       <main className="mx-auto flex max-w-[1400px] min-h-0 flex-col px-5 py-6">
         {children}
       </main>
+
+      {dashboardOpen && <TokenDashboardModal onClose={() => setDashboardOpen(false)} />}
     </div>
   );
 }
