@@ -1,3 +1,0 @@
-ALTER TABLE "Slide" ADD COLUMN "irJson" TEXT;
-ALTER TABLE "Slide" ADD COLUMN "svgPreview" TEXT;
-ALTER TABLE "Slide" ADD COLUMN "generationStatus" TEXT NOT NULL DEFAULT 'draft';

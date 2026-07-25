@@ -1,2 +1,0 @@
-"""PPT Agent FastAPI backend."""
-
