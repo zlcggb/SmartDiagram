@@ -7,18 +7,15 @@ import type {
   PptExportTheme,
   ProjectDto,
   SlideDto,
-  SlideIrDto,
   SlidePlanDto
 } from "@ppt-agent/shared";
 import {
   buildExtractFactsPrompt,
   buildOutlinePrompt,
-  buildSlideIrPrompt,
   buildSlidePlanPrompt,
   buildSvgPreviewPrompt,
   extractFactsSystemPrompt,
   outlineSystemPrompt,
-  slideIrSystemPrompt,
   slidePlanSystemPrompt,
   svgPreviewSystemPrompt
 } from "./prompts.js";
@@ -26,12 +23,10 @@ import {
   extractFactsSchema,
   normalizeFactsResult,
   normalizeOutline,
-  normalizeSlideIr,
   normalizeSlidePlan,
   outlineSchema,
   parseModelJson,
   sanitizeSvgOutput,
-  slideIrJsonSchema,
   slidePlanSchema
 } from "./realGeminiAdapter.js";
 import type { GeminiAdapter, SvgGenerationOptions } from "./types.js";
@@ -94,7 +89,7 @@ function resolveTemperature() {
 
 type EffortLevel = "low" | "high" | "max" | "none";
 
-type EffortStage = "facts" | "brief" | "research" | "outline" | "search" | "plan" | "ir" | "svg";
+type EffortStage = "facts" | "brief" | "research" | "outline" | "search" | "plan" | "svg";
 
 function normalizeEffortLevel(raw: string | undefined): EffortLevel | undefined {
   if (!raw) return undefined;
@@ -116,12 +111,12 @@ function resolveEffortForStage(stage: EffortStage | "main"): EffortLevel {
     if (stageSpecific) return stageSpecific;
   }
 
-  if (stage === "ir" || stage === "svg") {
+  if (stage === "svg") {
     const designEffort = normalizeEffortLevel(process.env.OPENAI_COMPATIBLE_DESIGN_EFFORT);
     if (designEffort) return designEffort;
   }
 
-  if (stage !== "ir" && stage !== "svg") {
+  if (stage !== "svg") {
     const mainEffort = normalizeEffortLevel(process.env.OPENAI_COMPATIBLE_MAIN_EFFORT);
     if (mainEffort) return mainEffort;
   }
@@ -449,14 +444,7 @@ export class OpenAiCompatibleAdapter implements GeminiAdapter {
     return normalizeSlidePlan(result, slide, allowedFactIds);
   }
 
-  async generateSlideIr(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void): Promise<SlideIrDto> {
-    const result = await this.generateJson<unknown>(buildSlideIrPrompt(slide, facts, theme), slideIrJsonSchema, slideIrSystemPrompt, {
-      model: this.designModel,
-      temperature: resolveTemperature(),
-      stage: "ir"
-    }, onToken);
-    return normalizeSlideIr(result, slide, theme);
-  }
+
 
   async generateSvgPreview(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void, options?: SvgGenerationOptions): Promise<string> {
     const result = await this.generateText(buildSvgPreviewPrompt(slide, facts, theme, options?.surfaceId, options?.revisionNotes, options?.accentId), svgPreviewSystemPrompt, { stage: "svg" }, onToken);

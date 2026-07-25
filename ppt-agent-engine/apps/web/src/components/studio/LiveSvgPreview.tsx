@@ -1,11 +1,9 @@
 import { useMemo } from "react";
 import { fitSvgTextToBounds, getThemeSurfacePreset, recolorSvgPreview } from "@ppt-agent/shared";
 import { useWorkbenchStore } from "../../store/workbenchStore";
-import type { RenderStrategy } from "../../lib/exportMode";
 
 interface LiveSvgPreviewProps {
   slideId: string | null;
-  strategy: RenderStrategy;
 }
 
 function tryCompleteSvg(text: string): string | null {
@@ -22,7 +20,7 @@ function tryCompleteSvg(text: string): string | null {
   return svg;
 }
 
-export function LiveSvgPreview({ slideId, strategy }: LiveSvgPreviewProps) {
+export function LiveSvgPreview({ slideId }: LiveSvgPreviewProps) {
   const progressStages = useWorkbenchStore((s) => s.progressStages);
   const exportTheme = useWorkbenchStore((s) => s.exportTheme);
   const themeAccentId = useWorkbenchStore((s) => s.themeAccentId);
@@ -36,7 +34,7 @@ export function LiveSvgPreview({ slideId, strategy }: LiveSvgPreviewProps) {
   const isOtherSlide = Boolean(slideId && designSlideId && designSlideId !== slideId);
 
   const renderedSvg = useMemo(() => {
-    if (strategy === "ir" || isOtherSlide) return null;
+    if (isOtherSlide) return null;
     const svg = tryCompleteSvg(delta);
     if (!svg) return null;
 
@@ -46,18 +44,9 @@ export function LiveSvgPreview({ slideId, strategy }: LiveSvgPreviewProps) {
     } catch {
       return svg;
     }
-  }, [delta, exportTheme, isOtherSlide, strategy, themeAccentId]);
+  }, [delta, exportTheme, isOtherSlide, themeAccentId]);
 
   const surfacePreviewFilter = getThemeSurfacePreset(themeSurfaceId).previewFilter;
-
-  if (strategy === "ir") {
-    return (
-      <div className="rounded-2xl border border-[rgba(0,0,0,0.13)] bg-white p-4 shadow-[0_5px_16px_-4px_rgba(0,0,0,0.07)]">
-        <h3 className="text-xs font-medium text-[rgba(0,0,0,0.9)]">实时设计稿</h3>
-        <p className="mt-2 text-xs text-[rgba(0,0,0,0.45)]">IR 策略模式下不使用 SVG 实时预览</p>
-      </div>
-    );
-  }
 
   if (isOtherSlide) {
     return (

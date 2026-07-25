@@ -7,7 +7,7 @@
  * 3. 与 dashi-ppt-skill 生态的双向转换桥梁
  *
  * 不同于 dashi 的 goal.json（面向模板编排），engine 的 GoalSpec
- * 携带 AI 生成的 planJson/irJson/svgPreview，支持 Hybrid 导出。
+ * 携带 AI 生成的 planJson/svgPreview。
  */
 
 import { z } from "zod";
@@ -18,12 +18,12 @@ import { normalizePptExportTheme, type PptExportTheme } from "./themePacks.js";
  * 内联定义（避免从 index.js 循环导入）。
  * 与 index.ts 中 RenderStrategySchema / SlideGenerationStatusSchema 保持一致。
  */
-const renderStrategies = ["ir", "svg", "hybrid"] as const;
+const renderStrategies = ["svg", "theme"] as const;
 const RenderStrategySchema = z.enum(renderStrategies);
 
 const slideGenerationStatuses = [
   "draft", "planned", "search-ready", "draft-ready",
-  "ir-ready", "svg-ready", "error"
+  "svg-ready", "error"
 ] as const;
 const SlideGenerationStatusSchema = z.enum(slideGenerationStatuses);
 
@@ -63,8 +63,6 @@ export const GoalSlideSchema = z.object({
   // ── engine 扩展：AI 产物 ──
   /** 策划稿 */
   planJson: z.any().optional(),
-  /** Slide IR */
-  irJson: z.any().optional(),
   /** SVG 预览 */
   svgPreview: z.string().optional(),
   /** 检索资料卡 */
@@ -145,7 +143,6 @@ export function projectToGoalSpec(
         renderStrategy: slide.renderStrategy,
         generationStatus: slide.generationStatus,
         planJson: slide.planJson,
-        irJson: slide.irJson,
         svgPreview: slide.svgPreview ?? undefined,
         searchJson: slide.searchJson
       }))

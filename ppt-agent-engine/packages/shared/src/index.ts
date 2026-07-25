@@ -40,13 +40,11 @@ export const slideGenerationStatuses = [
   "planned",
   "search-ready",
   "draft-ready",
-  "ir-ready",
   "svg-ready",
   "error"
 ] as const;
 export const projectModes = ["topic", "paste"] as const;
 export const briefQuestionSources = ["ai", "fallback"] as const;
-export const slideIrElementTypes = ["text", "card", "metric", "table", "timeline", "process", "callout", "decor"] as const;
 export {
   pptExportThemes,
   themePacks,
@@ -111,9 +109,6 @@ export {
   hasSkeletonFrame,
   skeletonVariantIds,
   slotsFromSlide,
-  fillSkeletonFrame,
-  buildIrFromSkeleton,
-  snapIrToSkeleton,
   formatSkeletonGeometryInstruction
 } from "./skeletons/index.js";
 export type {
@@ -133,7 +128,7 @@ export {
   getThemeSurfacePreset
 } from "./themeSurfacePresets.js";
 export type { ThemeSurfaceId, ThemeSurfacePreset } from "./themeSurfacePresets.js";
-export const renderStrategies = ["ir", "svg", "hybrid"] as const;
+export const renderStrategies = ["svg", "theme"] as const;
 export const exportModes = ["draft", "standard", "visual"] as const;
 export const svgPptExportModes = ["fidelity", "editable"] as const;
 /** A 全文可改/SVG 成功；B 主体可改/部分降级；C 装饰降级或纯 IR 模板 */
@@ -245,59 +240,6 @@ export const videoExportSchema = narrationOptionsSchema.extend({
   subtitleStyle: SubtitleStyleSchema.optional().default("minimal-outline")
 });
 
-export const SlideIrElementTypeSchema = z.enum(slideIrElementTypes);
-
-export const SlideIrStyleSchema = z
-  .object({
-    fill: z.string().optional(),
-    stroke: z.string().optional(),
-    color: z.string().optional(),
-    accent: z.string().optional(),
-    fontSize: z.coerce.number().min(6).max(72).optional(),
-    bold: z.boolean().optional(),
-    align: z.enum(["left", "center", "right"]).optional(),
-    tone: z.enum(["primary", "default", "accent", "success", "warning", "risk"]).optional()
-  })
-  .passthrough();
-
-export const SlideIrContentSchema = z
-  .object({
-    title: z.string().optional(),
-    text: z.string().optional(),
-    body: z.string().optional(),
-    label: z.string().optional(),
-    value: z.string().optional(),
-    note: z.string().optional(),
-    items: z.array(z.string()).optional(),
-    rows: z.array(z.array(z.string())).optional()
-  })
-  .passthrough();
-
-export const SlideIrElementSchema = z.object({
-  id: z.string().min(1),
-  type: SlideIrElementTypeSchema,
-  role: z.string().min(1),
-  x: z.coerce.number().min(0).max(1280),
-  y: z.coerce.number().min(0).max(720),
-  w: z.coerce.number().min(1).max(1280),
-  h: z.coerce.number().min(1).max(720),
-  z: z.coerce.number().int().default(0),
-  content: SlideIrContentSchema.default({}),
-  style: SlideIrStyleSchema.default({}),
-  editable: z.boolean().default(true)
-});
-
-export const SlideIrSchema = z.object({
-  version: z.literal("1.0"),
-  canvas: z.object({
-    width: z.literal(1280),
-    height: z.literal(720)
-  }),
-  title: z.string().min(1),
-  layout: z.string().min(1),
-  elements: z.array(SlideIrElementSchema).min(1).max(40)
-});
-
 export type FactCategory = z.infer<typeof FactCategorySchema>;
 export type FactStatus = z.infer<typeof FactStatusSchema>;
 export type ReportType = z.infer<typeof ReportTypeSchema>;
@@ -309,9 +251,6 @@ export type RenderStrategy = z.infer<typeof RenderStrategySchema>;
 export type ExportMode = z.infer<typeof ExportModeSchema>;
 export type SvgPptExportMode = z.infer<typeof SvgPptExportModeSchema>;
 export type EditableGrade = z.infer<typeof EditableGradeSchema>;
-export type SlideIrElementType = z.infer<typeof SlideIrElementTypeSchema>;
-export type SlideIrElementDto = z.infer<typeof SlideIrElementSchema>;
-export type SlideIrDto = z.infer<typeof SlideIrSchema>;
 
 export const createProjectSchema = z.object({
   name: z.string().min(1, "请填写项目名称"),
@@ -583,7 +522,7 @@ export const updateSlideSchema = z.object({
   status: SlideStatusSchema.optional(),
   isContentLocked: z.boolean().optional(),
   isLayoutLocked: z.boolean().optional(),
-  /** 按页覆盖渲染策略（ir|svg|hybrid）；手动设置后默认 strategyLocked=true */
+  /** 按页覆盖渲染策略（svg|theme）；手动设置后默认 strategyLocked=true */
   renderStrategy: RenderStrategySchema.optional(),
   /** 为 true 时大纲重生成（非 force）与 layout 重算不会覆盖 renderStrategy */
   strategyLocked: z.boolean().optional(),
@@ -703,7 +642,6 @@ export interface SlideDto {
   isLayoutLocked: boolean;
   sourceFactIds: string[];
   planJson?: SlidePlanDto | null;
-  irJson?: SlideIrDto | null;
   svgPreview?: string | null;
   searchJson?: SlideSearchJson | null;
   partTitle?: string | null;
@@ -753,8 +691,8 @@ export interface SlidePlanDto {
 export interface PageRenderResult {
   slideId: string;
   strategy: RenderStrategy;
-  /** svg-image=整页保真 SVG；svg=拆分为原生文本/形状 */
-  path: "svg-image" | "svg" | "ir" | "theme";
+  /** svg-image=整页保真 SVG；svg=拆分为原生文本/形状；theme=降级为纯文本+版式 */
+  path: "svg-image" | "svg" | "theme";
   warning?: string;
   /** 导出后标注；可由 inferEditableGrade 填充 */
   editableGrade?: EditableGrade;
@@ -765,7 +703,6 @@ export interface AiUsageCounts {
   extractFacts: number;
   outline: number;
   plan: number;
-  ir: number;
   svg: number;
 }
 
@@ -890,8 +827,8 @@ export function inferRenderStrategy(slide: InferRenderStrategyInput): RenderStra
 
 /**
  * 导出/设计生成时的生效策略：
- * - draft → 强制 ir
- * - visual → 非 ir 提升为 svg（ir 保持）
+ * - draft → 强制 theme (跳过 svg)
+ * - visual → 强制 svg
  * - standard → 尊重显式/推断策略
  */
 export function effectiveRenderStrategy(
@@ -899,10 +836,10 @@ export function effectiveRenderStrategy(
   mode: ExportMode = "standard"
 ): RenderStrategy {
   if (mode === "draft") {
-    return "ir";
+    return "theme";
   }
   const base = inferRenderStrategy(slide);
-  if (mode === "visual" && base !== "ir") {
+  if (mode === "visual") {
     return "svg";
   }
   return base;
@@ -914,20 +851,20 @@ export function shouldGenerateSvgForMode(
   mode: ExportMode = "standard"
 ): boolean {
   const strategy = effectiveRenderStrategy(slide, mode);
-  return strategy === "svg" || strategy === "hybrid";
+  return strategy === "svg";
 }
 
 export type InferEditableGradeInput = {
   strategy: RenderStrategy;
-  path: "svg-image" | "svg" | "ir" | "theme";
+  path: "svg-image" | "svg" | "theme";
   warning?: string | null;
 };
 
 /**
  * 按页可编辑等级：
  * - A：SVG 编译成功且无警告（全文可改）
- * - B：SVG 带警告，或 svg/hybrid 策略降级到 IR（主体可改）
- * - C：整页保真 SVG 图像、纯 IR 策略路径，或主题模板 / 装饰降级
+ * - B：SVG 带警告，或 svg 策略降级到 theme（主体可改）
+ * - C：整页保真 SVG 图像，或主题模板 / 装饰降级
  */
 export function inferEditableGrade(input: InferEditableGradeInput): EditableGrade {
   if (input.path === "svg-image") {
@@ -939,7 +876,7 @@ export function inferEditableGrade(input: InferEditableGradeInput): EditableGrad
   if (input.path === "svg" && input.warning) {
     return "B";
   }
-  if (input.path === "ir" && (input.strategy === "svg" || input.strategy === "hybrid")) {
+  if (input.path === "theme" && input.strategy === "svg") {
     return "B";
   }
   return "C";

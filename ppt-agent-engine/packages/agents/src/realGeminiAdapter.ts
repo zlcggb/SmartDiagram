@@ -7,34 +7,25 @@ import type {
   PptExportTheme,
   ProjectDto,
   SlideDto,
-  SlideIrDto,
-  SlideIrElementDto,
   SlidePlanDto
 } from "@ppt-agent/shared";
 import {
   applyCopyBudgetsToBlockItems,
   applyCopyBudgetsToSlideFields,
-  buildIrFromSkeleton,
   factCategories,
   factStatuses,
-  getSkeletonFrame,
   normalizePptExportTheme,
   normalizeRecommendedLayout,
-  pickDefaultVariant,
   recommendedLayoutEnumValues,
-  SlideIrSchema,
-  snapIrToSkeleton,
   themeFamily
 } from "@ppt-agent/shared";
 import {
   buildExtractFactsPrompt,
   buildOutlinePrompt,
-  buildSlideIrPrompt,
   buildSlidePlanPrompt,
   buildSvgPreviewPrompt,
   extractFactsSystemPrompt,
   outlineSystemPrompt,
-  slideIrSystemPrompt,
   slidePlanSystemPrompt,
   svgPreviewSystemPrompt
 } from "./prompts.js";
@@ -159,55 +150,6 @@ export const slidePlanSchema = {
   required: ["title", "pageGoal", "keyMessage", "layoutType", "contentBlocks", "sourceFactIds", "designGuide"]
 } as const;
 
-export const slideIrJsonSchema = {
-  type: "object",
-  properties: {
-    version: { type: "string" },
-    canvas: {
-      type: "object",
-      properties: {
-        width: { type: "number" },
-        height: { type: "number" }
-      },
-      required: ["width", "height"]
-    },
-    title: { type: "string" },
-    layout: { type: "string" },
-    elements: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          type: { type: "string", enum: ["text", "card", "metric", "table", "timeline", "process", "callout", "decor"] },
-          role: { type: "string" },
-          x: { type: "number" },
-          y: { type: "number" },
-          w: { type: "number" },
-          h: { type: "number" },
-          z: { type: "number" },
-          content: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-              text: { type: "string" },
-              body: { type: "string" },
-              label: { type: "string" },
-              value: { type: "string" },
-              note: { type: "string" },
-              items: { type: "array", items: { type: "string" } },
-              rows: { type: "array", items: { type: "array", items: { type: "string" } } }
-            }
-          },
-          style: { type: "object" },
-          editable: { type: "boolean" }
-        },
-        required: ["id", "type", "role", "x", "y", "w", "h", "z", "content", "style", "editable"]
-      }
-    }
-  },
-  required: ["version", "canvas", "title", "layout", "elements"]
-} as const;
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
@@ -504,128 +446,6 @@ function normalizeBlockTitle(title: string): string {
   return clean || "内容要点";
 }
 
-function normalizeElement(value: unknown, index: number): SlideIrElementDto {
-  const object = (typeof value === "object" && value !== null ? value : {}) as JsonObject;
-  const type = asString(object.type, "card");
-  const safeType = ["text", "card", "metric", "table", "timeline", "process", "callout", "decor"].includes(type) ? (type as SlideIrElementDto["type"]) : "card";
-  const x = clampNumber(object.x, 0, 1240, 80 + (index % 2) * 560);
-  const y = clampNumber(object.y, 0, 680, 120 + Math.floor(index / 2) * 170);
-  const maxW = Math.max(1, 1280 - x);
-  const maxH = Math.max(1, 720 - y);
-  const contentObject = (typeof object.content === "object" && object.content !== null ? object.content : {}) as JsonObject;
-
-  return {
-    id: asString(object.id, `el-${index + 1}`),
-    type: safeType,
-    role: asString(object.role, safeType === "decor" ? "decoration" : "content"),
-    x,
-    y,
-    w: clampNumber(object.w, 1, maxW, safeType === "text" ? 720 : 500),
-    h: clampNumber(object.h, 1, maxH, safeType === "text" ? 80 : 130),
-    z: Math.round(clampNumber(object.z, 0, 100, index)),
-    content: {
-      ...contentObject,
-      title: asString(contentObject.title),
-      text: asString(contentObject.text),
-      body: asString(contentObject.body),
-      label: asString(contentObject.label),
-      value: asString(contentObject.value),
-      note: asString(contentObject.note),
-      items: asArray(contentObject.items).map((item) => asString(item)).filter(Boolean).slice(0, 8),
-      rows: asArray(contentObject.rows)
-        .map((row) => asArray(row).map((cell) => asString(cell)).filter(Boolean))
-        .filter((row) => row.length > 0)
-        .slice(0, 6)
-    },
-    style: typeof object.style === "object" && object.style !== null ? (object.style as SlideIrElementDto["style"]) : {},
-    editable: safeType === "decor" ? Boolean(object.editable) : true
-  };
-}
-
-export function normalizeSlideIr(value: unknown, slide: SlideDto, theme: PptExportTheme = "white-blue"): SlideIrDto {
-  const object = (typeof value === "object" && value !== null ? value : {}) as JsonObject;
-  const rawElements = asArray(object.elements);
-  const family = themeFamily(normalizePptExportTheme(theme));
-  const layout = slide.planJson?.layoutType || slide.recommendedLayout;
-  const variant = pickDefaultVariant(layout, family, [], `${slide.id ?? slide.title}-${layout}`);
-  const frame = getSkeletonFrame(variant.id);
-
-  const elements = rawElements.length > 0 ? rawElements.map(normalizeElement) : fallbackIr(slide, theme).elements;
-  const candidate = {
-    version: "1.0" as const,
-    canvas: { width: 1280 as const, height: 720 as const },
-    title: asString(object.title, slide.title),
-    layout: asString(object.layout, slide.recommendedLayout),
-    elements
-  };
-
-  const snapped = frame ? snapIrToSkeleton(candidate, frame) : candidate;
-  const result = SlideIrSchema.safeParse(snapped);
-  if (!result.success) {
-    throw new Error(`Gemini 返回的 Slide IR 不合法：${result.error.issues.map((issue) => issue.message).join("；")}`);
-  }
-  return result.data;
-}
-
-function fallbackIr(slide: SlideDto, theme: PptExportTheme = "white-blue"): SlideIrDto {
-  const family = themeFamily(normalizePptExportTheme(theme));
-  const fromSkeleton = buildIrFromSkeleton(slide, { themeFamily: family });
-  if (fromSkeleton) {
-    const parsed = SlideIrSchema.safeParse(fromSkeleton);
-    if (parsed.success) return parsed.data;
-  }
-
-  const points = slide.planJson?.contentBlocks.flatMap((block) => block.items).filter(Boolean) ?? slide.contentPoints;
-  const draftTitle = slide.planJson?.title || slide.title;
-  const draftKeyMessage = slide.planJson?.keyMessage || slide.keyMessage;
-  return {
-    version: "1.0",
-    canvas: { width: 1280, height: 720 },
-    title: draftTitle,
-    layout: slide.recommendedLayout,
-    elements: [
-      {
-        id: "title",
-        type: "text",
-        role: "title",
-        x: 72,
-        y: 48,
-        w: 880,
-        h: 70,
-        z: 1,
-        editable: true,
-        content: { text: draftTitle },
-        style: { fontSize: 34, bold: true, color: "#003F7D" }
-      },
-      {
-        id: "message",
-        type: "callout",
-        role: "key-message",
-        x: 72,
-        y: 142,
-        w: 1136,
-        h: 110,
-        z: 2,
-        editable: true,
-        content: { title: "核心结论", body: draftKeyMessage },
-        style: { tone: "primary" }
-      },
-      ...points.slice(0, 4).map((point, index) => ({
-        id: `card-${index + 1}`,
-        type: "card" as const,
-        role: "supporting-point",
-        x: 72 + (index % 2) * 578,
-        y: 292 + Math.floor(index / 2) * 170,
-        w: 538,
-        h: 132,
-        z: 3 + index,
-        editable: true,
-        content: { title: `要点 ${index + 1}`, body: point },
-        style: { tone: (index % 2 === 0 ? "default" : "accent") as "default" | "accent" }
-      }))
-    ]
-  };
-}
 
 export function sanitizeSvgOutput(text: string) {
   const withoutFence = text.replace(/```(?:svg|xml)?/gi, "").replace(/```/g, "").trim();
@@ -804,14 +624,6 @@ export class RealGeminiAdapter implements GeminiAdapter {
     return normalizeSlidePlan(result, slide, allowedFactIds);
   }
 
-  async generateSlideIr(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void): Promise<SlideIrDto> {
-    const result = await this.generateJson<unknown>(buildSlideIrPrompt(slide, facts, theme), slideIrJsonSchema, slideIrSystemPrompt, {
-      model: this.designModel,
-      temperature: 0.62,
-      thinkingLevel: "low"
-    }, onToken);
-    return normalizeSlideIr(result, slide, theme);
-  }
 
   async generateSvgPreview(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void, options?: SvgGenerationOptions): Promise<string> {
     const result = await this.generateText(buildSvgPreviewPrompt(slide, facts, theme, options?.surfaceId, options?.revisionNotes, options?.accentId), svgPreviewSystemPrompt, onToken);

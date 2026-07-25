@@ -657,7 +657,7 @@ export function StudioSpace() {
               ? slides.some((s) => s.searchJson)
               : phase.id === "draft"
                 ? slides.some((s) => s.planJson)
-                : slides.some((s) => s.svgPreview || s.irJson);
+                : slides.some((s) => s.svgPreview);
             const isActive = currentPhase === phase.id;
             return (
               <span key={phase.id} className="inline-flex items-center">

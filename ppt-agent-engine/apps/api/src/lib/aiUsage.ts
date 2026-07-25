@@ -5,7 +5,6 @@ const counts: AiUsageCounts = {
   extractFacts: 0,
   outline: 0,
   plan: 0,
-  ir: 0,
   svg: 0
 };
 
@@ -64,10 +63,7 @@ export function wrapAdapterWithUsage(adapter: GeminiAdapter): GeminiAdapter {
       recordAiCall("plan");
       return adapter.generateSlidePlan(slide, facts, theme, onToken);
     },
-    async generateSlideIr(slide, facts, theme, onToken) {
-      recordAiCall("ir");
-      return adapter.generateSlideIr(slide, facts, theme, onToken);
-    },
+
     async generateSvgPreview(slide, facts, theme, onToken, options) {
       recordAiCall("svg");
       return adapter.generateSvgPreview(slide, facts, theme, onToken, options);

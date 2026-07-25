@@ -13,9 +13,6 @@ export {
 } from "./registry.js";
 export {
   slotsFromSlide,
-  fillSkeletonFrame,
-  buildIrFromSkeleton,
-  snapIrToSkeleton,
   formatSkeletonGeometryInstruction,
   type SlideLikeForSkeleton
 } from "./fill.js";

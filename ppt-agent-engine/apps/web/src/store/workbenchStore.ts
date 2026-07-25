@@ -137,8 +137,6 @@ interface WorkbenchState {
   generateSlidePlan: (slideId: string) => Promise<void>;
   generateAllPlans: () => Promise<void>;
   saveSlideSvg: (slideId: string, svgPreview: string) => Promise<void>;
-  generateSlideIr: (slideId: string) => Promise<void>;
-  generateAllIr: () => Promise<void>;
   generateSlideDesign: (slideId: string) => Promise<void>;
   generateAllDesigns: () => Promise<void>;
   generateSvgPreview: (slideId: string) => Promise<void>;
@@ -606,13 +604,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           searchJson: input.searchJson !== undefined ? input.searchJson : previous.searchJson,
           planJson: input.planJson !== undefined ? input.planJson : previous.planJson,
           // 改初稿/页意图时本地先清设计预览，与 API 失效策略一致
-          irJson:
-            input.planJson !== undefined ||
-            input.title !== undefined ||
-            input.keyMessage !== undefined ||
-            input.contentPoints !== undefined
-              ? null
-              : previous.irJson,
+          // 改初稿/页意图时本地先清设计预览，与 API 失效策略一致
           svgPreview:
             input.planJson !== undefined ||
             input.title !== undefined ||
@@ -656,7 +648,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     try {
       const slide = await api.updateSlideRenderStrategy(project.id, slideId, strategy);
       set({ slides: replaceSlide(get().slides, slide) });
-      get().pushAgentLog(`本页策略已切换为 ${strategy === "ir" ? "IR 优先" : strategy === "svg" ? "SVG 优先" : "混合"}`);
+      get().pushAgentLog(`本页策略已切换为 ${strategy === "svg" ? "SVG 优先" : "主题模板"}`);
     } catch (error) {
       if (current) {
         set({ slides: replaceSlide(get().slides, current), error: errorMessage(error) });
@@ -812,36 +804,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       set({ busy: null });
     }
   },
-  async generateSlideIr(slideId) {
-    const project = get().project;
-    if (!project) return;
-    set({ busy: "生成页面 IR 中", error: null });
-    try {
-      const result = await api.generateSlideIr(project.id, slideId, get().exportTheme);
-      set({ slides: replaceSlide(get().slides, result.slide), selectedSlideId: slideId });
-    } catch (error) {
-      set({ error: errorMessage(error) });
-    } finally {
-      set({ busy: null });
-    }
-  },
-  async generateAllIr() {
-    const project = get().project;
-    if (!project) return;
-    if (get().slides.length === 0) {
-      set({ error: "请先生成便利贴大纲，再生成页面设计。" });
-      return;
-    }
-    set({ busy: "批量生成页面 IR 中", error: null });
-    try {
-      const slides = await api.generateAllIr(project.id, get().exportTheme);
-      set({ slides, selectedSlideId: get().selectedSlideId ?? firstSlideId(slides) });
-    } catch (error) {
-      set({ error: errorMessage(error) });
-    } finally {
-      set({ busy: null });
-    }
-  },
+
   async generateSlideDesign(slideId) {
     const project = get().project;
     if (!project) return;

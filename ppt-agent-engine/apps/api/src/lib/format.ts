@@ -11,12 +11,11 @@ import type {
   RenderStrategy,
   SlideDto,
   SlideGenerationStatus,
-  SlideIrDto,
   SlidePlanDto,
   SlideSearchJson,
   SourceTextDto
 } from "@ppt-agent/shared";
-import { inferRenderStrategy, renderStrategies, SlideIrSchema } from "@ppt-agent/shared";
+import { inferRenderStrategy, renderStrategies } from "@ppt-agent/shared";
 import { exportDownloadUrl } from "./paths.js";
 
 type DateLike = Date | string;
@@ -45,18 +44,6 @@ function parseSlidePlan(value: string | null): SlidePlanDto | null {
   }
 }
 
-function parseSlideIr(value: string | null): SlideIrDto | null {
-  if (!value) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    const result = SlideIrSchema.safeParse(parsed);
-    return result.success ? result.data : null;
-  } catch {
-    return null;
-  }
-}
 
 function resolveStoredRenderStrategy(
   value: string | null | undefined,
@@ -166,7 +153,6 @@ export function formatSlide(slide: {
   isContentLocked: boolean;
   isLayoutLocked: boolean;
   planJson: string | null;
-  irJson: string | null;
   svgPreview: string | null;
   searchJson?: string | null;
   partTitle?: string | null;
@@ -190,7 +176,6 @@ export function formatSlide(slide: {
     isLayoutLocked: slide.isLayoutLocked,
     sourceFactIds: slide.slideSources?.map((source) => source.factId) ?? [],
     planJson,
-    irJson: parseSlideIr(slide.irJson),
     svgPreview: slide.svgPreview,
     searchJson: parseJsonObject<SlideSearchJson>(slide.searchJson ?? null),
     partTitle: slide.partTitle ?? null,

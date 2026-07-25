@@ -35,7 +35,6 @@ import type {
   PptExportTheme,
   RenderStrategy,
   SlideDto,
-  SlideIrDto,
   ThemeSurfaceId
 } from "@ppt-agent/shared";
 import { createAiAdapter } from "../lib/ai.js";
@@ -347,15 +346,14 @@ async function persistRenderStrategy(slideId: string, strategy: RenderStrategy):
   });
 }
 
-async function ensureSlideIr(
+async function ensureSlidePlan(
   slide: SlideDto,
   facts: FactDto[],
-  theme: PptExportTheme,
-  onToken?: (token: string) => void
+  theme: PptExportTheme
 ): Promise<SlideDto> {
   const strategy = resolveNextStrategy(slide, slide);
 
-  if (slide.irJson) {
+  if (slide.planJson) {
     await persistRenderStrategy(slide.id, strategy).catch(() => undefined);
     return { ...slide, renderStrategy: strategy };
   }
@@ -363,16 +361,13 @@ async function ensureSlideIr(
   try {
     const slideFacts = linkedFactsForSlide(slide, facts);
     const plan = await generatePlanForSlide(slide, slideFacts, theme);
-    const slideForIr = { ...slide, planJson: slide.planJson ?? plan };
-    const ir = await adapter.generateSlideIr(slideForIr, slideFacts, theme, onToken);
-    const nextStrategy = resolveNextStrategy(slide, slideForIr);
+    const nextStrategy = resolveNextStrategy(slide, { ...slide, planJson: plan });
     const updatedSlide = await prisma.slide.update({
       where: { id: slide.id },
       data: {
-        planJson: slide.planJson ? undefined : JSON.stringify(plan),
+        planJson: JSON.stringify(plan),
         status: "planned",
-        irJson: JSON.stringify(ir),
-        generationStatus: slide.svgPreview ? "svg-ready" : "ir-ready",
+        generationStatus: slide.svgPreview ? "svg-ready" : "draft-ready",
         renderStrategy: nextStrategy
       },
       include: { slideSources: true }
@@ -417,33 +412,6 @@ async function generateEditableSvgDesign(
 
   const slideWithPlan = { ...slideForDesign, planJson: plan };
 
-  // 尽量保留/补齐 IR，供导出降级使用；失败不阻断 SVG 生成
-  let irPayload: SlideIrDto | null = slideForDesign.irJson ?? null;
-  if (!irPayload) {
-    const irStreamHandler = createStreamingTokenHandler(projectId, "ir", 200, {
-      slideId: slideForDesign.id,
-      slideTitle: slideForDesign.title,
-      subStage: slideForDesign.title
-    });
-    try {
-      emitProgress(projectId, { stage: "ir", status: "start", message: `正在生成「${slideForDesign.title}」的 IR…`, slideId: slideForDesign.id, slideTitle: slideForDesign.title, subStage: slideForDesign.title, clearDelta: true });
-      irPayload = await adapter.generateSlideIr(slideWithPlan, slideFacts, theme, irStreamHandler.onToken);
-      irStreamHandler.flush();
-      emitProgress(projectId, { stage: "ir", status: "done", message: `IR 生成完成：${slideForDesign.title}`, slideId: slideForDesign.id, slideTitle: slideForDesign.title, subStage: slideForDesign.title });
-    } catch (error) {
-      irStreamHandler.flush();
-      emitProgress(projectId, {
-        stage: "ir",
-        status: "skip",
-        message: `IR 生成失败，已继续 SVG 设计：${error instanceof Error ? error.message : "未知错误"}`,
-        slideId: slideForDesign.id,
-        slideTitle: slideForDesign.title,
-        subStage: slideForDesign.title
-      });
-      irPayload = null;
-    }
-  }
-
   const designStreamHandler = createStreamingTokenHandler(projectId, "design", 200, {
     slideId: slideForDesign.id,
     slideTitle: slideForDesign.title,
@@ -473,7 +441,6 @@ async function generateEditableSvgDesign(
     data: {
       planJson: JSON.stringify(plan),
       svgPreview,
-      irJson: irPayload ? JSON.stringify(irPayload) : undefined,
       status: "planned",
       generationStatus: "svg-ready",
       renderStrategy: "svg",
@@ -516,7 +483,7 @@ async function prepareSlidesForExport(
     // 显式导出：不自动生成缺失稿，避免「点导出却跑完全部策划/出图」
     if (!fillMissing) {
       prepared.push({ ...slide, renderStrategy: baseStrategy });
-      if (!slide.svgPreview && !slide.irJson) {
+      if (!slide.svgPreview) {
         notes.push(`${pageLabel} 尚未生成设计稿，将走主题模板（未自动补齐）`);
       } else if (!slide.svgPreview && mode === "standard") {
         notes.push(`${pageLabel} 无 SVG，标准导出将走已有 IR/主题模板`);
@@ -524,16 +491,11 @@ async function prepareSlidesForExport(
       continue;
     }
 
-    if (mode === "draft" || strategy === "ir") {
-      // draft / ir 策略都必须 ensure IR；缺 irJson 时主题模板仍可兜底，但不能再跳过生成
-      const withIr = await ensureSlideIr(slide, facts, theme);
-      prepared.push({ ...withIr, renderStrategy: withIr.renderStrategy ?? baseStrategy });
-      if (!withIr.irJson) {
-        notes.push(
-          mode === "draft"
-            ? `${pageLabel} 草稿模式未能生成 IR，将走主题模板`
-            : `${pageLabel} IR 优先但未能生成 irJson，将走主题模板`
-        );
+    if (mode === "draft") {
+      const withPlan = await ensureSlidePlan(slide, facts, theme);
+      prepared.push({ ...withPlan, renderStrategy: withPlan.renderStrategy ?? baseStrategy });
+      if (!withPlan.svgPreview) {
+        notes.push(`${pageLabel} 草稿模式未生成设计稿，将走主题模板`);
       }
       continue;
     }
@@ -551,18 +513,18 @@ async function prepareSlidesForExport(
       } catch (error) {
         svgFailures += 1;
         const message = error instanceof Error ? error.message : "未知错误";
-        notes.push(`${pageLabel} SVG 生成失败，将降级 IR/主题模板：${message}`);
+        notes.push(`${pageLabel} SVG 生成失败，将走主题模板：${message}`);
         log.warn(error, `Export visual SVG generate failed for slide ${slide.id}`);
-        current = await ensureSlideIr(current, facts, theme);
+        current = await ensureSlidePlan(current, facts, theme);
       }
     } else if (!current.svgPreview && mode === "standard") {
-      current = await ensureSlideIr(current, facts, theme);
-      notes.push(`${pageLabel} 无 SVG（策略 ${strategy}），标准导出将走 IR/主题模板`);
+      current = await ensureSlidePlan(current, facts, theme);
+      notes.push(`${pageLabel} 无 SVG，标准导出将走主题模板`);
     } else if (bannedExisting.length > 0 && mode === "standard") {
-      current = await ensureSlideIr(current, facts, theme);
+      current = await ensureSlidePlan(current, facts, theme);
       notes.push(`${pageLabel} SVG 含禁止特性（${bannedExisting.join(", ")}），标准导出将降级`);
-    } else if (!current.irJson) {
-      current = await ensureSlideIr(current, facts, theme);
+    } else if (!current.planJson) {
+      current = await ensureSlidePlan(current, facts, theme);
     }
 
     prepared.push({ ...current, renderStrategy: current.renderStrategy ?? baseStrategy });
@@ -1139,7 +1101,6 @@ export async function projectRoutes(app: FastifyInstance) {
           : shouldInvalidatePlan
             ? null
             : undefined,
-        irJson: shouldInvalidateDesign ? null : undefined,
         svgPreview: svgEdited ? editedSvg : shouldInvalidateDesign ? null : undefined,
         generationStatus: svgEdited
           ? "svg-ready"
@@ -1306,7 +1267,6 @@ export async function projectRoutes(app: FastifyInstance) {
             where: { id: slide.id },
             data: {
               planJson: JSON.stringify(plan),
-              irJson: null,
               svgPreview: null,
               status: "planned",
               generationStatus: "draft-ready",
@@ -1356,132 +1316,6 @@ export async function projectRoutes(app: FastifyInstance) {
     );
   });
 
-  app.post<{ Params: SlideParams }>("/api/projects/:id/slides/:slideId/generate-ir", async (request, reply) => {
-    const input = exportPptxSchema.parse(request.body ?? {});
-    const slideRecord = await prisma.slide.findFirst({
-      where: { id: request.params.slideId, projectId: request.params.id },
-      include: { slideSources: true }
-    });
-    if (!slideRecord) {
-      return reply.status(404).send(fail("未找到页面"));
-    }
-
-    const facts = await getProjectFacts(request.params.id);
-    const slide = formatSlide(slideRecord);
-    const slideFacts = linkedFactsForSlide(slide, facts);
-
-    let slideForIr = slide;
-    const irStreamHandler = createStreamingTokenHandler(request.params.id, "ir", 200, {
-      slideId: slide.id,
-      slideTitle: slide.title,
-      subStage: slide.title
-    });
-    try {
-      const plan = await generatePlanForSlide(slide, slideFacts, input.theme);
-      if (!slide.planJson) {
-        const plannedSlide = await prisma.slide.update({
-          where: { id: slide.id },
-          data: {
-            planJson: JSON.stringify(plan),
-            status: "planned",
-            generationStatus: "draft-ready"
-          },
-          include: { slideSources: true }
-        });
-        slideForIr = formatSlide(plannedSlide);
-      }
-
-      emitProgress(request.params.id, { stage: "ir", status: "start", message: `正在生成「${slideForIr.title}」的 IR…`, slideId: slide.id, slideTitle: slideForIr.title, subStage: slideForIr.title, clearDelta: true });
-      const ir = await adapter.generateSlideIr(slideForIr, slideFacts, input.theme, irStreamHandler.onToken);
-      irStreamHandler.flush();
-      emitProgress(request.params.id, { stage: "ir", status: "done", message: `IR 生成完成：${slideForIr.title}`, slideId: slide.id, slideTitle: slideForIr.title, subStage: slideForIr.title });
-      const renderStrategy = resolveNextStrategy(slide, slideForIr);
-      const updatedSlide = await prisma.slide.update({
-        where: { id: slide.id },
-        data: {
-          irJson: JSON.stringify(ir),
-          generationStatus: "ir-ready",
-          renderStrategy
-        },
-        include: { slideSources: true }
-      });
-
-      return reply.send(ok({ ir, slide: formatSlide(updatedSlide) }, "页面设计已生成"));
-    } catch (error) {
-      irStreamHandler.flush();
-      await prisma.slide.update({
-        where: { id: slide.id },
-        data: { generationStatus: "error" }
-      });
-      app.log.error(error, "Generate slide IR failed");
-      return reply.status(502).send(fail(aiFailMessage(error)));
-    }
-  });
-
-  app.post<{ Params: IdParams }>("/api/projects/:id/generate-all-ir", async (request, reply) => {
-    const input = exportPptxSchema.parse(request.body ?? {});
-    const detail = await projectDetail(request.params.id);
-    if (!detail) {
-      return reply.status(404).send(fail("未找到项目"));
-    }
-    if (detail.slides.length === 0) {
-      return reply.status(400).send(fail("请先生成便利贴大纲，再生成页面设计。"));
-    }
-
-    let generatedCount = 0;
-    try {
-      for (const slide of detail.slides) {
-        if (slide.irJson) {
-          continue;
-        }
-        const slideFacts = linkedFactsForSlide(slide, detail.facts);
-        const plan = await generatePlanForSlide(slide, slideFacts, input.theme);
-        const slideForIr = slide.planJson ? slide : { ...slide, planJson: plan };
-        const perPageBuffer: string[] = [];
-        const irStreamHandler = createStreamingTokenHandler(request.params.id, "ir", 200, {
-          slideId: slide.id,
-          slideTitle: slide.title,
-          subStage: slide.title
-        });
-        emitProgress(request.params.id, { stage: "ir", status: "start", message: `正在生成「${slide.title}」的 IR…`, slideId: slide.id, slideTitle: slide.title, subStage: slide.title, clearDelta: true });
-        const ir = await adapter.generateSlideIr(slideForIr, slideFacts, input.theme, (token) => {
-          perPageBuffer.push(token);
-          irStreamHandler.onToken(token);
-        });
-        irStreamHandler.flush();
-        if (perPageBuffer.length > 0) {
-          emitProgress(request.params.id, {
-            stage: "ir",
-            status: "progress",
-            message: `「${slide.title}」IR 生成完成`,
-            delta: perPageBuffer.join(""),
-            subStage: slide.title,
-            slideId: slide.id,
-            slideTitle: slide.title
-          });
-        }
-        emitProgress(request.params.id, { stage: "ir", status: "done", message: `IR 生成完成：${slide.title}`, slideId: slide.id, slideTitle: slide.title, subStage: slide.title });
-        const renderStrategy = resolveNextStrategy(slide, slideForIr);
-        await prisma.slide.update({
-          where: { id: slide.id },
-          data: {
-            planJson: slide.planJson ? undefined : JSON.stringify(plan),
-            status: "planned",
-            irJson: JSON.stringify(ir),
-            generationStatus: "ir-ready",
-            renderStrategy
-          }
-        });
-        generatedCount += 1;
-      }
-    } catch (error) {
-      app.log.error(error, "Generate all slide IR failed");
-      return reply.status(502).send(fail(aiFailMessage(error)));
-    }
-
-    return reply.send(ok(await getProjectSlides(request.params.id), generatedCount === 0 ? "页面设计已是最新" : `已生成 ${generatedCount} 页页面设计`));
-  });
-
   app.post<{ Params: SlideParams }>("/api/projects/:id/slides/:slideId/generate-svg-preview", async (request, reply) => {
     const input = exportPptxSchema.parse(request.body ?? {});
     const slideRecord = await prisma.slide.findFirst({
@@ -1493,8 +1327,8 @@ export async function projectRoutes(app: FastifyInstance) {
     }
 
     const slide = formatSlide(slideRecord);
-    if (!slide.irJson) {
-      return reply.status(400).send(fail("请先生成页面设计，再生成 SVG 预览。"));
+    if (!slide.planJson) {
+      return reply.status(400).send(fail("请先生成页面策划稿，再生成 SVG 预览。"));
     }
 
     const designStreamHandler = createStreamingTokenHandler(request.params.id, "design", 200, {
@@ -1560,28 +1394,7 @@ export async function projectRoutes(app: FastifyInstance) {
 
       // 只有显式草稿导出跳过 SVG；设计工作区始终生成 SVG。
       if (mode === "draft") {
-        const irStreamHandler = createStreamingTokenHandler(request.params.id, "ir", 200, {
-          slideId: slide.id,
-          slideTitle: slide.title,
-          subStage: slide.title
-        });
         let current = slide;
-        try {
-          emitProgress(request.params.id, { stage: "ir", status: "start", message: `正在准备「${slide.title}」的 IR…`, slideId: slide.id, slideTitle: slide.title, subStage: slide.title, clearDelta: true });
-          current = await ensureSlideIr(slide, facts, input.theme, irStreamHandler.onToken);
-          irStreamHandler.flush();
-          emitProgress(request.params.id, { stage: "ir", status: "done", message: `IR 准备完成：${slide.title}`, slideId: slide.id, slideTitle: slide.title, subStage: slide.title });
-        } catch (error) {
-          irStreamHandler.flush();
-          emitProgress(request.params.id, {
-            stage: "ir",
-            status: "error",
-            message: aiFailMessage(error),
-            slideId: slide.id,
-            slideTitle: slide.title,
-            subStage: slide.title
-          });
-        }
         if (!current.planJson) {
           const slideFacts = linkedFactsForSlide(current, facts);
           const plan = await generatePlanForSlide(current, slideFacts, input.theme);
@@ -1591,7 +1404,7 @@ export async function projectRoutes(app: FastifyInstance) {
             data: {
               planJson: JSON.stringify(plan),
               status: "planned",
-              generationStatus: current.irJson ? current.generationStatus : "planned",
+              generationStatus: "draft-ready",
               renderStrategy
             },
             include: { slideSources: true }
@@ -1606,7 +1419,7 @@ export async function projectRoutes(app: FastifyInstance) {
         return reply.send(
           ok(
             { svgPreview: current.svgPreview ?? "", slide: current, skippedSvg: true },
-            "草稿模式已跳过 SVG，已准备 IR/策划"
+            "草稿模式已跳过 SVG，已准备策划"
           )
         );
       }
@@ -1642,12 +1455,12 @@ export async function projectRoutes(app: FastifyInstance) {
       // 只有显式草稿导出跳过 SVG；设计工作区始终生成 SVG。
       if (input.mode === "draft") {
         try {
-          await ensureSlideIr(slide, detail.facts, input.theme);
+          await ensureSlidePlan(slide, detail.facts, input.theme);
           skippedSvgCount += 1;
         } catch (error) {
           const message = error instanceof Error ? error.message : "未知错误";
           failures.push({ slideId: slide.id, title: slide.title, message });
-          app.log.error(error, `Ensure IR for skipped-SVG slide failed ${slide.id}`);
+          app.log.error(error, `Ensure Plan for skipped-SVG slide failed ${slide.id}`);
         }
         continue;
       }
@@ -1688,7 +1501,7 @@ export async function projectRoutes(app: FastifyInstance) {
     if (input.mode === "draft") {
       message =
         skippedSvgCount > 0
-          ? `草稿模式已跳过 SVG（${skippedSvgCount} 页），已准备 IR/策划`
+          ? `草稿模式已跳过 SVG（${skippedSvgCount} 页），已准备策划`
           : "草稿模式无需生成 SVG";
     } else if (failures.length > 0) {
       message = `部分页面设计失败：${failures.length} 页，请查看失败原因后重试。`;
@@ -1746,12 +1559,12 @@ export async function projectRoutes(app: FastifyInstance) {
         prepared.svgFailures === prepared.svgAttempts &&
         slidesForExport.every(
           (slide) =>
-            (!slide.svgPreview || getBannedSvgFeatures(slide.svgPreview).length > 0) && !slide.irJson
+            !slide.svgPreview || getBannedSvgFeatures(slide.svgPreview).length > 0
         )
       ) {
         return reply
           .status(502)
-          .send(fail("高视觉导出失败：所有页面 SVG 生成均失败，且无 IR 可降级。"));
+          .send(fail("高视觉导出失败：所有页面 SVG 生成均失败。"));
       }
     } catch (error) {
       app.log.error(error, "Prepare slides before export failed");

@@ -57,15 +57,13 @@ export const strategySwitchOptions: Array<{
   shortLabel: string;
   hint: string;
 }> = [
-  { id: "ir", label: "IR 优先", shortLabel: "IR", hint: "稳妥可编辑" },
   { id: "svg", label: "SVG 优先", shortLabel: "SVG", hint: "视觉优先" },
-  { id: "hybrid", label: "混合", shortLabel: "混合", hint: "观感与内容兼顾" }
+  { id: "theme", label: "主题优先", shortLabel: "主题", hint: "原生兼容" }
 ];
 
 const strategyLabels: Record<RenderStrategy, string> = {
-  ir: "IR 优先",
-  svg: "SVG 优先",
-  hybrid: "混合"
+  theme: "主题优先",
+  svg: "SVG 优先"
 };
 
 const gradeHints: Record<EditableGrade, string> = {
@@ -108,8 +106,8 @@ export function exportModeBusyLabel(mode: ExportMode): string {
 }
 
 /** 是否已有可导出的设计产物（SVG 或 IR）；无则导出只会走主题模板 */
-export function isSlideDesignReady(slide: Pick<SlideDto, "svgPreview" | "irJson">) {
-  return Boolean(slide.svgPreview || slide.irJson);
+export function isSlideDesignReady(slide: Pick<SlideDto, "svgPreview">) {
+  return Boolean(slide.svgPreview);
 }
 
 export function normalizeEditableGrade(raw: unknown): EditableGrade | null {

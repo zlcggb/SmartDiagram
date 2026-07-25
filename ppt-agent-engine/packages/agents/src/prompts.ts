@@ -207,39 +207,6 @@ export function buildOutlinePrompt(
   ].join("\n\n");
 }
 
-export const slideIrSystemPrompt = [
-  "你是精通信息架构、Bento Grid 页面设计和可编辑 PPT 结构设计的专家。",
-  "你的任务是把单页策划稿转换成 Slide IR，而不是生成 PPTX、HTML、SVG 或图片。",
-  "",
-  "## 画布与可编辑性",
-  "- 坐标必须使用 1280 x 720。",
-  "- 最终会渲染成 PowerPoint 原生文本框、形状、表格和线条。",
-  "- 主内容元素必须 editable: true。",
-  "- 正文不要放进 decor；decor 只能用于轻量装饰。",
-  "",
-  "## 锁骨架填文案（硬规则）",
-  "- 若提供了坐标骨架模板，elements 的 id/type/x/y/w/h/z 必须与模板一致，只填写 content。",
-  "- 禁止增删元素、禁止改几何；文案装进对应 slot 语义。",
-  "- 未提供骨架时，才允许在角色剪影内做有限 Bento 微调。",
-  "",
-  "## 内容质量约束",
-  "- 页面文案只能使用输入中的 designCopy（title / keyMessage / contentBlocks）；不得补写未在初稿中出现的新正文。",
-  "- 每页只有一个核心结论。",
-  "- 卡片内容不能互相重复。",
-  "- 禁止把页数、版本号、序号等弱信息当作核心指标或主视觉。",
-  "- 指标只能来自输入事实；没有合适数字时，用关键词或结论短语做主视觉。",
-  "- 正文保持完整：每个 bullet 单字段建议不超过 300 字，最多 3 条；需要时通过换行和字号适配。",
-  "- 不出现空洞标题，例如“概览”“说明”“内容一”，除非后面有明确业务语义。",
-  "",
-  "## 文案门禁（渲染后自动校验）",
-  "- 禁止出现模板占位文案：请输入文本/示例文本/placeholder/lorem ipsum/待填写。",
-  "- 禁止出现与用户主题无关的默认文案：AI Capital/SoundWave/Key Metrics/Roadmap/End of Report。",
-  "- 禁止虚构日期、公司、编号、版本号、倒计时。",
-  "- 禁止输出只有“•”“·”“-”“。”的孤立文本；bullet 必须写成完整短句。",
-  "",
-  "## 输出",
-  "只输出符合 JSON Schema 的中文 JSON。"
-].join("\n");
 
 export const svgPreviewSystemPrompt = [
   "你是精通信息架构与 SVG 编码的专家（Design Bento）。",
@@ -557,57 +524,6 @@ export function buildSlidePlanPrompt(slide: SlideDto, facts: FactDto[], theme: P
     .join("\n\n");
 }
 
-export function buildSlideIrPrompt(slide: SlideDto, _facts: FactDto[], theme: PptExportTheme = "white-blue") {
-  const family = themeFamily(normalizePptExportTheme(theme));
-  const layout = slide.planJson?.layoutType || slide.recommendedLayout;
-  const variant = pickDefaultVariant(layout, family, [], `${slide.id ?? slide.title}-${layout}`);
-  const frame = getSkeletonFrame(variant.id);
-  return [
-    "请把这一页 PPT 策划稿转换成可渲染的 Slide IR。",
-    "坐标使用 1280 x 720。默认「锁骨架填文案」：必须使用下方坐标骨架的 id/type/x/y/w/h/z，只填写 content。",
-    layoutBlueprintInstruction(slide, theme),
-    visualHintInstruction(slide),
-    designGuideInstruction(slide),
-    frame
-      ? `骨架模板 JSON（几何已锁定，elements 数量与 id 必须一致）：\n${JSON.stringify(
-          {
-            version: "1.0",
-            canvas: frame.canvas,
-            layout: frame.recommendedLayout,
-            variantId: frame.variantId,
-            elements: frame.elements.map((el) => ({
-              id: el.id,
-              type: el.type,
-              role: el.role,
-              x: el.x,
-              y: el.y,
-              w: el.w,
-              h: el.h,
-              z: el.z,
-              editable: el.editable !== false,
-              content: {},
-              style: el.style ?? {}
-            }))
-          },
-          null,
-          2
-        )}`
-      : "在角色骨架与变体剪影内排版，不要完全自由发明无关结构。",
-    "内容要求：每页一个主结论；卡片不重复；不要把页数、版本号、序号当主视觉；正文短句化。",
-    themeInstruction(theme),
-    "设计交接 JSON（designCopy 是唯一正文来源）：",
-    JSON.stringify(
-      {
-        id: slide.id,
-        ...designHandoff(slide),
-        layoutVariantId: variant.id
-      },
-      null,
-      2
-    ),
-    "输出要求：version 必须为 1.0；canvas 必须为 { width: 1280, height: 720 }；elements 必须覆盖骨架全部 id；只改 content，不改几何。"
-  ].join("\n\n");
-}
 
 export function buildSvgPreviewPrompt(
   slide: SlideDto,

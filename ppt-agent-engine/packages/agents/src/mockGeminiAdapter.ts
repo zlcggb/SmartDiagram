@@ -7,10 +7,9 @@ import type {
   PptExportTheme,
   ProjectDto,
   SlideDto,
-  SlideIrDto,
   SlidePlanDto
 } from "@ppt-agent/shared";
-import { buildIrFromSkeleton, factCategories, getThemePack, normalizePptExportTheme, themeFamily } from "@ppt-agent/shared";
+import { factCategories, getThemePack, normalizePptExportTheme, themeFamily } from "@ppt-agent/shared";
 import { selectDesignRecipe } from "./designKnowledge/index.js";
 import { buildMockPlanFromSearch } from "./studioHelpers.js";
 import type { GeminiAdapter, SvgGenerationOptions } from "./types.js";
@@ -177,107 +176,6 @@ export class MockGeminiAdapter implements GeminiAdapter {
     return buildMockPlanFromSearch(slide, facts);
   }
 
-  async generateSlideIr(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", _onToken?: (token: string) => void): Promise<SlideIrDto> {
-    const draftTitle = slide.planJson?.title || slide.title;
-    const draftKeyMessage = slide.planJson?.keyMessage || slide.keyMessage;
-    const fromSkeleton = buildIrFromSkeleton(slide, {
-      themeFamily: themeFamily(normalizePptExportTheme(theme))
-    });
-    if (fromSkeleton) {
-      return fromSkeleton as SlideIrDto;
-    }
-    const items = slideItems(slide, facts, 4);
-    const isCover = slide.recommendedLayout === "cover";
-    return {
-      version: "1.0",
-      canvas: { width: 1280, height: 720 },
-      title: draftTitle,
-      layout: slide.recommendedLayout,
-      elements: isCover
-        ? [
-            {
-              id: "cover-title",
-              type: "text",
-              role: "title",
-              x: 78,
-              y: 130,
-              w: 790,
-              h: 120,
-              z: 1,
-              editable: true,
-              content: { text: draftTitle },
-              style: { fontSize: 42, bold: true, color: "#003F7D" }
-            },
-            {
-              id: "cover-message",
-              type: "callout",
-              role: "key-message",
-              x: 78,
-              y: 285,
-              w: 620,
-              h: 150,
-              z: 2,
-              editable: true,
-              content: { title: "核心结论", body: draftKeyMessage },
-              style: { tone: "primary" }
-            },
-            {
-              id: "cover-metric",
-              type: "metric",
-              role: "summary-metric",
-              x: 905,
-              y: 300,
-              w: 220,
-              h: 150,
-              z: 3,
-              editable: true,
-              content: { label: "页面数", value: "PPT", note: slide.recommendedLayout },
-              style: { tone: "accent" }
-            }
-          ]
-        : [
-            {
-              id: "title",
-              type: "text",
-              role: "title",
-              x: 72,
-              y: 44,
-              w: 820,
-              h: 62,
-              z: 1,
-              editable: true,
-              content: { text: draftTitle },
-              style: { fontSize: 32, bold: true, color: "#003F7D" }
-            },
-            {
-              id: "key-message",
-              type: "callout",
-              role: "key-message",
-              x: 72,
-              y: 126,
-              w: 1136,
-              h: 104,
-              z: 2,
-              editable: true,
-              content: { title: "核心结论", body: draftKeyMessage },
-              style: { tone: "primary" }
-            },
-            ...items.map((item, index) => ({
-              id: `card-${index + 1}`,
-              type: "card" as const,
-              role: "supporting-point",
-              x: 72 + (index % 2) * 578,
-              y: 270 + Math.floor(index / 2) * 162,
-              w: 538,
-              h: 128,
-              z: 3 + index,
-              editable: true,
-              content: { title: `要点 ${index + 1}`, body: item },
-              style: { tone: (index % 2 === 0 ? "default" : "accent") as "default" | "accent" }
-            }))
-          ]
-    };
-  }
 
   async generateSvgPreview(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", _onToken?: (token: string) => void, _options?: SvgGenerationOptions): Promise<string> {
     const tokens = getThemePack(theme).tokens;

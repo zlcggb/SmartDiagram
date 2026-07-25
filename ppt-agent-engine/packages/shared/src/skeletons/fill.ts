@@ -4,40 +4,6 @@ import type { ThemePackMeta } from "../themePacks.js";
 import { getSkeletonFrame } from "./registry.js";
 import type { LayoutSkeletonFrame, SkeletonElement, SkeletonElementType, SkeletonSlotValues } from "./types.js";
 
-/** 与 SlideIrDto 结构对齐，避免与 index 循环依赖 */
-interface IrContent {
-  title?: string;
-  text?: string;
-  body?: string;
-  label?: string;
-  value?: string;
-  note?: string;
-  items?: string[];
-  rows?: string[][];
-}
-
-interface IrElement {
-  id: string;
-  type: SkeletonElementType;
-  role: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  z: number;
-  editable: boolean;
-  content: IrContent;
-  style: NonNullable<SkeletonElement["style"]>;
-}
-
-interface IrDoc {
-  version: "1.0";
-  canvas: { width: 1280; height: 720 };
-  title: string;
-  layout: string;
-  elements: IrElement[];
-}
-
 export interface SlideLikeForSkeleton {
   id?: string;
   title: string;
@@ -79,68 +45,6 @@ function getByPath(slots: SkeletonSlotValues, path: string): unknown {
   return undefined;
 }
 
-function contentForElement(el: SkeletonElement, slots: SkeletonSlotValues): IrContent {
-  const raw = getByPath(slots, el.slot);
-  const text = asText(raw);
-  const items = asItems(raw);
-
-  switch (el.type) {
-    case "metric": {
-      const label = asText(getByPath(slots, el.slot.replace(/Value$/, "Label")) || getByPath(slots, `${el.slot}Label`));
-      const note = asText(getByPath(slots, `${el.slot}Note`));
-      if (items.length >= 2) {
-        return {
-          value: softTrimCopy(items[0]!, copyBudgets.metric.maxChars),
-          label: softTrimCopy(items[1]!, copyBudgets.metricLabel.maxChars),
-          note: items[2] ? softTrimCopy(items[2], copyBudgets.bullet.maxChars) : note
-        };
-      }
-      return {
-        value: softTrimCopy(text || "—", copyBudgets.metric.maxChars),
-        label: softTrimCopy(label || el.role, copyBudgets.metricLabel.maxChars),
-        note: softTrimCopy(note, copyBudgets.bullet.maxChars)
-      };
-    }
-    case "table": {
-      const rows = Array.isArray(raw) && Array.isArray((raw as unknown[])[0])
-        ? (raw as string[][])
-        : items.map((item) => item.split("|").map((c) => c.trim()));
-      return {
-        title: softTrimCopy(asText(getByPath(slots, `${el.slot}Title`) || el.role), copyBudgets.cardTitle.maxChars),
-        rows: rows.slice(0, 6).map((row) => row.map((cell) => softTrimCopy(cell, 24)))
-      };
-    }
-    case "timeline":
-    case "process":
-      return {
-        title: softTrimCopy(asText(getByPath(slots, `${el.slot}Title`) || el.role), copyBudgets.cardTitle.maxChars),
-        items: (items.length ? items : text ? text.split(/[；;\n]/).map((s) => s.trim()).filter(Boolean) : []).slice(
-          0,
-          copyBudgets.bulletCount.max
-        )
-      };
-    case "text":
-      return {
-        text: softTrimCopy(
-          text,
-          el.role.includes("title") || el.slot === "title" || el.slot === "pageTitle" || el.slot === "chapter"
-            ? copyBudgets.title.maxChars
-            : copyBudgets.keyMessage.maxChars
-        )
-      };
-    case "callout":
-    case "card":
-    default:
-      return {
-        title: softTrimCopy(
-          asText(getByPath(slots, `${el.slot}Title`) || (el.role === "key-message" ? "核心结论" : el.role)),
-          copyBudgets.cardTitle.maxChars
-        ),
-        body: softTrimCopy(text || items.join("；"), copyBudgets.keyMessage.maxChars),
-        items: items.slice(0, copyBudgets.blockItemCount.max)
-      };
-  }
-}
 
 /** 从大纲/策划页抽取槽位文案 */
 export function slotsFromSlide(slide: SlideLikeForSkeleton): SkeletonSlotValues {
@@ -230,86 +134,6 @@ export function slotsFromSlide(slide: SlideLikeForSkeleton): SkeletonSlotValues 
   return slots;
 }
 
-export function fillSkeletonFrame(frame: LayoutSkeletonFrame, slots: SkeletonSlotValues, title?: string): IrDoc {
-  const elements: IrElement[] = frame.elements.map((el) => ({
-    id: el.id,
-    type: el.type,
-    role: el.role,
-    x: el.x,
-    y: el.y,
-    w: el.w,
-    h: el.h,
-    z: el.z,
-    editable: el.editable !== false && el.type !== "decor",
-    content: contentForElement(el, slots),
-    style: el.style ?? {}
-  }));
-
-  return {
-    version: "1.0",
-    canvas: { width: 1280, height: 720 },
-    title: title || asText(slots.pageTitle || slots.title, frame.variantId),
-    layout: frame.recommendedLayout,
-    elements
-  };
-}
-
-export function buildIrFromSkeleton(
-  slide: SlideLikeForSkeleton,
-  options?: {
-    variantId?: string | null;
-    themeFamily?: ThemePackMeta["family"];
-    usedVariantIds?: string[];
-  }
-): IrDoc | null {
-  const family = options?.themeFamily ?? "light";
-  const layout = slide.planJson?.layoutType || slide.recommendedLayout;
-  const variant =
-    options?.variantId && getSkeletonFrame(options.variantId)
-      ? { id: options.variantId }
-      : pickDefaultVariant(layout, family, options?.usedVariantIds ?? [], `${slide.id ?? slide.title}-${layout}`);
-  const frame = getSkeletonFrame(variant.id);
-  if (!frame) return null;
-  return fillSkeletonFrame(frame, slotsFromSlide(slide), slide.planJson?.title || slide.title);
-}
-
-/** 将 LLM IR 几何吸附到骨架（保留其文案，锁坐标） */
-export function snapIrToSkeleton(ir: IrDoc, frame: LayoutSkeletonFrame): IrDoc {
-  if (!frame.lockGeometry) return ir;
-  const byRole = new Map(ir.elements.map((el) => [el.role, el]));
-  const byId = new Map(ir.elements.map((el) => [el.id, el]));
-  const byOrder = [...ir.elements];
-
-  const elements: IrElement[] = frame.elements.map((slotEl, index) => {
-    const matched =
-      byId.get(slotEl.id) ||
-      byRole.get(slotEl.role) ||
-      byOrder[index] ||
-      null;
-    const content = matched?.content ?? contentForElement(slotEl, {});
-    return {
-      id: slotEl.id,
-      type: slotEl.type,
-      role: slotEl.role,
-      x: slotEl.x,
-      y: slotEl.y,
-      w: slotEl.w,
-      h: slotEl.h,
-      z: slotEl.z,
-      editable: slotEl.editable !== false && slotEl.type !== "decor",
-      content,
-      style: { ...(slotEl.style ?? {}), ...(matched?.style ?? {}) }
-    };
-  });
-
-  return {
-    version: "1.0",
-    canvas: { width: 1280, height: 720 },
-    title: ir.title,
-    layout: frame.recommendedLayout,
-    elements
-  };
-}
 
 export function formatSkeletonGeometryInstruction(frame: LayoutSkeletonFrame): string {
   const lines = frame.elements.map(

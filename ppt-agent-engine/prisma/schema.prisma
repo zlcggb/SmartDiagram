@@ -100,13 +100,12 @@ model Slide {
   isContentLocked   Boolean         @default(false)
   isLayoutLocked    Boolean         @default(false)
   planJson          String?
-  irJson            String?
   svgPreview        String?
   searchJson        String?
   partTitle         String?
   generationStatus  String          @default("draft")
   /**
-   * ir | svg | hybrid；空则由 API format 时 inferRenderStrategy
+   * svg | theme | hybrid；空则由 API format 时 inferRenderStrategy
    */
   renderStrategy    String?
   /**

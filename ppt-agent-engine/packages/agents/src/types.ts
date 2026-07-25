@@ -8,7 +8,6 @@ import type {
   ProjectDto,
   ResearchJson,
   SlideDto,
-  SlideIrDto,
   SlidePlanDto,
   SlideSearchJson,
   PptExportTheme,
@@ -34,7 +33,7 @@ export interface GeminiAdapter {
     onToken?: (token: string) => void
   ): Promise<OutlineSlideDraft[]>;
   generateSlidePlan(slide: SlideDto, facts: FactDto[], theme?: PptExportTheme, onToken?: (token: string) => void): Promise<SlidePlanDto>;
-  generateSlideIr(slide: SlideDto, facts: FactDto[], theme?: PptExportTheme, onToken?: (token: string) => void): Promise<SlideIrDto>;
+
   generateSvgPreview(
     slide: SlideDto,
     facts: FactDto[],

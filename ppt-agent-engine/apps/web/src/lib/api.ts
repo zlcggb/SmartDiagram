@@ -18,10 +18,9 @@ import type {
   ProjectDto,
   RenderStrategy,
   ResearchJson,
-  SlideDto,
-  SlideIrDto,
   SlideNarrationDto,
   SlidePlanDto,
+  SlideDto,
   SlideSearchJson,
   SourceTextDto,
   SubtitleStyleId,
@@ -303,12 +302,7 @@ export const api = {
   generateAllPlans(projectId: string) {
     return request<SlideDto[]>(`/api/projects/${projectId}/generate-all-plans`, json("POST", {}));
   },
-  generateSlideIr(projectId: string, slideId: string, theme: PptExportTheme) {
-    return request<{ ir: SlideIrDto; slide: SlideDto }>(`/api/projects/${projectId}/slides/${slideId}/generate-ir`, json("POST", { theme }));
-  },
-  generateAllIr(projectId: string, theme: PptExportTheme) {
-    return request<SlideDto[]>(`/api/projects/${projectId}/generate-all-ir`, json("POST", { theme }));
-  },
+
   generateSvgPreview(projectId: string, slideId: string, theme: PptExportTheme, options?: { accentId?: string; surfaceId?: string }) {
     return request<{ svgPreview: string; slide: SlideDto }>(`/api/projects/${projectId}/slides/${slideId}/generate-svg-preview`, json("POST", { theme, ...options }));
   },

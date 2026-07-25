@@ -7,8 +7,7 @@ import type {
   FactDto,
   ProjectDto,
   RenderStrategy,
-  SlideDto,
-  SlideIrElementDto
+  SlideDto
 } from "@ppt-agent/shared";
 import {
   effectiveRenderStrategy,
@@ -159,14 +158,7 @@ function multilineShort(value: string, length = 180) {
   return clean.length > length ? `${clean.slice(0, length - 1)}...` : clean;
 }
 
-function pxBox(element: SlideIrElementDto): Box {
-  return {
-    x: (element.x / 1280) * W,
-    y: (element.y / 720) * H,
-    w: (element.w / 1280) * W,
-    h: (element.h / 720) * H
-  };
-}
+
 
 function factsForSlide(slide: SlideDto, facts: FactDto[]) {
   const linked = facts.filter((fact) => slide.sourceFactIds.includes(fact.id));
@@ -213,84 +205,7 @@ function toneColor(tone: CardTone) {
   return deckTokens.blue;
 }
 
-function elementTone(element: SlideIrElementDto): CardTone {
-  const tone = element.style.tone;
-  return tone === "primary" || tone === "accent" || tone === "success" || tone === "warning" || tone === "risk" || tone === "default" ? tone : "default";
-}
 
-function styleColor(element: SlideIrElementDto, fallback: string) {
-  return typeof element.style.color === "string" ? element.style.color : fallback;
-}
-
-function styleFill(element: SlideIrElementDto, fallback: string) {
-  return typeof element.style.fill === "string" ? element.style.fill : fallback;
-}
-
-function styleStroke(element: SlideIrElementDto, fallback: string) {
-  return typeof element.style.stroke === "string" ? element.style.stroke : fallback;
-}
-
-function contentTitle(element: SlideIrElementDto, fallback = "") {
-  return element.content.title || element.content.label || fallback;
-}
-
-function contentBody(element: SlideIrElementDto) {
-  return (
-    element.content.body ||
-    element.content.text ||
-    element.content.value ||
-    element.content.note ||
-    element.content.items?.join("\n") ||
-    element.content.rows?.map((row) => row.join("  ")).join("\n") ||
-    ""
-  );
-}
-
-function contentItems(element: SlideIrElementDto) {
-  if (element.content.items?.length) {
-    return element.content.items.filter((item) => item.trim().length > 0);
-  }
-
-  const body = contentBody(element);
-  const bulletLines = body
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /^[-•]\s+/.test(line) || /^\d+[.、]\s*/.test(line))
-    .map((line) => line.replace(/^[-•]\s+/, "").replace(/^\d+[.、]\s*/, "").trim())
-    .filter(Boolean);
-
-  if (bulletLines.length > 0) {
-    return bulletLines;
-  }
-
-  return body
-    .split(/；|;|。(?=\S)/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function bulletText(element: SlideIrElementDto) {
-  const items = contentItems(element);
-  return items.length > 1 ? items.map((item) => `• ${item}`).join("\n") : contentBody(element);
-}
-
-function parseMarkdownTable(value: string | undefined) {
-  if (!value) {
-    return [];
-  }
-  const rows = value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("|") && line.endsWith("|"))
-    .map((line) =>
-      line
-        .slice(1, -1)
-        .split("|")
-        .map((cell) => cell.trim())
-    )
-    .filter((row) => row.length > 0 && !row.every((cell) => /^:?-{3,}:?$/.test(cell)));
-  return rows.length >= 2 ? rows : [];
-}
 
 function cardShadow() {
   return { type: "outer", color: "C7D3E1", opacity: 0.16, blur: 1.2, angle: 45, distance: 1 };
@@ -469,73 +384,7 @@ function addMetricCard(pptx: PptxInstance, slide: PptxSlide, box: Box, label: st
   }
 }
 
-function addTextElement(slide: PptxSlide, element: SlideIrElementDto) {
-  const box = pxBox(element);
-  const fontSize = typeof element.style.fontSize === "number" ? element.style.fontSize * 0.52 : element.role === "title" ? 22 : 12;
-  const text = element.content.items?.length ? bulletText(element) : contentBody(element) || element.content.title || element.content.label || "";
-  slide.addText(element.role === "title" ? short(text, 42) : multilineShort(text, 220), {
-    ...box,
-    fontFace,
-    fontSize,
-    bold: element.style.bold ?? element.role === "title",
-    color: c(styleColor(element, element.role === "title" ? deckTokens.navy : deckTokens.ink)),
-    align: element.style.align ?? "left",
-    fit: "shrink",
-    margin: 0.02
-  });
-}
 
-function addTableLike(pptx: PptxInstance, slide: PptxSlide, element: SlideIrElementDto) {
-  const box = pxBox(element);
-  const title = contentTitle(element);
-  const tableBox = title
-    ? { x: box.x + 0.18, y: box.y + 0.72, w: box.w - 0.36, h: Math.max(0.4, box.h - 0.92) }
-    : box;
-  const markdownRows = parseMarkdownTable(element.content.value || element.content.body || element.content.text);
-  const rows = element.content.rows?.length
-    ? element.content.rows
-    : markdownRows.length
-      ? markdownRows
-      : element.content.items?.length
-        ? element.content.items.map((item) => [item])
-        : [[contentBody(element)]];
-  const rowCount = Math.max(1, rows.length);
-  const colCount = Math.max(1, Math.max(...rows.map((row) => row.length)));
-  const rowH = tableBox.h / rowCount;
-  const colW = tableBox.w / colCount;
-
-  if (title) {
-    addEditableCard(pptx, slide, box, title, "", elementTone(element), "compact");
-  }
-
-  rows.forEach((row, rowIndex) => {
-    for (let colIndex = 0; colIndex < colCount; colIndex += 1) {
-      const x = tableBox.x + colIndex * colW;
-      const y = tableBox.y + rowIndex * rowH;
-      const isHeader = rowIndex === 0 && colCount > 1;
-      slide.addShape(pptx.ShapeType.rect, {
-        x,
-        y,
-        w: colW,
-        h: rowH,
-        fill: { color: isHeader ? c(deckTokens.navy) : rowIndex % 2 === 0 ? "F8FBFF" : "FFFFFF" },
-        line: { color: c(deckTokens.line), width: 0.5 }
-      });
-      slide.addText(short(row[colIndex] ?? "", 46), {
-        x: x + 0.06,
-        y: y + 0.06,
-        w: Math.max(0.1, colW - 0.12),
-        h: Math.max(0.1, rowH - 0.12),
-        fontFace,
-        fontSize: isHeader ? 8.8 : 8.2,
-        bold: isHeader,
-        color: isHeader ? "FFFFFF" : c(deckTokens.ink),
-        fit: "shrink",
-        margin: 0
-      });
-    }
-  });
-}
 
 function addTableGrid(pptx: PptxInstance, slide: PptxSlide, box: Box, title: string, rows: string[][]) {
   addEditableCard(pptx, slide, box, title, "", "default", "compact");
@@ -574,124 +423,7 @@ function addTableGrid(pptx: PptxInstance, slide: PptxSlide, box: Box, title: str
   });
 }
 
-function addTimelineLike(pptx: PptxInstance, slide: PptxSlide, element: SlideIrElementDto) {
-  const box = pxBox(element);
-  const items = contentItems(element).slice(0, 6);
-  if (items.length === 0) {
-    return;
-  }
-  addEditableCard(pptx, slide, box, contentTitle(element, "关键节点"), "", elementTone(element), "compact");
-  const accent = toneColor(elementTone(element));
-  const y = box.y + box.h * 0.5;
-  slide.addShape(pptx.ShapeType.line, {
-    x: box.x + 0.38,
-    y,
-    w: Math.max(0.1, box.w - 0.76),
-    h: 0,
-    line: { color: c(accent), width: 1.8 }
-  });
-  items.forEach((item, index) => {
-    const step = items.length === 1 ? 0 : (box.w - 1.1) / (items.length - 1);
-    const x = box.x + 0.44 + index * step;
-    slide.addShape(pptx.ShapeType.ellipse, {
-      x,
-      y: y - 0.14,
-      w: 0.28,
-      h: 0.28,
-      fill: { color: c(accent) },
-      line: { color: c(accent) }
-    });
-    slide.addText(short(item, 52), {
-      x: x - 0.4,
-      y: y + (index % 2 === 0 ? 0.24 : -0.82),
-      w: 1.28,
-      h: 0.56,
-      fontFace,
-      fontSize: 7.8,
-      color: c(deckTokens.ink),
-      fit: "shrink",
-      align: "center",
-      margin: 0
-    });
-  });
-}
 
-function addProcessLike(pptx: PptxInstance, slide: PptxSlide, element: SlideIrElementDto) {
-  const box = pxBox(element);
-  const items = contentItems(element).slice(0, 5);
-  if (items.length === 0) {
-    return;
-  }
-  const gap = 0.18;
-  const cardW = (box.w - gap * (items.length - 1)) / items.length;
-  items.forEach((item, index) => {
-    const cardBox = { x: box.x + index * (cardW + gap), y: box.y, w: cardW, h: box.h };
-    addEditableCard(pptx, slide, cardBox, `步骤 ${index + 1}`, item, index === 0 ? "primary" : "default", "compact");
-    if (index < items.length - 1) {
-      slide.addShape(pptx.ShapeType.line, {
-        x: cardBox.x + cardBox.w + 0.03,
-        y: cardBox.y + cardBox.h / 2,
-        w: gap - 0.06,
-        h: 0,
-        line: { color: c(deckTokens.blue), width: 1.1, beginArrowType: "none", endArrowType: "triangle" }
-      });
-    }
-  });
-}
-
-function addDecor(pptx: PptxInstance, slide: PptxSlide, element: SlideIrElementDto) {
-  const box = pxBox(element);
-  slide.addShape(pptx.ShapeType.rect, {
-    ...box,
-    fill: { color: c(styleFill(element, "#FFFFFF")), transparency: 12 },
-    line: { color: c(styleStroke(element, deckTokens.line)), transparency: 35 },
-    radius: 0.08
-  });
-}
-
-function renderIrElement(pptx: PptxInstance, slide: PptxSlide, element: SlideIrElementDto) {
-  const box = pxBox(element);
-  const tone = elementTone(element);
-  if (element.type === "text") {
-    addTextElement(slide, element);
-    return;
-  }
-  if (element.type === "metric") {
-    addMetricCard(pptx, slide, box, element.content.label || contentTitle(element, "指标"), element.content.value || contentBody(element), element.content.note || "", tone);
-    return;
-  }
-  if (element.type === "table") {
-    addTableLike(pptx, slide, element);
-    return;
-  }
-  if (element.type === "timeline") {
-    addTimelineLike(pptx, slide, element);
-    return;
-  }
-  if (element.type === "process") {
-    addProcessLike(pptx, slide, element);
-    return;
-  }
-  if (element.type === "decor") {
-    addDecor(pptx, slide, element);
-    return;
-  }
-
-  const variant = element.type === "callout" || /hero|key|summary/i.test(element.role) ? "hero" : "default";
-  addEditableCard(pptx, slide, box, contentTitle(element, element.type === "callout" ? "重点提示" : "内容卡片"), bulletText(element), tone, variant);
-}
-
-function renderIrSlide(pptx: PptxInstance, slide: PptxSlide, outline: SlideDto) {
-  const ir = outline.irJson;
-  if (!ir) {
-    return false;
-  }
-  ir.elements
-    .slice()
-    .sort((a, b) => a.z - b.z)
-    .forEach((element) => renderIrElement(pptx, slide, element));
-  return true;
-}
 
 function renderActionSlide(pptx: PptxInstance, slide: PptxSlide, outline: SlideDto) {
   const rows = planTableRows(outline);
@@ -1896,30 +1628,19 @@ function renderFallback(pptx: PptxInstance, slide: PptxSlide, project: ProjectDt
   });
 }
 
-function degradePathForSlide(outline: SlideDto): "ir" | "theme" {
-  return outline.irJson ? "ir" : "theme";
+function degradePathForSlide(outline: SlideDto): "theme" {
+  return "theme";
 }
 
-function renderThemeOrIrSlide(
+function renderThemeSlide(
   pptx: PptxInstance,
   slide: PptxSlide,
   project: ProjectDto,
   outline: SlideDto,
   linkedFacts: FactDto[],
   index: number,
-  exportTheme: PptExportTheme,
-  options?: { preferIr?: boolean }
+  exportTheme: PptExportTheme
 ) {
-  // IR 优先：有 irJson 时先渲染 IR，避免主题模板永远盖住 IR
-  if (options?.preferIr && outline.irJson) {
-    slide.background = { color: c(deckTokens.bg) };
-    addSlideBackdrop(pptx, slide, index + 1);
-    if (renderIrSlide(pptx, slide, outline)) {
-      addFooter(pptx, slide, index + 1);
-      return;
-    }
-  }
-
   const renderedStyled = isDarkExportTheme(exportTheme)
     ? renderDarkTechSlide(pptx, slide, project, outline, linkedFacts, index)
     : renderWhiteBlueSlide(pptx, slide, project, outline, linkedFacts, index);
@@ -1930,7 +1651,7 @@ function renderThemeOrIrSlide(
   slide.background = { color: c(deckTokens.bg) };
   addSlideBackdrop(pptx, slide, index + 1);
 
-  if (!(isActionSlide(outline) && renderActionSlide(pptx, slide, outline)) && !renderIrSlide(pptx, slide, outline)) {
+  if (!(isActionSlide(outline) && renderActionSlide(pptx, slide, outline))) {
     renderFallback(pptx, slide, project, outline, linkedFacts, index);
   }
 
@@ -1975,30 +1696,6 @@ export async function renderProjectPptx(input: RenderProjectPptxInput, outputPat
       pageResults.push({ slideId: outline.id, strategy, path: "svg-image" });
       return;
     }
-
-    // ir / draft：直接走 IR/主题模板，跳过 SVG 优先
-    if (strategy === "ir") {
-      let warning: string | undefined;
-      if (outline.svgPreview && mode !== "draft") {
-        warning = `${pageLabel} 策略为 ir，已跳过 SVG，使用 IR/主题模板导出`;
-        warnings.push(warning);
-      }
-      if (!outline.irJson) {
-        warning = `${pageLabel} 策略为 ir 但缺少 irJson，已降级主题模板`;
-        warnings.push(warning);
-      }
-      renderThemeOrIrSlide(pptx, slide, input.project, outline, linkedFacts, index, exportTheme, {
-        preferIr: true
-      });
-      pageResults.push({
-        slideId: outline.id,
-        strategy,
-        path: degradePathForSlide(outline),
-        warning
-      });
-      return;
-    }
-
     // 可编辑版：SVG 拆成 PPT 原生文本/形状。
     if (tryRenderSvgSlide(pptx, slide, themedSvg)) {
       pageResults.push({ slideId: outline.id, strategy, path: "svg" });
@@ -2018,14 +1715,14 @@ export async function renderProjectPptx(input: RenderProjectPptxInput, outputPat
             ? "含未支持的 transform（matrix/scale/rotate），避免错位导出"
             : "无法转换为足够多的可编辑对象";
       const severity = mode === "visual" && strategy === "svg" ? "严格模式警告" : "已降级";
-      warning = `${pageLabel} SVG 编译失败（${reason}），${severity}为 IR/主题模板`;
+      warning = `${pageLabel} SVG 编译失败（${reason}），${severity}为主题模板`;
       warnings.push(warning);
-    } else if (strategy === "svg" || strategy === "hybrid") {
-      warning = `${pageLabel} 缺少 SVG，已降级为 IR/主题模板`;
+    } else if (strategy === "svg") {
+      warning = `${pageLabel} 缺少 SVG，已降级为主题模板`;
       warnings.push(warning);
     }
 
-    renderThemeOrIrSlide(pptx, slide, input.project, outline, linkedFacts, index, exportTheme);
+    renderThemeSlide(pptx, slide, input.project, outline, linkedFacts, index, exportTheme);
     pageResults.push({
       slideId: outline.id,
       strategy,
