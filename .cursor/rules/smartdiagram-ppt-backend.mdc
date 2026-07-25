@@ -1,0 +1,35 @@
+---
+description: SmartDiagram PPT 后端（api-ppt + renderer + packages）改动约定
+globs: apps/api-ppt/**/*,apps/service-ppt-renderer/**/*,packages/**/*
+alwaysApply: false
+---
+
+# PPT 后端规则
+
+## 双服务
+
+```
+浏览器 /ppt-api/* → api-ppt (Python, :4000) LangGraph 编排
+                 → service-ppt-renderer (Node, :4010) Prisma + PPTX 渲染
+                 → api-diagram（内部认证，PPT_INTERNAL_API_SECRET）
+```
+
+## 共享包
+
+- `packages/shared` — DTO/类型
+- `packages/agents` — TS Agent 逻辑
+- `packages/ppt-renderer` — PPTX 渲染核心
+
+## 常见改动
+
+| 目标 | 路径 |
+|------|------|
+| PPT LangGraph 工作流 | `apps/api-ppt/src/` |
+| 项目/幻灯片 CRUD | `service-ppt-renderer/src/routes/` |
+| PPTX 导出 | `packages/ppt-renderer/` |
+| 数据库迁移 | 根 `prisma/`（`ppt_agent` 库） |
+
+## 注意
+
+- PPT 域**不用 Redis**；持久化走 PostgreSQL（Prisma）+ 文件卷 `STORAGE_DIR`。
+- 勿把 PPT 数据写到 `smartdiagram` 库。

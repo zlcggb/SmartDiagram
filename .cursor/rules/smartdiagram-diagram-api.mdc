@@ -1,0 +1,38 @@
+---
+description: SmartDiagram 图表后端（api-diagram）改动约定
+globs: apps/api-diagram/**/*
+alwaysApply: false
+---
+
+# api-diagram 规则
+
+## 入口链路
+
+- 应用挂载：`app/main.py`
+- **SSE 主入口**：`app/api/routes.py` → `POST /api/chat/stream`
+- 编排：`agents/orchestrator.py` → `agents/router.py` → 各 `*_agent.py`
+- 引擎映射：`agents/catalog.py`
+
+## 常见改动
+
+| 目标 | 路径 |
+|------|------|
+| 聊天/SSE 行为 | `routes.py` + `orchestrator.py` |
+| 新绘图引擎 | `catalog.py` + `*_agent.py` + 前端 Canvas |
+| 登录/权限 | `routes_auth.py` |
+| 知识库 | `routes_knowledge.py` + `services/knowledge_*` |
+| 异步导出/worker | `export_job_service.py` + `run_enterprise_workers.py` |
+
+## Redis（本服务专用）
+
+- 认证 IP 限流：`services/rate_limit.py`（fail-open）
+- 运行时护栏限流：`runtime_guard_service.py`（生产 Docker 默认 `RUNTIME_RATE_LIMIT_BACKEND=redis`）
+- 任务队列：`redis_queue_service.py`（知识库 `ingestion_mode=redis`、导出 `mode=redis`）
+- Worker 互斥锁：`acquire_worker_job_lock` / `release_worker_job_lock`（防多 worker 重复消费）
+
+任务状态仍以 PostgreSQL 为准；Redis 只负责限流计数、派发与互斥。
+
+## 风格
+
+- FastAPI + SQLAlchemy async；LangGraph 流式输出 `<design_concept>` + `<code>`。
+- 企业能力（知识库/导出/队列）依赖 PostgreSQL + Redis，本地可不开 worker。

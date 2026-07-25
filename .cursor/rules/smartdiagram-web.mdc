@@ -1,0 +1,37 @@
+---
+description: SmartDiagram 前端（apps/web）改动约定
+globs: apps/web/**/*
+alwaysApply: false
+---
+
+# apps/web 规则
+
+## 结构
+
+- 路由：`src/app/main.tsx`（`/` · `/diagram/*` · `/ppt/*`）
+- 业务模块：`src/features/diagram/` · `src/features/ppt/`
+- 平台壳：`src/shared/`（AppShell、auth、settings）
+- 新模块：注册 `src/modules/registry.tsx` + 加路由
+
+## API 调用
+
+| 域 | base | 后端 |
+|----|------|------|
+| 图表 | `/api` | api-diagram :8000 |
+| PPT | `/ppt-api` | api-ppt :4000 |
+
+本地 proxy 在 `vite.config.ts`；生产分流在 `gateway/nginx.conf`。
+
+## 常见改动
+
+| 目标 | 路径 |
+|------|------|
+| 图表 UI/画布 | `features/diagram/ui/` |
+| PPT 五步工作流 | `features/ppt/pages/` + `store/workbenchStore.ts` |
+| 登录态 | `shared/store/authStore.ts` |
+| 访客 PPT 项目 | `features/ppt/lib/guestProjectStore.ts`（IndexedDB，非 Redis） |
+
+## 改完检查
+
+- 修改 `.tsx`/`.ts` 后跑 `ReadLints`。
+- UI 保持与现有 macOS 桌面壳风格一致；复用 `shared/ui` 组件。

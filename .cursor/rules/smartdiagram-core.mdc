@@ -1,0 +1,35 @@
+---
+description: SmartDiagram 项目核心约定（monorepo、文档、env、改代码纪律）
+alwaysApply: true
+---
+
+# SmartDiagram 项目规则
+
+## 先读什么
+
+1. 通用工具流程 → [`AGENTS.md`](../../AGENTS.md)
+2. 架构与改哪里 → [`smartdiagram_architecture.md`](../../smartdiagram_architecture.md)（尤其 **§8 改动定位表**）
+3. 启动/部署命令 → [`README.md`](../../README.md)
+
+## Monorepo 边界
+
+| 模块 | 路径 | API 前缀 | 数据库 |
+|------|------|----------|--------|
+| 统一前端 | `apps/web` | Vite proxy | — |
+| 图表后端 | `apps/api-diagram` | `/api/*` | `DIAGRAM_DATABASE_URL` → `smartdiagram` |
+| PPT 编排 | `apps/api-ppt` | `/ppt-api/*` | 主要调 Node 侧车 |
+| PPT 渲染 | `apps/service-ppt-renderer` | 内网 `:4010` | `DATABASE_URL` → `ppt_agent` |
+
+**切勿混库**；配置以根目录 `.env` 为唯一真相，`apps/*/.env` 仅本机临时覆盖。
+
+## 改代码
+
+- 最小 diff，匹配现有风格；新模块走 `apps/web/src/modules/registry.tsx` 注册。
+- 结构/路径/边界变更 → 只更新 `smartdiagram_architecture.md`；操作步骤 → `README.md`。
+- 勿泄露 `.env` 密钥；勿未经要求 `git commit` / `push`。
+- Shell **勿用 `&&` 链命令**（分步执行）。
+- 改完 React/TS → 跑 `ReadLints` 查语法。
+
+## 本地基础设施
+
+`npm run db:up` 起 PostgreSQL + Redis + draw.io；企业 worker 见 `npm run worker` / `scripts/run_enterprise_workers.py`。
