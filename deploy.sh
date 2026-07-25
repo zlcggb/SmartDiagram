@@ -210,10 +210,11 @@ prune_unused_images_when_disk_is_high() {
 
 # ── 检查 .env（合并旧文件 + 双库/密钥校验） ──
 check_env() {
+    local project_root="$ROOT_DIR"
     # shellcheck source=scripts/validate-deploy-env.sh
-    source "$ROOT_DIR/scripts/validate-deploy-env.sh"
+    source "$project_root/scripts/validate-deploy-env.sh"
     MERGE_LEGACY=true
-    validate_deploy_env "$ROOT_DIR" || exit 1
+    validate_deploy_env "$project_root" || exit 1
 }
 
 ensure_deploy_environment() {

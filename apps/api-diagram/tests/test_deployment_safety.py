@@ -354,12 +354,15 @@ def test_deploy_runs_env_validation_before_build() -> None:
     script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
     validator = (REPO_ROOT / "scripts" / "validate-deploy-env.sh").read_text(encoding="utf-8")
 
-    assert 'source "$ROOT_DIR/scripts/validate-deploy-env.sh"' in script
+    assert 'source "$project_root/scripts/validate-deploy-env.sh"' in script
+    assert "local project_root=\"$ROOT_DIR\"" in script
     assert "MERGE_LEGACY=true" in script
     assert "validate_deploy_env" in script
     assert "DIAGRAM_DATABASE_URL" in validator
     assert "ppt_agent" in validator
     assert "merge_legacy_env_files" in validator
+    assert 'BASH_SOURCE[0]' in validator
+    assert 'dirname "$0"' not in validator.split("ROOT_DIR=")[1].split("\n")[0]
 
     deploy_body = script[script.index("deploy() {") : script.index("\n# ── 停止 ──")]
     check_env_at = deploy_body.index("check_env")
