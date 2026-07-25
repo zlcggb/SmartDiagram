@@ -6,6 +6,9 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 ARG PYTHON_IMAGE=python:3.12-slim-bookworm
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.10.5
 
+# BuildKit 不会可靠展开 COPY --from=${UV_IMAGE}，须先声明命名 stage。
+FROM ${UV_IMAGE} AS uv-bin
+
 FROM ${NODE_IMAGE} AS node-deps
 
 ENV PNPM_HOME=/pnpm
@@ -71,8 +74,7 @@ CMD ["sh", "-c", "./node_modules/.bin/tsx prisma/apply-migrations.ts && exec nod
 
 FROM ${PYTHON_IMAGE} AS python-api
 
-ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.10.5
-COPY --from=${UV_IMAGE} /uv /uvx /bin/
+COPY --from=uv-bin /uv /uvx /bin/
 
 ENV PYTHONUNBUFFERED=1
 ENV UV_PROJECT_ENVIRONMENT=/app/apps/api-ppt/.venv

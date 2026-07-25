@@ -258,6 +258,14 @@ def test_china_deploy_uses_configurable_ghcr_mirror_before_backup() -> None:
     assert "FROM ${UV_PYTHON_IMAGE}" in gateway_dockerfile
     assert "UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.10.5}" in ppt_node_compose
 
+    root_dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "FROM ${UV_IMAGE} AS uv-bin" in root_dockerfile
+    assert "COPY --from=uv-bin" in root_dockerfile
+    assert not any(
+        line.strip().startswith("COPY --from=${UV_IMAGE}")
+        for line in root_dockerfile.splitlines()
+    )
+
 
 def test_database_migration_script_imports_app_when_executed_by_path() -> None:
     backend_dir = REPO_ROOT / "apps" / "api-diagram"
