@@ -1,488 +1,343 @@
 # SmartDiagram 部署教程
 
-> 从本地开发到服务器上线的完整指南
+> 统一平台（思维导图 / 图表 + PPT）从本地到服务器上线的完整指南
 
 ---
 
 ## 目录
 
-1. [总体流程](#总体流程)
-2. [第一步：本地准备 — 推送到 GitHub](#第一步本地准备--推送到-github)
-3. [第二步：服务器环境准备](#第二步服务器环境准备)
-4. [第三步：拉取代码并配置](#第三步拉取代码并配置)
-5. [第四步：一键部署](#第四步一键部署)
-6. [第五步：域名和 HTTPS（可选）](#第五步域名和-https可选)
+1. [架构与服务](#架构与服务)
+2. [部署命令怎么选](#部署命令怎么选)
+3. [首次部署](#首次部署)
+4. [日常更新](#日常更新)
+5. [环境变量](#环境变量)
+6. [域名与 HTTPS](#域名与-https)
 7. [日常运维](#日常运维)
 8. [常见问题](#常见问题)
+9. [检查清单](#检查清单)
 
 ---
 
-## 总体流程
+## 架构与服务
+
+### 对外入口
+
+生产环境**只有一个对外 HTTP 端口**：聚合网关 `gateway`（默认宿主机 **9237**）。宝塔 / Nginx 只需反代这一端口。
 
 ```
-本地开发 → Git Push → 服务器 Git Pull → Docker Compose 一键启动
+                    ┌─────────────────────────────────────┐
+                    │  gateway (:9237 → 容器 :80)          │
+                    │  /          → web（统一 SPA）        │
+                    │  /api/      → api-diagram :8000     │
+                    │  /ppt-api/  → ppt-python-api :4000  │
+                    │  /drawio/   → drawio :9022          │
+                    └─────────────────────────────────────┘
+                                      │
+         ┌────────────────────────────┼────────────────────────────┐
+         ▼                            ▼                            ▼
+  smartdiagram-web            smartdiagram-api-diagram      smartdiagram-ppt-*
+  （apps/web 构建）            （apps/api-diagram）           Node :4010 + Python :4000
+         │                            │                            │
+         └────────────────────────────┼────────────────────────────┘
+                                      ▼
+                         PostgreSQL（smartdiagram + ppt_agent）
+                         Redis · 命名卷（knowledgedata / pptdata）
 ```
 
-```
-┌──────────┐     git push     ┌──────────┐     git pull      ┌──────────────┐
-│  本地 Mac │ ──────────────→ │  GitHub  │ ──────────────→  │  云服务器     │
-│  开发机   │                 │  仓库    │                   │  (Ubuntu)    │
-└──────────┘                  └──────────┘                   └──────┬───────┘
-                                                                    │
-                                                          docker compose up
-                                                                    │
-                                                            ┌───────▼───────┐
-                                                            │  Nginx (:80)  │
-                                                            │  Backend (:8k)│
-                                                            │  PostgreSQL   │
-                                                            │  Redis        │
-                                                            │  Draw.io      │
-                                                            └───────────────┘
-```
+### Compose 服务对照
+
+| 服务名 | 容器名 | 作用 | 默认对外 |
+|--------|--------|------|----------|
+| `gateway` | `smartdiagram-gateway` | 统一入口、路径分流 | **9237** |
+| `web` | `smartdiagram-web` | 统一 SPA（`/diagram` + `/ppt`） | 仅内网 |
+| `api-diagram` | `smartdiagram-api-diagram` | 图表 / Auth / 知识库 API | 9236（调试） |
+| `ppt-python-api` | `smartdiagram-ppt-python-api` | PPT 编排 API | 仅内网 |
+| `ppt-node-api` | `smartdiagram-ppt-node-api` | PPT 渲染 / Prisma | 仅内网 |
+| `db` | `smartdiagram-db` | PostgreSQL | 5432 |
+| `redis` | `smartdiagram-redis` | 限流 / 队列 | 6379 |
+| `drawio` | `smartdiagram-drawio` | 画板 iframe | 9022 |
+| `worker` | `smartdiagram-worker` | 异步导出 / 知识库队列 | profile `worker` |
+| `qdrant` | `smartdiagram-qdrant` | 向量库（可选） | profile `qdrant` |
+
+> 旧版单独的 `frontend`、`backend`、`ppt-web` 服务已合并为 `web` + `api-diagram` + PPT 双 API。
 
 ---
 
-## 第一步：本地准备 — 推送到 GitHub
+## 部署命令怎么选
 
-### 1.1 确认 .gitignore 正确
+`deploy.sh` **仍然是生产部署的唯一入口**，你之前用的 `--with-worker` **继续有效**。
 
-确保以下敏感文件 **不会被提交**：
+| 场景 | 命令 |
+|------|------|
+| **服务器日常更新（最推荐）** | `./deploy.sh --update --with-worker` |
+| 代码已 `git pull`，只部署 | `./deploy.sh --with-worker` |
+| 首次部署 | `./deploy.sh --with-worker` |
+| 国内 / 宝塔，先验镜像 | `./deploy.sh --check-mirror` |
+| 国内强制加速 | `./deploy.sh --update --with-worker --cn` |
+| 启用 Qdrant | 加 `--with-qdrant` |
+| 仅备份 | `./deploy.sh --backup` |
+| 部署前 env 自检 | `npm run env:validate` |
+| 合并旧 env 后自检 | `npm run env:merge-legacy` |
+| 查看状态 / 日志 | `./deploy.sh --status` / `--logs` |
+| 停止（保留数据卷） | `./deploy.sh --down` |
 
-```bash
-# 检查 .gitignore 是否包含关键排除项
-cat .gitignore | grep -E "\.env|gcp-credentials"
-```
+### `--with-worker` 是什么？
 
-应该看到：
-```
-.env
-.env.local
-backend/.env
-gcp-credentials.json
-```
+- 启动 Compose **`worker` profile**，运行 `apps/api-diagram` 里的企业后台 worker。
+- 负责：**异步导出**（`mode=redis` / `queued`）、**知识库 ingestion**（`ingestion_mode=redis` / `queued`）、stale job 恢复、Redis 分布式锁。
+- **不带 worker**：图表仍可生成，但队列类任务不会后台执行。
+- **PPT 模块**不依赖此 flag；`ppt-node-api` / `ppt-python-api` 默认就会部署。
+- 部署脚本在 `--with-worker` 成功后会自动跑 `scripts/verify-worker-deployment.sh`（Redis PING + worker 进程 + `/api/health` 的 `dependencies.redis`）。
 
-> **注意**：`uv.lock` 和 `package-lock.json` 一样是依赖锁文件，**必须提交**到仓库，以确保服务器 Docker 构建时依赖版本一致。
+### `--update` 做什么？
 
-### 1.2 清理已追踪的敏感文件
+1. `git pull --ff-only origin main`（工作区有未提交修改会中止）
+2. 备份 `smartdiagram` + `ppt_agent` + 用户文件卷
+3. 构建镜像 → 增量 migrate → `compose up -d`
+4. 健康检查：主 API、网关、`/ppt-api/api/health`
 
-如果 `.env` 或密钥文件曾经被提交过，需要从 Git 历史中清除：
+**不会**执行 `down -v` 或删除命名卷。
 
-```bash
-# 检查是否有敏感文件被追踪
-git ls-files | grep -E "\.env$|gcp-credentials"
-
-# 如果有，取消追踪（不删除本地文件）
-git rm --cached backend/.env 2>/dev/null
-git rm --cached backend/gcp-credentials.json 2>/dev/null
-```
-
-### 1.3 提交并推送
-
-```bash
-# 查看当前更改
-git status
-
-# 添加所有修改
-git add -A
-
-# 提交
-git commit -m "feat: 完善部署配置"
-
-# 推送到 GitHub
-git push origin main
-```
+更细的安全策略见 [SERVER_DEPLOYMENT.md](./SERVER_DEPLOYMENT.md)。
 
 ---
 
-## 第二步：服务器环境准备
+## 首次部署
 
-### 2.1 服务器要求
+### 1. 服务器要求
 
-| 要求 | 最低配置 | 推荐配置 |
-|------|----------|----------|
-| 系统 | Ubuntu 22.04 / Debian 12 | Ubuntu 24.04 |
-| CPU  | 2 核 | 4 核 |
-| 内存 | 4 GB | 8 GB |
-| 磁盘 | 20 GB | 40 GB SSD |
-| 网络 | 公网 IP | 公网 IP + 域名 |
+| 项目 | 最低 | 推荐 |
+|------|------|------|
+| 系统 | Ubuntu 22.04 | Ubuntu 24.04 |
+| CPU | 2 核 | 4 核 |
+| 内存 | 4 GB | 8 GB（含 PPT 渲染建议更高） |
+| 磁盘 | 40 GB SSD | 80 GB SSD |
 
-### 2.2 安装 Docker
+安装 Docker Compose V2 与 Git（见旧版步骤，此处略）。
 
-```bash
-# 一键安装 Docker（官方脚本）
-curl -fsSL https://get.docker.com | sh
-
-# 将当前用户加入 docker 组（免 sudo）
-sudo usermod -aG docker $USER
-
-# 重新登录使权限生效
-exit
-# 重新 SSH 登录后验证
-docker --version
-docker compose version
-```
-
-### 2.3 安装 Git
+### 2. 克隆与配置
 
 ```bash
-# Ubuntu/Debian
-sudo apt update && sudo apt install -y git
-
-# 验证
-git --version
-```
-
-### 2.4 配置 SSH Key（推荐）
-
-如果是私有仓库，需要配置 SSH：
-
-```bash
-# 生成 SSH 密钥
-ssh-keygen -t ed25519 -C "your-email@example.com"
-
-# 查看公钥
-cat ~/.ssh/id_ed25519.pub
-
-# 将公钥添加到 GitHub → Settings → SSH Keys
-```
-
----
-
-## 第三步：拉取代码并配置
-
-### 3.1 克隆仓库
-
-```bash
-# 选择一个目录
 cd /opt
-
-# 克隆（HTTPS 方式 — 公开仓库）
-sudo git clone https://github.com/zlcggb/SmartDiagram.git
+git clone git@github.com:你的组织/SmartDiagram.git
 cd SmartDiagram
 
-# 如果用 SSH 方式
-# git clone git@github.com:zlcggb/SmartDiagram.git
+cp .env.example .env
+nano .env
 ```
 
-### 3.2 配置环境变量
+**只需维护根目录 `.env`**（Platform / Diagram / PPT 三分区）。`apps/api-diagram/.env` 可选，默认留空。
 
-`docker-compose.yml` 使用 `env_file` 直接读取 `backend/.env`，**只需配置这一个文件**即可。
+必填示例：
 
 ```bash
-# 从模板创建配置文件
-cp backend/.env.example backend/.env
+# Platform
+DB_PASSWORD=你的强密码          # 首次初始化后勿改，否则连不上已有卷
+PPT_INTERNAL_API_SECRET=至少32字节的随机串
+GATEWAY_PORT=9237
 
-# 编辑配置
-nano backend/.env
+# Diagram
+DIAGRAM_DATABASE_URL=postgresql+asyncpg://postgres:你的强密码@localhost:5432/smartdiagram
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1
+
+# PPT（Prisma 读 DATABASE_URL）
+DATABASE_URL=postgresql://postgres:你的强密码@localhost:5432/ppt_agent?schema=public
+# AI / TTS 等见 .env.example PPT 分区
 ```
 
-**必须修改的配置项：**
+生成随机密钥：
 
 ```bash
-# ── 必填：LLM API 配置 ──
-OPENAI_API_KEY=sk-your-real-api-key        # 替换为真实 API Key
-OPENAI_BASE_URL=https://api.openai.com/v1  # 如果用中转站，改为中转站地址
-MODEL_ID=gpt-4o                            # 或其他兼容模型
-
-# ── 推荐修改：安全配置 ──
-AUTH_SESSION_SECRET=your-random-secret     # Session 签名密钥（至少 32 字符随机串）
-ALTCHA_HMAC_KEY=your-random-hmac-key       # CAPTCHA 验证密钥（至少 32 字符随机串）
+openssl rand -hex 32   # PPT_INTERNAL_API_SECRET、AUTH_SESSION_SECRET 等
 ```
 
-> **生成随机密钥：**
-> ```bash
-> # 一次生成两个密钥
-> echo "AUTH_SESSION_SECRET=$(openssl rand -hex 32)"
-> echo "ALTCHA_HMAC_KEY=$(openssl rand -hex 32)"
-> ```
-
-**生产环境推荐配置：**
+### 3. 一键部署
 
 ```bash
-# 关闭演示账号预设
-AUTH_SHOW_DEMO_PRESETS=false
-
-# 安全验证（ALTCHA 自部署 PoW，无需外部服务）
-ALTCHA_HMAC_KEY=<openssl rand -hex 32 生成>  # CAPTCHA 签名密钥
-ALTCHA_ALGORITHM=SHA-256                     # 哈希算法
-ALTCHA_MAX_NUMBER=100000                     # PoW 难度（越大越难，100000 约 1 秒）
-
-# Auth 限速（每 IP 每分钟最多 5 次登录/注册）
-AUTH_RATE_LIMIT_MAX=5
-AUTH_RATE_LIMIT_WINDOW_SECONDS=60
-```
-
-> **关于数据库密码**：`docker-compose.yml` 中数据库密码默认为 `smartdiagram_secret`。如需修改，在项目根目录创建 `.env` 文件：
-> ```bash
-> echo "DB_PASSWORD=your-strong-db-password" > .env
-> ```
-
----
-
-## 第四步：一键部署
-
-### 4.1 使用部署脚本
-
-```bash
-# 赋予执行权限（首次）
 chmod +x deploy.sh
 
-# 一键部署！
-./deploy.sh
-```
+# 合并旧 env（若服务器还有 backend/.env 等）并校验双库/密钥
+npm run env:merge-legacy
 
-部署脚本会自动完成：
-1. ✅ 检查 Docker 环境
-2. ✅ 检查 `.env` 配置
-3. ✅ 构建前端和后端 Docker 镜像
-4. ✅ 启动所有服务（PostgreSQL + Redis + Draw.io + Backend + Frontend）
+# 国内建议先检查镜像
+./deploy.sh --check-mirror
 
-### 4.2 验证部署
-
-```bash
-# 查看服务状态
-./deploy.sh --status
-
-# 应该看到所有容器都是 running 状态：
-# smartdiagram-db        running  5432
-# smartdiagram-redis     running  6379
-# smartdiagram-drawio    running  9022
-# smartdiagram-backend   running  8000
-# smartdiagram-frontend  running  80
-```
-
-在浏览器访问：`http://你的服务器IP`
-
-### 4.3 带可选服务的部署
-
-```bash
-# 同时启动异步 Worker（用于导出任务、知识库 ingestion）
+# 首次完整部署（脚本内会再次自动校验 env，通过后才备份/构建）
 ./deploy.sh --with-worker
+```
 
-# 同时启动 Qdrant 向量数据库
-./deploy.sh --with-qdrant
+### 4. 验证
 
-# 两个都要
-./deploy.sh --with-worker --with-qdrant
+```bash
+./deploy.sh --status
+npm run worker:verify    # 单独检查 Redis + worker（生产/本地 Docker 均可）
+```
+
+浏览器访问：`http://服务器IP:9237`  
+调试 API：`http://服务器IP:9236/api/health`（应含 `"dependencies":{"redis":"ok"}`）  
+PPT 健康（经网关）：`http://服务器IP:9237/ppt-api/api/health`
+
+**生产队列任务**建议 API 使用 Redis 模式（需 worker 运行）：
+
+- 导出：`POST .../exports` body `{ "format": "pdf", "mode": "redis" }`
+- 知识库：`ingestion_mode=redis`
+
+---
+
+## 日常更新
+
+```bash
+cd /opt/SmartDiagram
+git status --short          # 有未提交修改时 deploy 会拒绝 --update
+./deploy.sh --update --with-worker
+```
+
+若已手动 `git pull`：
+
+```bash
+./deploy.sh --with-worker
+```
+
+需要 Qdrant 时：
+
+```bash
+./deploy.sh --update --with-worker --with-qdrant
 ```
 
 ---
 
-## 第五步：域名和 HTTPS（可选）
+## 环境变量
 
-### 方案 A：Nginx 反向代理 + Let's Encrypt
+| 变更点 | 旧版 | 现在 |
+|--------|------|------|
+| 配置文件 | `backend/.env` | **根 `.env` 唯一主配置** |
+| 图表库 | `DATABASE_URL` | **`DIAGRAM_DATABASE_URL`**（图表后端优先） |
+| PPT 库 | 独立 sqlite / 旧路径 | **`DATABASE_URL` → `ppt_agent`** |
+| 网关端口 | 80 或混用 | **`GATEWAY_PORT=9237`**（避免与宝塔 80 冲突） |
 
-如果服务器上已有一个宿主机 Nginx，可以做反向代理：
+`docker-compose.yml` 通过 `env_file: ./.env` 注入各服务，并在 `environment` 段覆盖容器内网络地址（如 `@db:5432`）。
 
-```bash
-# 安装 Nginx 和 Certbot
-sudo apt install -y nginx certbot python3-certbot-nginx
-```
+---
 
-创建 Nginx 配置：
+## 域名与 HTTPS
 
-```bash
-sudo nano /etc/nginx/sites-available/smartdiagram
-```
+宝塔 / 宿主机 Nginx **只反代 gateway**：
 
 ```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:80;  # 指向 Docker 内的前端
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # SSE 支持
-        proxy_buffering off;
-        proxy_read_timeout 300s;
-    }
+location / {
+    proxy_pass http://127.0.0.1:9237;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+    proxy_read_timeout 900s;   # SSE / PPT 长任务
 }
 ```
 
-> ⚠️ **注意**：如果宿主机 80 端口被 Nginx 占用，需要修改 `docker-compose.yml` 中 frontend 的端口映射，例如改为 `3000:80`，然后 `proxy_pass http://127.0.0.1:3000;`
-
-```bash
-# 启用站点
-sudo ln -s /etc/nginx/sites-available/smartdiagram /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-
-# 申请 SSL 证书
-sudo certbot --nginx -d yourdomain.com
-```
-
-### 方案 B：Cloudflare Tunnel（推荐，无需公网端口）
-
-如果使用 Cloudflare 管理域名，可以用 Tunnel 免去端口暴露：
-
-```bash
-# 安装 cloudflared
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
-chmod +x cloudflared && sudo mv cloudflared /usr/local/bin/
-
-# 登录并创建隧道
-cloudflared tunnel login
-cloudflared tunnel create smartdiagram
-cloudflared tunnel route dns smartdiagram yourdomain.com
-
-# 运行隧道
-cloudflared tunnel --url http://localhost:80 run smartdiagram
-```
+不要直接把 `web` 或 `api-diagram` 暴露到公网 80。
 
 ---
 
 ## 日常运维
 
-### 更新部署
-
-当有新代码推送到 GitHub 后：
-
-```bash
-cd /opt/SmartDiagram
-
-# 拉取最新代码 + 重建部署
-git pull origin main
-./deploy.sh --rebuild
-```
-
-或者一步到位：
-
-```bash
-./deploy.sh --pull && ./deploy.sh --rebuild
-```
-
-### 常用命令速查
-
 | 操作 | 命令 |
 |------|------|
-| 一键部署 | `./deploy.sh` |
-| 查看日志 | `./deploy.sh --logs` |
-| 查看状态 | `./deploy.sh --status` |
-| 停止服务 | `./deploy.sh --down` |
-| 强制重建 | `./deploy.sh --rebuild` |
-| 仅查后端日志 | `docker compose logs -f backend` |
-| 进入数据库 | `docker compose exec db psql -U postgres -d smartdiagram` |
-| 重启单个服务 | `docker compose restart backend` |
+| 部署 / 更新 | `./deploy.sh --update --with-worker` |
+| 仅备份 | `./deploy.sh --backup` |
+| 日志 | `./deploy.sh --logs` |
+| 状态 | `./deploy.sh --status` |
+| 停止 | `./deploy.sh --down` |
+| 清理悬空镜像 | `./deploy.sh --clean` |
+| 图表 API 日志 | `docker compose logs -f api-diagram` |
+| PPT Python 日志 | `docker compose logs -f ppt-python-api` |
+| 进入主库 | `docker compose exec db psql -U postgres -d smartdiagram` |
+| 进入 PPT 库 | `docker compose exec db psql -U postgres -d ppt_agent` |
 
-### 数据备份
-
-```bash
-# 备份数据库
-docker compose exec db pg_dump -U postgres smartdiagram > backup_$(date +%Y%m%d).sql
-
-# 恢复数据库
-cat backup_20260624.sql | docker compose exec -T db psql -U postgres -d smartdiagram
-```
+备份目录：`backups/<UTC时间>/`（含双库 dump + 用户卷 tar + 校验和）。
 
 ---
 
 ## 常见问题
 
-### Q: 前端白屏 / 无法访问
+### Q: 以前只用 `./deploy.sh --with-worker`，现在还要改吗？
+
+**不用改习惯。** 日常更新建议加上 `--update`：
 
 ```bash
-# 检查前端容器是否正常运行
-docker compose logs frontend
-
-# 常见原因：
-# 1. 端口 80 被占用 → 修改 docker-compose.yml 的端口映射
-# 2. 构建失败 → docker compose build frontend --no-cache
+./deploy.sh --update --with-worker
 ```
 
-### Q: 后端 API 返回 500
+### Q: 前端白屏
 
 ```bash
-# 查看后端日志
-docker compose logs -f backend
-
-# 常见原因：
-# 1. API Key 错误 → 检查 backend/.env
-# 2. 数据库连接失败 → docker compose restart db && docker compose restart backend
+docker compose logs web gateway
+docker compose build web gateway --no-cache
+./deploy.sh --with-worker
 ```
 
-### Q: Draw.io 编辑器加载失败
+确认访问的是 **9237**（gateway），不是旧的 80 直连 frontend。
+
+### Q: PPT 模块 502
 
 ```bash
-# 检查 Draw.io 容器
-docker compose logs drawio
-
-# 如果容器正常但网络不通，检查 Docker 网络
-docker network ls
-docker compose restart drawio
+docker compose logs ppt-python-api ppt-node-api
+curl -s http://127.0.0.1:9237/ppt-api/api/health
 ```
 
-### Q: SSE 流式响应断开
+检查根 `.env` 的 PPT 密钥与 `DATABASE_URL`（`ppt_agent`）。
+
+### Q: 图表 API 500
 
 ```bash
-# 可能是 Nginx 超时，检查 proxy_read_timeout 配置
-# frontend/nginx.conf 中已设置 300s
-# 如果用了宿主机 Nginx，也需要设置
+docker compose logs api-diagram
 ```
 
-### Q: 磁盘空间不足
+检查根 `.env` 的 `OPENAI_API_KEY`、`DIAGRAM_DATABASE_URL`。
+
+### Q: Worker 任务不执行
+
+确认部署时带了 `--with-worker`，且 worker 容器在运行：
 
 ```bash
-# 清理未使用的 Docker 资源
-docker system prune -a --volumes
+docker compose --profile worker ps worker
+npm run worker:verify
+docker compose --profile worker logs worker --tail=100
+```
 
-# 查看磁盘使用
-docker system df
+异步任务需使用 Redis/队列模式（见上文「生产队列任务」）；`mode=sync` / `ingestion_mode=sync` 不会进入 worker。
+
+### Q: 国内构建慢 / 拉镜像失败
+
+```bash
+./deploy.sh --check-mirror
+# 宝塔：Docker → 设置 → 加速 URL → https://docker.1ms.run
+./deploy.sh --update --with-worker --cn
 ```
 
 ---
 
-## 架构拓扑
+## 检查清单
 
-```
-                              ┌─────────────────┐
-                              │   用户浏览器      │
-                              └────────┬────────┘
-                                       │ :80
-                              ┌────────▼────────┐
-                              │  Nginx (前端容器) │
-                              │  静态文件 + 反代   │
-                              └──┬─────────┬────┘
-                                 │         │
-                        静态资源   │         │ /api/*
-                                 │    ┌────▼───────┐
-                                 │    │  FastAPI    │
-                                 │    │  Backend    │
-                                 │    │  :8000      │
-                                 │    └──┬────┬────┘
-                                 │       │    │
-                           ┌─────▼──┐ ┌──▼──┐ │
-                           │  PG DB │ │Redis│ │ LLM API
-                           │ :5432  │ │:6379│ │ (外部)
-                           └────────┘ └─────┘ │
-                                        ┌─────▼──────┐
-                                        │  Draw.io   │
-                                        │  :9022     │
-                                        └────────────┘
-```
+- [ ] Docker Compose V2 可用
+- [ ] 根目录 `.env` 已从 `.env.example` 创建并填密钥
+- [ ] `DIAGRAM_DATABASE_URL` 与 `DATABASE_URL` 分别指向两个库
+- [ ] `PPT_INTERNAL_API_SECRET` ≥ 32 字节
+- [ ] `GATEWAY_PORT=9237`（宝塔环境）
+- [ ] `./deploy.sh --with-worker` 或 `--update --with-worker` 成功
+- [ ] `npm run worker:verify` 通过（若启用了 worker）
+- [ ] `gateway`、`web`、`api-diagram`、`ppt-*` 均为 running
+- [ ] 浏览器可打开 `/`、`/diagram`、`/ppt`
+- [ ] 图表对话与 PPT 生成均正常
+- [ ] （可选）`--with-qdrant` + `KNOWLEDGE_VECTOR_BACKEND=qdrant`
+- [ ] 定期 `./deploy.sh --backup` 或同步 `backups/` 目录
 
 ---
 
-## 完整部署检查清单
+## 相关文档
 
-- [ ] 服务器安装了 Docker 和 Docker Compose V2
-- [ ] 服务器安装了 Git
-- [ ] 已克隆仓库到服务器
-- [ ] 已创建 `backend/.env` 并填入真实 API Key
-- [ ] 已修改数据库密码（生产环境）
-- [ ] 已修改 `AUTH_SESSION_SECRET`（生产环境）
-- [ ] 已修改 `ALTCHA_HMAC_KEY`（生产环境）
-- [ ] 已关闭 `AUTH_SHOW_DEMO_PRESETS=false`（生产环境）
-- [ ] 运行 `./deploy.sh` 成功
-- [ ] 所有容器处于 running 状态
-- [ ] 浏览器可以正常访问
-- [ ] AI 对话可以正常生成图表
-- [ ] 注册/登录 CAPTCHA 验证正常（应在 1-2 秒内自动完成）
-- [ ] 配置了域名和 HTTPS（可选）
-- [ ] 配置了数据库定期备份（可选）
+- [SERVER_DEPLOYMENT.md](./SERVER_DEPLOYMENT.md) — 备份策略、迁移安全、宝塔镜像
+- [README.md](../README.md) — 本地开发 `npm run dev`
+- [.env.example](../.env.example) — 完整环境变量模板

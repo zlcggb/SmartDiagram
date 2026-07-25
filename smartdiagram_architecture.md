@@ -1,366 +1,343 @@
-# SmartDiagram 架构文档
+# SmartDiagram 架构 A 文档
 
-> **版本**: 0.1.0 · **日期**: 2026-03-13 · **状态**: MVP 可运行
+> **用途**：架构真相源；AI Agent **先读 [`AGENTS.md`](./AGENTS.md)**，再读本文建立全局地图。  
+> **版本**：0.2.0 · **更新**：2026-07-26 · **状态**：与当前 monorepo 对齐
 
 ---
 
-## 一、项目定位
+## 0. 30 秒速览
 
-SmartDiagram 是一个 **AI 驱动的智能绘图平台**，用户通过自然语言描述即可生成多种类型的专业图表。核心理念是「对话即绘图」——在一个界面中完成需求描述、AI 理解、图表生成和实时编辑的完整闭环。
-
-### 核心特性
-
-| 特性 | 说明 |
+| 维度 | 事实 |
 |------|------|
-| 多引擎渲染 | 一个平台集成 Excalidraw、Mermaid、React Flow、ECharts、mind-elixir 五种绘图引擎 |
-| 智能路由 | LangGraph 驱动的 Agent 编排，自动识别用户意图并分发到对应 Agent |
-| 流式响应 | SSE 流式传输，设计思路和代码分离输出，实时渲染 |
-| 支持 @tag 语法 | 用户可通过 `@excalidraw`、`@mermaid` 等标签显式选择绘图引擎 |
+| **产品** | 统一桌面式 SPA：`/` 首页 · `/diagram` 智能图表 · `/ppt` AI 演示文稿 |
+| **形态** | npm/pnpm monorepo，**一个前端 + 两个后端域 + 网关聚合** |
+| **本地** | `npm run dev` → Vite `:5173`，API 由 Vite proxy 分流 |
+| **生产** | `gateway :9237` 唯一入口，nginx 分流 SPA / 图表 API / PPT API / draw.io |
+| **数据库** | **双库**：`smartdiagram`（图表）+ `ppt_agent`（PPT，Prisma） |
+| **配置** | **唯一主配置** 根目录 `.env`（Platform / Diagram / PPT 三分区） |
 
 ---
 
-## 二、技术栈
+## 1. 设计原则（改代码前先理解）
 
-```
-┌──────────────────────────────────┐
-│          前端 (Frontend)          │
-│  React 18 + TypeScript + Vite   │
-│  TailwindCSS v4 · Zustand       │
-│  react-markdown · lucide-react  │
-├──────────────────────────────────┤
-│          后端 (Backend)           │
-│  FastAPI + LangChain + LangGraph│
-│  Python 3.11 · uvicorn          │
-├──────────────────────────────────┤
-│        基础设施 (Infra)           │
-│  Docker Compose · Nginx         │
-│  PostgreSQL (可选)               │
-└──────────────────────────────────┘
-```
-
-### 依赖清单
-
-**前端**:
-- `@excalidraw/excalidraw` — 手绘白板
-- `reactflow` — 流程图
-- `mermaid` — 标准图表（时序图/类图/ER图等）
-- `echarts` — 数据可视化图表
-- `mind-elixir` — 思维导图
-- `react-markdown` + `remark-gfm` — Markdown 渲染
-- `zustand` — 状态管理
-- `lucide-react` — 图标库
-
-**后端**:
-- `fastapi` + `uvicorn` — HTTP 服务
-- `langchain` + `langchain-openai` — LLM 集成
-- `langgraph` — Agent 编排框架
-- `python-dotenv` — 环境变量
+1. **平台 + 业务模块**：`apps/web` 是统一壳；`/diagram` 与 `/ppt` 是平级业务模块，通过 `modules/registry.tsx` 注册，新增模块只加注册 + 路由。
+2. **API 前缀隔离**：图表走 `/api/*` → `api-diagram`；PPT 走 `/ppt-api/*` → `api-ppt`（Python 编排）→ `service-ppt-renderer`（Node 渲染侧车）。
+3. **环境变量单源**：根 `.env` 为唯一真相；`apps/*/.env` 仅本机临时覆盖。部署脚本会合并旧 env、校验、自动生成密钥。
+4. **LangGraph 编排**：图表与 PPT 均用 Agent 图；路由按 task/engine 分发，SSE 流式输出 `<design_concept>` + `<code>`。
+5. **企业能力可选**：知识库、异步导出、worker 队列依赖 PostgreSQL + Redis；`--with-worker` 才启 worker 容器。
 
 ---
 
-## 三、系统架构
+## 2. 目录地图（改哪里一目了然）
+
+```
+SmartDiagram/
+├── apps/
+│   ├── web/                      # 统一 SPA（React 18 + Vite + Tailwind v4）
+│   │   └── src/
+│   │       ├── app/main.tsx      # 路由入口：/ · /diagram/* · /ppt/*
+│   │       ├── modules/registry.tsx   # 模块注册表（导航 + 首页卡片）
+│   │       ├── pages/            # 平台页（home、diagram workspace）
+│   │       ├── features/
+│   │       │   ├── diagram/      # 图表：chatStore、Canvas、ChatPanel
+│   │       │   └── ppt/          # PPT：五步工作流、workbenchStore、api.ts
+│   │       └── shared/           # AppShell、auth、settings、macOS 桌面 UI
+│   │
+│   ├── api-diagram/              # 图表 FastAPI + LangGraph（:8000）
+│   │   └── app/
+│   │       ├── main.py           # 路由挂载（chat/auth/knowledge/exports/…）
+│   │       ├── api/routes.py     # SSE /api/chat/stream 主入口
+│   │       ├── agents/           # orchestrator、router、各 engine agent
+│   │       ├── services/         # 持久化、知识库、导出、队列、计费…
+│   │       └── models/           # SQLAlchemy 模型（smartdiagram 库）
+│   │
+│   ├── api-ppt/                  # PPT Python 编排 FastAPI（:4000）
+│   │   └── src/ppt_agent_api/    # LangGraph 工作流、对 Node 侧车 HTTP 调用
+│   │
+│   └── service-ppt-renderer/     # PPT Node 侧车（:4010）
+│       └── Prisma + PPTX 渲染 + 资料存储
+│
+├── packages/
+│   ├── shared/                   # PPT 共享类型（goalSpec 等）
+│   ├── agents/                   # PPT Agent 逻辑（TS）
+│   └── ppt-renderer/             # PPTX 渲染核心
+│
+├── prisma/                       # ppt_agent 库迁移（DATABASE_URL）
+├── gateway/
+│   ├── nginx.conf                # 生产分流规则
+│   └── dev-gateway.mjs           # 本地 gateway 模式（start-all.sh）
+│
+├── scripts/                      # dev-common、env 校验、bootstrap 密钥、db-wait
+├── dev.sh                        # npm run dev 入口
+├── deploy.sh                     # 生产部署 / 更新
+├── docker-compose.yml            # 全栈容器定义
+├── .env / .env.example           # 唯一主配置（三分区）
+└── README.md                     # 人类操作手册
+```
+
+---
+
+## 3. 运行时拓扑
+
+### 3.1 本地开发（`npm run dev` → `dev.sh`）
+
+```
+浏览器 :5173 (apps/web, Vite HMR)
+  ├─ /api/*      ──proxy──► api-diagram      :8000
+  └─ /ppt-api/*  ──proxy──► api-ppt          :4000
+                                    │
+                                    └──HTTP──► service-ppt-renderer :4010
+
+Docker（基础设施）:
+  db:5432 (smartdiagram + ppt_agent)
+  redis:6379
+  drawio:9022 → iframe 嵌入 Draw.io 画布
+```
+
+### 3.2 生产（`./deploy.sh --with-worker`）
+
+```
+gateway :9237 (nginx)
+  ├─ /              → web（静态 SPA）
+  ├─ /api/          → api-diagram:8000
+  ├─ /ppt-api/      → ppt-python-api:4000 → ppt-node-api:4010
+  ├─ /drawio/       → drawio
+  └─ worker profile → smartdiagram-worker（企业异步任务）
+
+外部只暴露 GATEWAY_PORT（默认 9237）；web/api 走 Docker 内网。
+```
 
 ```mermaid
 graph TB
-    subgraph 用户层
-        User[用户浏览器]
+    User[浏览器]
+
+    subgraph dev [本地 Dev]
+        Vite[Vite :5173]
+        AD[api-diagram :8000]
+        AP[api-ppt :4000]
+        NR[service-ppt-renderer :4010]
+        Vite -->|/api| AD
+        Vite -->|/ppt-api| AP
+        AP --> NR
     end
 
-    subgraph 前端 [React Frontend :5173]
-        ChatPanel[ChatPanel<br/>聊天面板]
-        CanvasPanel[CanvasPanel<br/>画布面板]
-        Store[(Zustand Store)]
-        
-        ChatPanel --> |SSE 请求| API
-        ChatPanel --> |更新状态| Store
-        Store --> |读取 canvasAgent| CanvasPanel
-        
-        subgraph Canvas 渲染器
-            EC[ExcalidrawCanvas]
-            MC[MermaidCanvas]
-            FC[FlowCanvas]
-            MiC[MindmapCanvas]
-            ChC[ChartsCanvas]
-        end
-        
-        CanvasPanel --> |路由| EC
-        CanvasPanel --> |路由| MC
-        CanvasPanel --> |路由| FC
-        CanvasPanel --> |路由| MiC
-        CanvasPanel --> |路由| ChC
+    subgraph prod [生产 Gateway :9237]
+        GW[nginx gateway]
+        WEB[web SPA]
+        AD2[api-diagram]
+        AP2[ppt-python-api]
+        NR2[ppt-node-api]
+        GW --> WEB
+        GW -->|/api| AD2
+        GW -->|/ppt-api| AP2
+        AP2 --> NR2
     end
 
-    subgraph 后端 [FastAPI Backend :8000]
-        API["/api/chat/stream<br/>SSE Endpoint"]
-        Router[Router<br/>意图识别]
-        
-        API --> Router
-        
-        subgraph LangGraph Agents
-            EA[Excalidraw Agent]
-            MA[Mermaid Agent]
-            FA[Flow Agent]
-            MiA[Mindmap Agent]
-            ChA[Charts Agent]
-            GA[General Agent]
-        end
-        
-        Router --> |条件路由| EA
-        Router --> |条件路由| MA
-        Router --> |条件路由| FA
-        Router --> |条件路由| MiA
-        Router --> |条件路由| ChA
-        Router --> |条件路由| GA
+    User --> dev
+    User --> prod
+
+    subgraph infra [共享基础设施]
+        PG[(PostgreSQL<br/>smartdiagram + ppt_agent)]
+        RD[(Redis)]
+        DIO[drawio]
     end
 
-    subgraph LLM
-        OpenAI[OpenAI 兼容 API]
-    end
-
-    EA --> OpenAI
-    MA --> OpenAI
-    FA --> OpenAI
-    MiA --> OpenAI
-    ChA --> OpenAI
-    GA --> OpenAI
+    AD --> PG
+    AD --> RD
+    AD2 --> PG
+    NR --> PG
+    NR2 --> PG
 ```
 
 ---
 
-## 四、模块详解
+## 4. 前端架构
 
-### 4.1 后端模块
+### 4.1 路由（`apps/web/src/app/main.tsx`）
 
-```
-backend/app/
-├── main.py                 # FastAPI 入口 + CORS + 启动钩子
-├── api/
-│   └── routes.py           # SSE 流式端点 + StreamingTagParser
-├── agents/
-│   ├── orchestrator.py     # LangGraph 状态图定义
-│   ├── router.py           # 意图识别（@tag / LLM 分类）
-│   ├── excalidraw_agent.py # → ExcalidrawElement JSON
-│   ├── mermaid_agent.py    # → Mermaid 语法
-│   ├── other_agents.py     # → Flow JSON / Markmap MD / ECharts JSON
-│   └── general_agent.py    # → 自然语言对话
-├── core/
-│   ├── config.py           # Settings（env 配置）
-│   ├── llm.py              # ChatOpenAI 工厂函数
-│   ├── db.py               # 数据库连接（可选）
-│   └── logger.py           # 日志
-├── state/
-│   └── state.py            # AgentState TypedDict
-├── models/                 # 数据模型（预留）
-└── services/               # 业务逻辑（预留）
-```
-
-#### 核心数据流
-
-```
-用户消息
-  ↓
-routes.py: /api/chat/stream
-  ↓
-orchestrator.py: graph.astream_events()
-  ↓
-router.py: router_node()
-  ├─ 检查 @tag 显式指定
-  ├─ 检查历史 Agent 上下文
-  └─ LLM 意图分类 → intent
-  ↓
-条件路由 → 对应 Agent
-  ↓
-Agent 调用 LLM → 输出 <design_concept> + <code>
-  ↓
-StreamingTagParser 解析标签 → SSE 事件
-  ↓
-前端接收: { type: 'agent' | 'design' | 'code' | 'code_end' | 'error' }
-```
-
-#### Agent 输出格式
-
-每个绘图 Agent 的 System Prompt 要求 LLM 输出固定结构：
-
-```xml
-<design_concept>
-设计思路描述...
-</design_concept>
-
-<code>
-具体的图表代码（JSON / Mermaid / Markdown）
-</code>
-```
-
-| Agent | 输出格式 | 示例 |
-|-------|---------|------|
-| Excalidraw | `ExcalidrawElement[]` JSON | `[{type:"rectangle",...}]` |
-| Mermaid | Mermaid DSL 语法 | `sequenceDiagram\n A->>B: msg` |
-| Flow | React Flow `{nodes, edges}` JSON | `{nodes:[...],edges:[...]}` |
-| Mindmap | Markdown 标题层级 | `# Root\n## Branch` |
-| Charts | ECharts option JSON | `{xAxis:{...},series:[...]}` |
-| General | 自然语言 Markdown | 纯对话回复 |
-
----
-
-### 4.2 前端模块
-
-```
-frontend/src/
-├── main.tsx                 # React 入口
-├── App.tsx                  # 根布局（Canvas 左 65% + Chat 右 35%）
-├── index.css                # TailwindCSS v4 @theme + Excalidraw 修复 + 动画
-├── store/
-│   └── chatStore.ts         # Zustand 状态管理
-├── components/
-│   ├── layout/
-│   │   ├── CanvasPanel.tsx  # 画布容器（5 种 Agent 路由）
-│   │   └── ChatPanel.tsx    # 聊天面板（Markdown + Agent 工具栏 + SSE）
-│   ├── canvas/
-│   │   ├── ExcalidrawCanvas.tsx   # Excalidraw 渲染器
-│   │   ├── MermaidCanvas.tsx      # Mermaid 渲染器
-│   │   ├── FlowCanvas.tsx         # React Flow 渲染器
-│   │   ├── MindmapCanvas.tsx      # mind-elixir 渲染器
-│   │   └── ChartsCanvas.tsx       # ECharts 渲染器
-│   └── settings/
-│       └── SettingsModal.tsx      # 模型配置弹窗
-├── hooks/                   # 自定义 hooks（预留）
-├── lib/                     # 工具函数（预留）
-└── types/                   # TypeScript 类型（预留）
-```
-
-#### Zustand Store 状态
-
-```typescript
-interface ChatStore {
-  messages: Message[]       // 聊天消息列表
-  isStreaming: boolean      // 流式传输中
-  currentAgent: AgentType   // 当前活跃 Agent
-  canvasCode: string        // 画布渲染代码
-  canvasAgent: AgentType    // 画布 Agent 类型（决定路由）
-  designConcept: string     // AI 设计思路
-  modelConfig: ModelConfig  // 模型配置（API Key / Base URL / Model ID）
-}
-```
-
-#### 布局结构
-
-```
-┌─────────────────────────────────────────┬──────────────┐
-│                                         │  SmartDiagram │
-│            Canvas Panel                 │  Agent 工具栏  │
-│           (flex: 1, 65%)                │              │
-│                                         │  消息列表      │
-│   ┌──────────────────────────────┐      │  · 用户消息    │
-│   │ Excalidraw / Mermaid / Flow  │      │  · AI 消息     │
-│   │    / MindMap / Charts        │      │  · 设计概念    │
-│   └──────────────────────────────┘      │              │
-│                                         │  输入框        │
-│                                         │ (Enter 发送)  │
-├─ 拖拽分隔线 ────────────────────────────┤──────────────┤
-│                                         │  width: 380px│
-└─────────────────────────────────────────┴──────────────┘
-```
-
----
-
-## 五、已完成功能
-
-### ✅ 后端
-- [x] LangGraph 状态图 + 6 个 Agent 节点编排
-- [x] 意图路由（@tag 显式 + LLM 分类 + 上下文继承）
-- [x] SSE 流式传输 + `<design_concept>` / `<code>` 标签解析
-- [x] OpenAI 兼容 API 接入（支持自定义 Base URL）
-- [x] 可选数据库连接（无数据库时 stateless 运行）
-
-### ✅ 前端
-- [x] 双面板布局（画布左 + 聊天右 + 可拖拽分隔线）
-- [x] 5 种 Canvas 渲染器（Excalidraw、Mermaid、Flow、MindMap、Charts）
-- [x] ChatPanel Markdown 渲染 + 消息复制 + Agent 工具栏
-- [x] SettingsModal 模型配置弹窗（含 API 连接测试）
-- [x] Zustand 状态管理
-- [x] Excalidraw + TailwindCSS v4 样式隔离
-- [x] 空状态引导页 + 交互动画
-
----
-
-## 六、待完善功能
-
-### 🔴 高优先级
-
-| 功能 | 说明 | 复杂度 |
-|------|------|--------|
-| 对话历史持久化 | 当前消息仅存在内存中，刷新即丢失。需要后端存储或 localStorage | 中 |
-| 图表导出 | 所有 Canvas 统一支持 PNG/SVG/JSON 导出 | 中 |
-| 错误重试 | LLM 生成失败后的重试机制和错误提示优化 | 低 |
-| 流式渲染最终确认 | code_end 后做一次完整的 JSON 校验再渲染 | 低 |
-
-### 🟡 中优先级
-
-| 功能 | 说明 | 复杂度 |
-|------|------|--------|
-| 多轮编辑 | 在已有图表上追加修改（"把颜色改成蓝色"） | 高 |
-| 模板库 | 预设常用图表模板，一键生成 | 中 |
-| 图表代码查看 | 右侧显示生成的代码，支持手动编辑并同步到画布 | 中 |
-| 移动端适配 | 响应式布局，小屏切换为上下结构 | 中 |
-| 暗色/亮色主题切换 | 画布和聊天面板的主题统一控制 | 低 |
-
-### 🟢 长期目标
-
-| 功能 | 说明 | 复杂度 |
-|------|------|--------|
-| 用户系统 | 注册/登录 + 项目管理 + 历史图表列表 | 高 |
-| 协作编辑 | WebSocket 实时同步多人编辑 | 很高 |
-| 自定义 Agent | 用户可创建自定义 prompt 的 Agent | 中 |
-| 插件市场 | 社区贡献的绘图模板和 Agent | 高 |
-| 自部署 | Docker 一键部署，支持私有 LLM | 中 |
-
----
-
-## 七、参考项目
-
-| 项目 | 特点 | 可借鉴 |
-|------|------|--------|
-| [DeepDiagram-Pro](https://github.com/DerekLiii/DeepDiagram-Pro) | LLM 驱动的 Mermaid 绘图 | 原始灵感来源，SSE 流式架构 |
-| [Excalidraw](https://excalidraw.com/) | 最流行的手绘白板工具 | 已集成，可参考其协作编辑实现 |
-| [tldraw](https://www.tldraw.com/) | 无限白板 + AI 生成 | AI 理解绘图意图的方式 |
-| [Eraser.io](https://eraser.io/) | AI 文档 + 图表 | 多图表类型切换的交互设计 |
-| [Mermaid Chart](https://www.mermaidchart.com/) | Mermaid 官方编辑器 | 代码高亮 + 实时预览的双面板 |
-| [Diagrams (mingrammer)](https://diagrams.mingrammer.com/) | Python 代码 → 架构图 | 代码即图表的理念 |
-| [ChatGPT Canvas](https://openai.com/canvas) | OpenAI 的 Canvas 交互 | 对话 + 画布的交互模式 |
-
----
-
-## 八、启动方式
-
-### 开发环境
-
-```bash
-# 1. 后端
-cd SmartDiagram/backend
-cp .env.example .env  # 填写 OPENAI_API_KEY、OPENAI_BASE_URL、MODEL_ID
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# 2. 前端
-cd SmartDiagram/frontend
-npm install
-npm run dev  # → http://localhost:5173
-```
-
-### Docker 部署
-
-```bash
-cd SmartDiagram
-docker-compose up --build
-# → Nginx 反向代理 → 前端 :80 / 后端 /api
-```
-
-### 环境变量
-
-| 变量 | 必填 | 说明 |
+| 路径 | 组件 | 说明 |
 |------|------|------|
-| `OPENAI_API_KEY` | ✅ | LLM API 密钥 |
-| `OPENAI_BASE_URL` | ✅ | API 基地址（默认 `https://api.openai.com/v1`） |
-| `MODEL_ID` | ❌ | 模型名（默认 `gpt-4o`） |
-| `TEMPERATURE` | ❌ | 温度（默认 `0.3`） |
-| `MAX_TOKENS` | ❌ | 最大 token（默认 `16384`） |
-| `DATABASE_URL` | ❌ | PostgreSQL 连接（不配置则 stateless 运行） |
+| `/` | `HomePage` | 模块入口卡片 |
+| `/diagram/*` | `DiagramWorkspace` | 图表工作台（画布 + 聊天） |
+| `/ppt/*` | `PptModule` | PPT 五步工作流 |
+
+所有路由包在 `AppShell` 内（macOS 风格菜单栏、Spotlight、设置）。
+
+### 4.2 模块注册（`modules/registry.tsx`）
+
+新增业务模块：**只改两处** — `moduleRegistry` 加一条 + `main.tsx` 挂 Route。导航栏与首页自动读取注册表。
+
+### 4.3 图表前端（`features/diagram/`）
+
+| 关注点 | 文件 |
+|--------|------|
+| 状态 | `model/chatStore.ts`（Zustand：messages、canvasAgent、SSE 流） |
+| 聊天 | `ui/chat/ChatPanel.tsx` |
+| 画布路由 | `ui/layout/CanvasPanel.tsx` → 各 `*Canvas.tsx` |
+| Agent 元数据 | `shared/lib/config/diagramAgents.ts` |
+| 历史/导出 | `model/diagramHistory.ts`、`ui/ExportButton.tsx` |
+
+**Canvas 与 Engine 对应**（须与后端 `agents/catalog.py` 一致）：
+
+| Engine | Canvas 组件 | 输出形态 |
+|--------|-------------|----------|
+| excalidraw | ExcalidrawCanvas | Excalidraw JSON |
+| mermaid | MermaidCanvas | Mermaid DSL |
+| flow | FlowCanvas | React Flow JSON |
+| mindmap | MindmapCanvas | Markdown 层级 |
+| charts | ChartsCanvas | ECharts option |
+| drawio | DrawioCanvas | draw.io XML（iframe） |
+| infographic | InfographicCanvas | AntV Infographic |
+| html_email / web_report_html | ArtifactCanvas | HTML artifact |
+
+### 4.4 PPT 前端（`features/ppt/`）
+
+| 空间 | 页面 | 职责 |
+|------|------|------|
+| Intent | `IntentSpace` | 资料上传、Brief、视觉意图 |
+| Structure | `StructureSpace` | 大纲便利贴 |
+| Studio | `StudioSpace` | 单页 AI 设计与预览 |
+| Exports | `ExportsSpace` | PPTX / 视频导出 |
+
+API 封装：`lib/api.ts`（base = `/ppt-api`）。状态：`store/workbenchStore.ts`。
+
+---
+
+## 5. 图表后端（`apps/api-diagram`）
+
+### 5.1 入口与路由前缀
+
+- 应用：`app/main.py`，前缀由 `settings.API_PREFIX`（通常 `/api`）
+- **核心 SSE**：`app/api/routes.py` → `POST /api/chat/stream`
+- 其他域：auth、conversations、diagrams、knowledge、exports、admin、billing、pricing…
+
+### 5.2 Agent 编排
+
+```
+用户消息 → routes.py (SSE)
+         → orchestrator.py (LangGraph)
+         → router.py（@tag / 历史上下文 / LLM 分类）
+         → 条件边 → 具体 agent
+         → StreamingTagParser → SSE 事件
+              type: agent | design | code | code_end | error
+```
+
+**Task ↔ Engine 映射**（`agents/catalog.py`）：
+
+| Task | Engine |
+|------|--------|
+| sketch | excalidraw |
+| document | mermaid |
+| flow | flow |
+| mindmap | mindmap |
+| data_chart | charts |
+| architecture | drawio |
+| infographic | infographic |
+| html_email | html_email |
+| web_report_html | web_report_html |
+| general | general |
+
+Agent 文件目录：`app/agents/*_agent.py`；企业向服务在 `app/services/`。
+
+### 5.3 企业/worker 相关
+
+| 能力 | 关键路径 |
+|------|----------|
+| 异步导出 | `services/export_job_service.py`、`routes_exports.py`（`mode=redis` / `queued`） |
+| 知识库 | `services/knowledge_*`、`routes_knowledge.py` |
+| 队列 / 锁 | `services/redis_queue_service.py`（List 队列 + worker 分布式锁） |
+| Worker 进程 | `scripts/run_enterprise_workers.py`（`npm run worker`） |
+
+---
+
+## 6. PPT 后端（双服务）
+
+```
+浏览器 /ppt-api/*
+    → api-ppt (Python FastAPI, :4000)
+         LangGraph 编排：意图 → 结构 → Studio → 导出任务
+    → service-ppt-renderer (Node, :4010)
+         Prisma (ppt_agent) · 文件存储 · PPTX 渲染 · TTS/视频
+    → api-diagram (内部)
+         认证 MATERIAL_GATEWAY · AUTH_SERVICE · PPT_INTERNAL_API_SECRET
+```
+
+| 服务 | 数据库 env | ORM |
+|------|------------|-----|
+| api-diagram | `DIAGRAM_DATABASE_URL` | SQLAlchemy async |
+| service-ppt-renderer | `DATABASE_URL` → `ppt_agent` | Prisma |
+| api-ppt | 主要调 Node + 文件卷 | — |
+
+共享包：`packages/shared`、`packages/agents`、`packages/ppt-renderer`。
+
+---
+
+## 7. 环境变量（根 `.env` 三分区）
+
+| 分区 | 服务 | 关键变量 |
+|------|------|----------|
+| **Platform** | deploy / docker | `DB_PASSWORD`、`GATEWAY_PORT`、`PPT_INTERNAL_API_SECRET` |
+| **Diagram** | api-diagram | `DIAGRAM_DATABASE_URL`、`REDIS_URL`、`OPENAI_*`、`AUTH_*` |
+| **PPT** | api-ppt + renderer | `DATABASE_URL`（ppt_agent）、`AI_*`、`STORAGE_DIR` |
+
+**切勿混库**：`DIAGRAM_DATABASE_URL` → `smartdiagram`；`DATABASE_URL` → `ppt_agent`。
+
+校验：`npm run env:validate` · 部署前：`deploy.sh` 自动调用 `scripts/validate-deploy-env.sh`。
+
+---
+
+## 8. 常见改动定位表（给 AI 用）
+
+| 我要… | 先看 |
+|--------|------|
+| 改图表聊天/SSE 行为 | `api-diagram/app/api/routes.py` + `agents/orchestrator.py` |
+| 新增/改绘图引擎 | `agents/catalog.py` + `*_agent.py` + `web/.../CanvasPanel.tsx` + 新 Canvas |
+| 改图表 UI/布局 | `features/diagram/ui/` |
+| 改登录/权限 | `api-diagram/app/api/routes_auth.py` + `guest_session_service.py` + `identity_service.py` + `web/shared/lib/config/guestSession.ts` |
+| 租户用户管理（本租户） | `routes_admin.py` + `UserManagementPanel.tsx`（admin/owner） |
+| **平台用户中心（跨租户）** | `routes_platform_admin.py` + `PlatformUserCenterWindow.tsx` / `PlatformUserCenterPanel.tsx` / `PlatformQuotaProfilesPanel.tsx`（桌面入口；`PLATFORM_ADMIN_EMAILS`） |
+| **平台用量配额 / 超限拦截** | `user_quota_service.py` + `guest_quota_settings_service.py` + `routes.py` chat/stream；文档 [`docs/plans/2026-07-26-platform-quota-management-execution.md`](docs/plans/2026-07-26-platform-quota-management-execution.md) |
+| 改 PPT 工作流 | `api-ppt/src/` + `features/ppt/pages/` |
+| 改 PPTX 渲染 | `packages/ppt-renderer/` + `service-ppt-renderer/` |
+| 改生产路由 | `gateway/nginx.conf` |
+| 改本地 proxy | `apps/web/vite.config.ts` |
+| 改启动/端口 | `dev.sh`、`scripts/dev-common.sh`、`docker-compose.yml` |
+| 改部署流程 | `deploy.sh`、`docs/DEPLOYMENT.md` |
+| 加 npm 脚本 | 根 `package.json` |
+
+---
+
+## 9. 启动与部署命令
+
+| 场景 | 命令 |
+|------|------|
+| 本地全栈 | `cp .env.example .env` → 填 LLM 密钥 → `npm run dev` |
+| 本地 gateway 模式 | `npm run dev:gateway`（`start-all.sh`） |
+| 仅图表 API | `npm run dev:backend` |
+| DB 迁移 | `npm run db:prepare` |
+| 生产首次/更新 | `./deploy.sh --with-worker` / `./deploy.sh --update --with-worker` |
+| env 检查 | `npm run env:validate` |
+
+人类向细节见 [README.md](./README.md)、[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)。
+
+---
+
+## 10. 技术栈摘要
+
+| 层 | 选型 |
+|----|------|
+| 前端 | React 18、TypeScript、Vite、Tailwind v4、Zustand、react-router |
+| 图表后端 | FastAPI、LangChain/LangGraph、SQLAlchemy async、PostgreSQL+pgvector、Redis |
+| PPT | Python FastAPI + LangGraph；Node 22 + Prisma；共享 TS packages |
+| infra | Docker Compose、nginx gateway、draw.io sidecar、可选 Qdrant profile |
+
+---
+
+## 11. 文档维护约定
+
+- **[`AGENTS.md`](./AGENTS.md)**：AI 稳定入口（阅读顺序、CodeGraph 流程、工具选择）；**尽量不随架构变更而改**。
+- **本文（A 文档）**：架构真相源；结构/边界/路径/定位表变更时**只更新本文**。
+- **README**：操作手册（怎么跑、怎么部署），不写深层实现细节。
+- **docs/**：部署、迁移、专项计划等执行记录；入口 [`docs/README.md`](docs/README.md)（文档中心索引）。
+
+CodeGraph 已索引时：先 `AGENTS.md` → 本文建立地图 → `codegraph_explore` 查实现细节。
