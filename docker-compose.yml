@@ -143,11 +143,12 @@ services:
 
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: ./
+      dockerfile: apps/web/Dockerfile
       args:
         CN_MIRROR: ${CN_MIRROR:-false}
-        UV_PYTHON_IMAGE: ${UV_PYTHON_IMAGE:-ghcr.io/astral-sh/uv:python3.13-bookworm-slim}
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:stable-alpine}
     container_name: smartdiagram-web
     restart: always
     depends_on:

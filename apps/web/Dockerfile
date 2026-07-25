@@ -1,40 +1,46 @@
-ARG UV_PYTHON_IMAGE=ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+# SmartDiagram 统一前端 SPA（pnpm monorepo 构建）
+# build context: 仓库根目录（见 docker-compose.yml web.build.context）
 
-# Build stage: 国内部署由 deploy.sh 切换为 ghcr.1ms.run。
-FROM ${UV_PYTHON_IMAGE} AS build
+ARG NODE_IMAGE=node:22-bookworm-slim
+ARG NGINX_IMAGE=nginx:stable-alpine
 ARG CN_MIRROR=false
-RUN if [ "$CN_MIRROR" = "true" ]; then \
-        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null; \
-    fi
 
-RUN apt-get update && apt-get install -y curl gnupg && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+FROM ${NODE_IMAGE} AS build
+
+ARG CN_MIRROR
+ENV PNPM_HOME=/pnpm
+ENV PATH=${PNPM_HOME}:${PATH}
+
 WORKDIR /app
 
-RUN if [ "$CN_MIRROR" = "true" ]; then npm config set registry https://registry.npmmirror.com; fi
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && corepack enable \
+    && corepack prepare pnpm@9.15.0 --activate
 
-COPY package*.json ./
-RUN npm ci
+RUN if [ "$CN_MIRROR" = "true" ]; then pnpm config set registry https://registry.npmmirror.com; fi
 
-COPY . .
-RUN npm run build
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY apps/web/package.json ./apps/web/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/ppt-renderer/package.json ./packages/ppt-renderer/package.json
 
-# Runtime: 复用同一可配置基础镜像 + apt 安装 nginx。
-FROM ${UV_PYTHON_IMAGE}
-ARG CN_MIRROR=false
-RUN if [ "$CN_MIRROR" = "true" ]; then \
-        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null; \
-    fi
+RUN --mount=type=cache,id=pnpm-store-web,target=/pnpm/store \
+    pnpm install --frozen-lockfile
 
-RUN apt-get update && apt-get install -y nginx && \
-    rm -rf /var/lib/apt/lists/* && \
-    rm -f /etc/nginx/sites-enabled/default
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY packages/shared ./packages/shared
+COPY packages/ppt-renderer ./packages/ppt-renderer
+COPY apps/web ./apps/web
+
+RUN pnpm --filter @ppt-agent/shared build \
+    && pnpm --filter @ppt-agent/ppt-renderer build \
+    && pnpm --filter @smartdiagram/web build
+
+FROM ${NGINX_IMAGE} AS runtime
+
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

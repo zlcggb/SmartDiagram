@@ -251,8 +251,10 @@ def test_china_deploy_uses_configurable_ghcr_mirror_before_backup() -> None:
 
     assert "ARG UV_PYTHON_IMAGE=ghcr.io/astral-sh/uv:python3.13-bookworm-slim" in backend_dockerfile
     assert "FROM ${UV_PYTHON_IMAGE}" in backend_dockerfile
-    assert "ARG UV_PYTHON_IMAGE=ghcr.io/astral-sh/uv:python3.13-bookworm-slim" in frontend_dockerfile
-    assert "FROM ${UV_PYTHON_IMAGE}" in frontend_dockerfile
+    assert "pnpm install --frozen-lockfile" in frontend_dockerfile
+    assert "pnpm --filter @smartdiagram/web build" in frontend_dockerfile
+    assert "context: ./" in compose[compose.index("  web:") : compose.index("\n  # ================= PPT Agent")]
+    assert "NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}" in compose
     assert "UV_PYTHON_IMAGE" in gateway_compose
     assert "ARG UV_PYTHON_IMAGE=ghcr.io/astral-sh/uv:python3.13-bookworm-slim" in gateway_dockerfile
     assert "FROM ${UV_PYTHON_IMAGE}" in gateway_dockerfile
