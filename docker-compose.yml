@@ -44,6 +44,11 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   drawio:
     image: jgraph/drawio:latest
@@ -65,24 +70,31 @@ services:
     volumes:
       - qdrantdata:/qdrant/storage
 
-  backend:
+  api-diagram:
     build:
-      context: ./backend
+      context: ./apps/api-diagram
       dockerfile: Dockerfile
       args:
         CN_MIRROR: ${CN_MIRROR:-false}
         UV_PYTHON_IMAGE: ${UV_PYTHON_IMAGE:-ghcr.io/astral-sh/uv:python3.13-bookworm-slim}
-    container_name: smartdiagram-backend
+    container_name: smartdiagram-api-diagram
     restart: always
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     env_file:
-      - ./backend/.env
+      - path: ./.env
+        required: false
     environment:
       # 覆盖容器内网络地址（.env 里是 localhost，容器间需要用服务名）
       - DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/smartdiagram
+      - DIAGRAM_DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/smartdiagram
       - REDIS_URL=redis://redis:6379/0
+      - RUNTIME_RATE_LIMIT_BACKEND=redis
+      - EXPORT_REDIS_QUEUE=${EXPORT_REDIS_QUEUE:-smartdiagram:queue:exports}
+      - KNOWLEDGE_INGESTION_REDIS_QUEUE=${KNOWLEDGE_INGESTION_REDIS_QUEUE:-smartdiagram:knowledge:ingestion}
       - LANGCHAIN_TRACING_V2=false
       - PPT_INTERNAL_API_SECRET=${PPT_INTERNAL_API_SECRET:?Set PPT_INTERNAL_API_SECRET to a long random value}
     volumes:
@@ -93,7 +105,7 @@ services:
 
   worker:
     build:
-      context: ./backend
+      context: ./apps/api-diagram
       dockerfile: Dockerfile
       args:
         CN_MIRROR: ${CN_MIRROR:-false}
@@ -103,29 +115,43 @@ services:
     profiles:
       - worker
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     command: ["python", "scripts/run_enterprise_workers.py", "--loop"]
     env_file:
-      - ./backend/.env
+      - path: ./.env
+        required: false
     environment:
       # 覆盖容器内网络地址
       - DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/smartdiagram
+      - DIAGRAM_DATABASE_URL=postgresql+asyncpg://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/smartdiagram
       - REDIS_URL=redis://redis:6379/0
+      - EXPORT_REDIS_QUEUE=${EXPORT_REDIS_QUEUE:-smartdiagram:queue:exports}
+      - KNOWLEDGE_INGESTION_REDIS_QUEUE=${KNOWLEDGE_INGESTION_REDIS_QUEUE:-smartdiagram:knowledge:ingestion}
+      - WORKER_JOB_LOCK_TTL_SECONDS=${WORKER_JOB_LOCK_TTL_SECONDS:-1800}
+      - PPT_INTERNAL_API_SECRET=${PPT_INTERNAL_API_SECRET:?Set PPT_INTERNAL_API_SECRET to a long random value}
     volumes:
       - knowledgedata:/app/storage
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f run_enterprise_workers.py >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
-  frontend:
+  web:
     build:
-      context: ./frontend
+      context: ./apps/web
       dockerfile: Dockerfile
       args:
         CN_MIRROR: ${CN_MIRROR:-false}
         UV_PYTHON_IMAGE: ${UV_PYTHON_IMAGE:-ghcr.io/astral-sh/uv:python3.13-bookworm-slim}
-    container_name: smartdiagram-frontend
+    container_name: smartdiagram-web
     restart: always
     depends_on:
-      - backend
+      - api-diagram
       - drawio
     # 只供统一 gateway 通过 Docker 内网访问，不直接占用宿主机 9237。
     expose:
@@ -153,7 +179,7 @@ services:
   # Node 数据/渲染侧车（Prisma + PPTX 渲染，内部 4010）
   ppt-node-api:
     build:
-      context: ./ppt-agent-engine
+      context: ./
       dockerfile: Dockerfile
       target: node-api
       args:
@@ -161,20 +187,20 @@ services:
         PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim-bookworm}
         NGINX_IMAGE: ${NGINX_IMAGE:-nginx:stable-alpine}
         UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.10.5}
-    container_name: deepdiagram-ppt-node-api
+    container_name: smartdiagram-ppt-node-api
     restart: always
     depends_on:
       db:
         condition: service_healthy
-      backend:
+      api-diagram:
         condition: service_started
       ppt-db-init:
         condition: service_completed_successfully
       ppt-storage-init:
         condition: service_completed_successfully
     env_file:
-      # AI/TTS 密钥从 PPT 项目 .env 注入（文件缺失时忽略，可用 AI_PROVIDER=mock 演示）
-      - path: ./ppt-agent-engine/.env
+      # AI/TTS 密钥从根目录 .env 注入（文件缺失时忽略，可用 AI_PROVIDER=mock 演示）
+      - path: ./.env
         required: false
     environment:
       # 覆盖 .env 中的本机地址，适配容器网络；ppt-db-init 会先幂等创建独立库。
@@ -183,8 +209,8 @@ services:
       - API_PORT=4010
       - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/ppt_agent?schema=public
       - STORAGE_DIR=/data/storage
-      - MATERIAL_GATEWAY_URL=http://backend:8000
-      - AUTH_SERVICE_URL=http://backend:8000
+      - MATERIAL_GATEWAY_URL=http://api-diagram:8000
+      - AUTH_SERVICE_URL=http://api-diagram:8000
       - PPT_INTERNAL_API_SECRET=${PPT_INTERNAL_API_SECRET:?Set PPT_INTERNAL_API_SECRET to a long random value}
       - PPT_GUEST_PROJECT_TTL_SECONDS=${PPT_GUEST_PROJECT_TTL_SECONDS:-86400}
     volumes:
@@ -195,7 +221,7 @@ services:
   # FastAPI + LangGraph 编排网关（内部 4000）
   ppt-python-api:
     build:
-      context: ./ppt-agent-engine
+      context: ./
       dockerfile: Dockerfile
       target: python-api
       args:
@@ -203,7 +229,7 @@ services:
         PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim-bookworm}
         NGINX_IMAGE: ${NGINX_IMAGE:-nginx:stable-alpine}
         UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.10.5}
-    container_name: deepdiagram-ppt-python-api
+    container_name: smartdiagram-ppt-python-api
     restart: always
     depends_on:
       ppt-storage-init:
@@ -211,7 +237,7 @@ services:
       ppt-node-api:
         condition: service_started
     env_file:
-      - path: ./ppt-agent-engine/.env
+      - path: ./.env
         required: false
     environment:
       - API_HOST=0.0.0.0
@@ -224,7 +250,7 @@ services:
     expose:
       - "4000"
 
-  # PPT Agent 前端已并入统一 SPA（frontend），不再需要独立的 ppt-web 服务。
+  # PPT Agent 前端已并入统一 SPA（apps/web），不再需要独立的 ppt-web 服务。
 
   # ================= 聚合网关（统一入口） =================
   #   /         → 统一前端 SPA（/ 首页 · /diagram 思维导图 · /ppt PPT 制作）
@@ -236,11 +262,11 @@ services:
       args:
         CN_MIRROR: ${CN_MIRROR:-false}
         UV_PYTHON_IMAGE: ${UV_PYTHON_IMAGE:-ghcr.io/astral-sh/uv:python3.13-bookworm-slim}
-    container_name: deepdiagram-gateway
+    container_name: smartdiagram-gateway
     restart: always
     depends_on:
-      - frontend
-      - backend
+      - web
+      - api-diagram
       - drawio
       - ppt-python-api
     ports:
@@ -266,7 +292,7 @@ services:
       - qdrantdata:/source/qdrantdata:ro
       - ${BACKUP_DIR:-./backups}:/backup
 
-  # 旧版本可能把上传文件写在 backend 容器层。deploy.sh 先 docker cp 到
+  # 旧版本可能把上传文件写在 apps/api-diagram 容器层。deploy.sh 先 docker cp 到
   # 宿主机备份目录，再仅在目标卷为空时通过本工具导入，避免覆盖现有文件。
   legacy-storage-import:
     image: pgvector/pgvector:pg16

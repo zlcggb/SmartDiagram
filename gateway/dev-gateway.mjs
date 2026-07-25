@@ -1,7 +1,7 @@
-// DeepDiagram Pro 本地开发网关（零依赖，Node 内置模块实现）
+// SmartDiagram 本地开发网关（零依赖，Node 内置模块实现）
 // 统一 SPA 架构：前端单应用承载 首页/思维导图/PPT 三个路由，网关只做 API 分流：
 //
-//   /            → 统一前端构建产物（frontend/dist，SPA 回退）
+//   /            → 统一前端构建产物（apps/web/dist，SPA 回退）
 //   /api/        → SmartDiagram 后端  http://127.0.0.1:8000
 //   /ppt-api/    → PPT Agent 后端    http://127.0.0.1:4000（剥离前缀）
 //   /drawio/     → drawio 容器       http://127.0.0.1:9022（剥离前缀）
@@ -15,7 +15,7 @@ const gatewayDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(gatewayDir, "..");
 
 const listenPort = Number(process.env.GATEWAY_PORT ?? 8080);
-const frontendDistDir = path.join(projectRoot, "frontend/dist");
+const frontendDistDir = path.join(projectRoot, "apps/web/dist");
 
 /** 反向代理规则：prefix 命中后转发到 target；stripPrefix 决定是否剥掉前缀 */
 const proxyRoutes = [

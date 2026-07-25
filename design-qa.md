@@ -1,4 +1,4 @@
-# DeepDiagram Pro macOS shell — design QA
+# SmartDiagram macOS shell — design QA
 
 ## Scope
 
@@ -43,7 +43,7 @@
 - P1, resolved — The recent-projects window looked like Finder without Finder's working navigation surface. It now has previous/next category navigation, list/grid controls, and project search; controls that require authenticated data are honestly disabled for guests.
 - P1, resolved — Login could instantiate an empty CAPTCHA URL after a configuration failure. It now exposes an explicit unavailable state and working retry path, while the CAPTCHA interaction is a keyboard-accessible button.
 - P2, resolved — Dock items were undersized and lacked a meaningful files area. The Dock now has 56 px artwork, native-style magnification, a stronger divider, and a functional recent-projects folder. The app keeps its running indicator; the folder uses open-state emphasis without an application-running dot.
-- P2, resolved — Login had a duplicated close control, excessive background blur, and inconsistent SmartDiagram branding. The window now uses only traffic-light controls, direct native-style content, a compact segmented control, the generated product artwork, and consistent DeepDiagram Pro copy.
+- P2, resolved — Login had a duplicated close control, excessive background blur, and inconsistent SmartDiagram branding. The window now uses only traffic-light controls, direct native-style content, a compact segmented control, the generated product artwork, and consistent SmartDiagram copy.
 - P2, resolved — The search field showed a rectangular browser focus outline inside the capsule. Focus is now communicated by the capsule border and halo.
 - P2, resolved — Programmatic focus painted a persistent outline around windows and the red traffic-light button. Windows now focus their first meaningful field or neutral surface without visual chrome; keyboard `:focus-visible` remains available.
 - P2, resolved — Recent-project guest and row icons used generic gradient tiles. Category artwork is now used for PPT and diagram content while sidebar icons remain monochrome interface symbols.
@@ -54,7 +54,7 @@
 
 - Spotlight opens from the menu bar, traps focus, closes from the backdrop/Escape path, and restores the compact state.
 - Spotlight `应用` mode expands to three meaningful actions; searching `PPT` returns only `PPT 制作`.
-- Dock `最近项目` opens the Finder-style window, keeps the DeepDiagram running indicator, marks only the folder's open state, and restores focus to the Dock trigger after closing.
+- Dock `最近项目` opens the Finder-style window, keeps the SmartDiagram running indicator, marks only the folder's open state, and restores focus to the Dock trigger after closing.
 - Finder previous/next controls change categories; sidebar categories remain interactive for guests and each presents category-specific login copy/artwork.
 - Login autofocus lands on the email field, unavailable CAPTCHA exposes retry, registration is disabled when configuration closes it, and the submit control cannot send an invalid offline request.
 - Help search with `PPT` returns only the matching `打开 PPT 制作` shortcut.

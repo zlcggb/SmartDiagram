@@ -208,36 +208,30 @@ prune_unused_images_when_disk_is_high() {
     ok "${project_name} 项目的未使用镜像清理完成，根分区使用率 ${remaining_percent}%"
 }
 
-# ── 检查 .env ──
+# ── 检查 .env（合并旧文件 + 双库/密钥校验） ──
 check_env() {
-    if [ ! -f "backend/.env" ]; then
-        if [ -f "backend/.env.example" ]; then
-            warn "未检测到 backend/.env，正在从 .env.example 复制..."
-            cp backend/.env.example backend/.env
-            warn "请编辑 backend/.env 填入 API Key 等配置后重新运行"
-            exit 1
-        else
-            error "未找到 backend/.env 或 .env.example"
-        fi
-    fi
-
-    # 检查关键配置
-    if grep -q "sk-your-api-key" backend/.env; then
-        warn "backend/.env 中的 OPENAI_API_KEY 尚未配置！"
-        warn "请编辑 backend/.env 填入真实的 API Key"
-        exit 1
-    fi
-
-    ok "环境变量配置就绪"
+    # shellcheck source=scripts/validate-deploy-env.sh
+    source "$ROOT_DIR/scripts/validate-deploy-env.sh"
+    MERGE_LEGACY=true
+    validate_deploy_env "$ROOT_DIR" || exit 1
 }
 
 ensure_deploy_environment() {
-    source "$ROOT_DIR/scripts/ensure-deploy-secret.sh"
-    ensure_ppt_internal_api_secret "$ROOT_DIR/.env"
+    # shellcheck source=scripts/bootstrap-deploy-secrets.sh
+    source "$ROOT_DIR/scripts/bootstrap-deploy-secrets.sh"
+    bootstrap_deploy_secrets "$ROOT_DIR/.env" || error "部署密钥初始化失败"
     case "${PPT_SECRET_BOOTSTRAP_STATUS:-}" in
-        generated) ok "已生成 PPT 内部密钥并安全写入根目录 .env" ;;
+        generated) ok "已自动生成 PPT 内部密钥并写入根 .env" ;;
         environment) ok "PPT 内部密钥已由外部环境提供" ;;
-        *) ok "PPT 内部密钥已就绪" ;;
+        file) ok "PPT 内部密钥已从根 .env 加载" ;;
+    esac
+    case "${DEPLOY_DB_BOOTSTRAP_STATUS:-}" in
+        generated) ok "已自动生成 DB_PASSWORD 并同步双库连接串（首次部署）" ;;
+        existing_volume) ok "检测到已有 PostgreSQL 数据卷，保留当前 DB_PASSWORD" ;;
+        custom) ok "使用自定义 DB_PASSWORD" ;;
+    esac
+    case "${DEPLOY_AUTH_SESSION_BOOTSTRAP:-}${DEPLOY_ALTCHA_BOOTSTRAP:-}" in
+        *generated*) ok "已自动生成 Auth / CAPTCHA 密钥" ;;
     esac
 }
 
@@ -290,7 +284,7 @@ pause_writers() {
     PAUSED_SERVICES=()
     running="$(docker compose --profile worker --profile qdrant ps --status running --services 2>/dev/null || true)"
 
-    for service in backend worker ppt-node-api ppt-python-api qdrant; do
+    for service in api-diagram worker ppt-node-api ppt-python-api qdrant; do
         if echo "$running" | grep -qx "$service"; then
             info "短暂停写以生成一致备份/迁移: $service"
             docker compose --profile worker --profile qdrant pause "$service"
@@ -343,26 +337,39 @@ wait_for_database() {
     error "PostgreSQL 在 120 秒内未就绪"
 }
 
+wait_for_redis() {
+    info "等待 Redis 就绪..."
+    local attempt
+    for attempt in $(seq 1 30); do
+        if compose exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
+            ok "Redis 已就绪"
+            return
+        fi
+        sleep 1
+    done
+    error "Redis 在 30 秒内未就绪"
+}
+
 detect_legacy_storage_layout() {
     local mounted file_count
     LEGACY_STORAGE_FILE_COUNT=0
-    if ! docker container inspect smartdiagram-backend >/dev/null 2>&1; then
+    if ! docker container inspect smartdiagram-api-diagram >/dev/null 2>&1; then
         return
     fi
 
-    mounted="$(docker container inspect smartdiagram-backend \
+    mounted="$(docker container inspect smartdiagram-api-diagram \
         --format '{{range .Mounts}}{{if eq .Destination "/app/storage"}}mounted{{end}}{{end}}' 2>/dev/null || true)"
     if [ "$mounted" = "mounted" ]; then
         return
     fi
 
-    file_count="$(docker exec smartdiagram-backend sh -c \
+    file_count="$(docker exec smartdiagram-api-diagram sh -c \
         'find /app/storage -type f 2>/dev/null | wc -l' 2>/dev/null | tr -d '[:space:]' || true)"
     case "$file_count" in
         ''|*[!0-9]*) file_count=0 ;;
     esac
     if [ "$file_count" -gt 0 ]; then
-        warn "旧 backend 容器的 /app/storage 内检测到 ${file_count} 个文件，但该目录未挂载命名卷"
+        warn "旧 apps/api-diagram 容器的 /app/storage 内检测到 ${file_count} 个文件，但该目录未挂载命名卷"
         LEGACY_STORAGE_FILE_COUNT="$file_count"
     fi
 }
@@ -374,10 +381,10 @@ migrate_legacy_storage() {
         return
     fi
 
-    legacy_dir="$backup_dir/legacy-backend-storage"
+    legacy_dir="$backup_dir/legacy-api-diagram-storage"
     mkdir -p "$legacy_dir"
-    info "从旧 backend 容器备份历史上传文件..."
-    docker cp smartdiagram-backend:/app/storage/. "$legacy_dir/"
+    info "从旧 apps/api-diagram 容器备份历史上传文件..."
+    docker cp smartdiagram-api-diagram:/app/storage/. "$legacy_dir/"
     copied_count="$(find "$legacy_dir" -type f | wc -l | tr -d '[:space:]')"
     if [ "$copied_count" -lt "$LEGACY_STORAGE_FILE_COUNT" ]; then
         error "旧容器文件备份不完整（检测 ${LEGACY_STORAGE_FILE_COUNT}，复制 ${copied_count}）"
@@ -393,6 +400,7 @@ prepare_databases() {
     info "启动数据库与 Redis（保留现有命名卷）..."
     compose up -d db redis
     wait_for_database
+    wait_for_redis
 
     # 只在不存在时创建 PPT 数据库；不会重建已有数据库。
     compose up --no-deps ppt-db-init
@@ -471,10 +479,10 @@ backup_data() {
 
 audit_migrations() {
     local findings
-    [ -d ppt-agent-engine/prisma/migrations ] || error "PPT 数据库迁移目录不存在"
+    [ -d prisma/migrations ] || error "PPT 数据库迁移目录不存在"
     findings="$(grep -ERin --include='migration.sql' \
         '(^|[[:space:];])(DROP|TRUNCATE)([[:space:]]|$)|DELETE[[:space:]]+FROM' \
-        ppt-agent-engine/prisma/migrations || true)"
+        prisma/migrations || true)"
     if [ -n "$findings" ]; then
         echo "$findings"
         error "检测到破坏性数据库语句，自动部署已停止；请人工审核并制定数据迁移方案"
@@ -486,7 +494,7 @@ migrate_databases() {
     audit_migrations
 
     info "执行 SmartDiagram 主数据库增量初始化..."
-    compose run --rm --no-deps backend python scripts/migrate_database.py
+    compose run --rm --no-deps api-diagram python scripts/migrate_database.py
 
     info "执行 PPT Agent 事务型增量迁移..."
     compose run --rm --no-deps ppt-node-api ./node_modules/.bin/tsx prisma/apply-migrations.ts
@@ -508,16 +516,28 @@ wait_for_url() {
     error "$name 健康检查失败: $url"
 }
 
-verify_deployment() {
-    local gateway_port backend_port
-    gateway_port="$(compose port gateway 80 | tail -n 1 | awk -F: '{print $NF}')"
-    backend_port="$(compose port backend 8000 | tail -n 1 | awk -F: '{print $NF}')"
-    test -n "$gateway_port"
-    test -n "$backend_port"
+verify_worker_deployment() {
+    if [ "$WITH_WORKER" != true ]; then
+        return
+    fi
+    local api_diagram_port
+    api_diagram_port="$(compose port api-diagram 8000 | tail -n 1 | awk -F: '{print $NF}')"
+    test -n "$api_diagram_port"
+    info "验证 worker 与 Redis 队列..."
+    SMARTDIAGRAM_API_PORT="$api_diagram_port" bash "$ROOT_DIR/scripts/verify-worker-deployment.sh"
+}
 
-    wait_for_url "SmartDiagram API" "http://127.0.0.1:${backend_port}/api/health"
+verify_deployment() {
+    local gateway_port api_diagram_port
+    gateway_port="$(compose port gateway 80 | tail -n 1 | awk -F: '{print $NF}')"
+    api_diagram_port="$(compose port api-diagram 8000 | tail -n 1 | awk -F: '{print $NF}')"
+    test -n "$gateway_port"
+    test -n "$api_diagram_port"
+
+    wait_for_url "SmartDiagram API" "http://127.0.0.1:${api_diagram_port}/api/health"
     wait_for_url "统一网关" "http://127.0.0.1:${gateway_port}/nginx-health"
     wait_for_url "PPT Agent API" "http://127.0.0.1:${gateway_port}/ppt-api/api/health"
+    verify_worker_deployment
 }
 
 # ── 部署 ──
@@ -580,6 +600,10 @@ deploy() {
     if [ "$WITH_QDRANT" = true ]; then
         echo -e "  🔍 Qdrant:   http://localhost:6333"
     fi
+    if [ "$WITH_WORKER" = true ]; then
+        echo -e "  🧵 Worker:   docker compose --profile worker ps worker"
+        echo -e "  📮 Redis:    redis://localhost:6379/0"
+    fi
     echo ""
     echo -e "${CYAN}常用命令:${NC}"
     echo "  ./deploy.sh --update     拉取、备份、迁移并更新"
@@ -615,6 +639,11 @@ show_status() {
     echo ""
     prepare_profiles
     compose ps
+    if docker compose --profile worker ps -q worker 2>/dev/null | grep -q .; then
+        echo ""
+        info "Worker / Redis 快速检查:"
+        bash "$ROOT_DIR/scripts/verify-worker-deployment.sh" || true
+    fi
 }
 
 backup_only() {

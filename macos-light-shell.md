@@ -2,7 +2,7 @@
 
 ## Goal
 
-把 DeepDiagram 桌面及所有壳层弹窗改造为参考图 2/3 的浅色 macOS Aqua 体系，保留所有真实功能。
+把 SmartDiagram 桌面及所有壳层弹窗改造为参考图 2/3 的浅色 macOS Aqua 体系，保留所有真实功能。
 
 ## Tasks
 
