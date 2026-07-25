@@ -1,0 +1,118 @@
+{
+  "variantId": "metrics-row",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "metrics",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "slot": "pageTitle",
+      "x": 56,
+      "y": 36,
+      "w": 900,
+      "h": 52,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 32,
+        "bold": true
+      }
+    },
+    {
+      "id": "claim",
+      "type": "callout",
+      "role": "key-message",
+      "slot": "claim",
+      "x": 56,
+      "y": 100,
+      "w": 1168,
+      "h": 80,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "tone": "primary"
+      }
+    },
+    {
+      "id": "m1",
+      "type": "metric",
+      "role": "metric",
+      "slot": "metrics.0",
+      "x": 56,
+      "y": 220,
+      "w": 270,
+      "h": 280,
+      "z": 3,
+      "editable": true,
+      "style": {
+        "fontSize": 40,
+        "bold": true
+      }
+    },
+    {
+      "id": "m2",
+      "type": "metric",
+      "role": "metric",
+      "slot": "metrics.1",
+      "x": 354,
+      "y": 220,
+      "w": 270,
+      "h": 280,
+      "z": 4,
+      "editable": true,
+      "style": {
+        "fontSize": 40,
+        "bold": true
+      }
+    },
+    {
+      "id": "m3",
+      "type": "metric",
+      "role": "metric",
+      "slot": "metrics.2",
+      "x": 652,
+      "y": 220,
+      "w": 270,
+      "h": 280,
+      "z": 5,
+      "editable": true,
+      "style": {
+        "fontSize": 40,
+        "bold": true
+      }
+    },
+    {
+      "id": "m4",
+      "type": "metric",
+      "role": "metric",
+      "slot": "metrics.3",
+      "x": 950,
+      "y": 220,
+      "w": 270,
+      "h": 280,
+      "z": 6,
+      "editable": true,
+      "style": {
+        "fontSize": 40,
+        "bold": true
+      }
+    },
+    {
+      "id": "insight",
+      "type": "callout",
+      "role": "insight",
+      "slot": "insight",
+      "x": 56,
+      "y": 540,
+      "w": 1168,
+      "h": 110,
+      "z": 7,
+      "editable": true
+    }
+  ]
+}

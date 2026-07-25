@@ -1,0 +1,57 @@
+{
+  "variantId": "observation-quote",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "observation",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "slot": "pageTitle",
+      "x": 56,
+      "y": 36,
+      "w": 900,
+      "h": 52,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 28,
+        "bold": true
+      }
+    },
+    {
+      "id": "quote",
+      "type": "callout",
+      "role": "quote",
+      "slot": "quote",
+      "x": 140,
+      "y": 160,
+      "w": 1000,
+      "h": 320,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "fontSize": 32,
+        "bold": true,
+        "align": "center",
+        "tone": "primary"
+      }
+    },
+    {
+      "id": "note",
+      "type": "card",
+      "role": "note",
+      "slot": "note",
+      "x": 200,
+      "y": 520,
+      "w": 880,
+      "h": 120,
+      "z": 3,
+      "editable": true
+    }
+  ]
+}

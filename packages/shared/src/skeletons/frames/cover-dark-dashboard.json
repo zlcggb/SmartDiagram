@@ -1,0 +1,114 @@
+{
+  "variantId": "cover-dark-dashboard",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "cover",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "slot": "title",
+      "x": 56,
+      "y": 48,
+      "w": 900,
+      "h": 64,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 36,
+        "bold": true
+      }
+    },
+    {
+      "id": "claim",
+      "type": "callout",
+      "role": "key-message",
+      "slot": "claim",
+      "x": 56,
+      "y": 140,
+      "w": 1168,
+      "h": 100,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "tone": "primary"
+      }
+    },
+    {
+      "id": "m1",
+      "type": "metric",
+      "role": "metric",
+      "slot": "metrics.0",
+      "x": 56,
+      "y": 280,
+      "w": 360,
+      "h": 140,
+      "z": 3,
+      "editable": true,
+      "style": {
+        "fontSize": 40,
+        "bold": true
+      }
+    },
+    {
+      "id": "m2",
+      "type": "metric",
+      "role": "metric",
+      "slot": "metrics.1",
+      "x": 460,
+      "y": 280,
+      "w": 360,
+      "h": 140,
+      "z": 4,
+      "editable": true,
+      "style": {
+        "fontSize": 40,
+        "bold": true
+      }
+    },
+    {
+      "id": "m3",
+      "type": "metric",
+      "role": "metric",
+      "slot": "metrics.2",
+      "x": 864,
+      "y": 280,
+      "w": 360,
+      "h": 140,
+      "z": 5,
+      "editable": true,
+      "style": {
+        "fontSize": 40,
+        "bold": true
+      }
+    },
+    {
+      "id": "p1",
+      "type": "card",
+      "role": "panel",
+      "slot": "panels.0",
+      "x": 56,
+      "y": 460,
+      "w": 560,
+      "h": 180,
+      "z": 6,
+      "editable": true
+    },
+    {
+      "id": "p2",
+      "type": "card",
+      "role": "panel",
+      "slot": "panels.1",
+      "x": 664,
+      "y": 460,
+      "w": 560,
+      "h": 180,
+      "z": 7,
+      "editable": true
+    }
+  ]
+}

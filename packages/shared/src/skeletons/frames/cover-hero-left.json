@@ -1,0 +1,120 @@
+{
+  "variantId": "cover-hero-left",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "cover",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "kicker",
+      "type": "text",
+      "role": "kicker",
+      "slot": "kicker",
+      "x": 72,
+      "y": 72,
+      "w": 520,
+      "h": 36,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 14,
+        "bold": true
+      }
+    },
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "slot": "title",
+      "x": 72,
+      "y": 140,
+      "w": 640,
+      "h": 120,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "fontSize": 48,
+        "bold": true
+      }
+    },
+    {
+      "id": "lead",
+      "type": "text",
+      "role": "lead",
+      "slot": "lead",
+      "x": 72,
+      "y": 300,
+      "w": 640,
+      "h": 80,
+      "z": 3,
+      "editable": true,
+      "style": {
+        "fontSize": 18
+      }
+    },
+    {
+      "id": "hero-metric",
+      "type": "metric",
+      "role": "hero-metric",
+      "slot": "heroMetric",
+      "x": 780,
+      "y": 72,
+      "w": 420,
+      "h": 360,
+      "z": 4,
+      "editable": true,
+      "style": {
+        "fontSize": 44,
+        "bold": true,
+        "tone": "primary"
+      }
+    },
+    {
+      "id": "meta-1",
+      "type": "card",
+      "role": "meta",
+      "slot": "metaCards.0",
+      "x": 72,
+      "y": 520,
+      "w": 360,
+      "h": 140,
+      "z": 5,
+      "editable": true,
+      "style": {
+        "tone": "default"
+      }
+    },
+    {
+      "id": "meta-2",
+      "type": "card",
+      "role": "meta",
+      "slot": "metaCards.1",
+      "x": 460,
+      "y": 520,
+      "w": 360,
+      "h": 140,
+      "z": 6,
+      "editable": true,
+      "style": {
+        "tone": "default"
+      }
+    },
+    {
+      "id": "meta-3",
+      "type": "card",
+      "role": "meta",
+      "slot": "metaCards.2",
+      "x": 848,
+      "y": 520,
+      "w": 360,
+      "h": 140,
+      "z": 7,
+      "editable": true,
+      "style": {
+        "tone": "accent"
+      }
+    }
+  ]
+}

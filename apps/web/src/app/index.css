@@ -1,0 +1,536 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════
+   SmartDiagram — Design System (TailwindCSS v4)
+   ═══════════════════════════════════════════ */
+
+/* Tailwind v4 custom theme tokens */
+@theme {
+  --color-dark-900: #0f1724;
+  --color-dark-800: #131d30;
+  --color-dark-700: #182540;
+  --color-dark-600: #1e2d4a;
+  --color-dark-500: #253a5c;
+}
+
+/* ── Global Reset ── */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.4); }
+
+/* ══════════════════════════════════════════════════
+   Excalidraw Fix — undo TailwindCSS v4 Preflight
+   inside the Excalidraw container.
+   
+   Tailwind v4 Preflight does:
+     - svg { display: block } → blows up toolbar icons
+     - *, *::before, *::after { box-sizing: border-box } → breaks Excalidraw sizing
+     - button { background: transparent } → removes toolbar button backgrounds
+     - img, svg { max-width: 100% } → can clip icons
+   ══════════════════════════════════════════════════ */
+.excalidraw-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.excalidraw-wrapper .excalidraw {
+  width: 100%;
+  height: 100%;
+}
+
+/* Restore box-sizing for all Excalidraw internals */
+.excalidraw-wrapper .excalidraw,
+.excalidraw-wrapper .excalidraw *,
+.excalidraw-wrapper .excalidraw *::before,
+.excalidraw-wrapper .excalidraw *::after {
+  box-sizing: content-box;
+}
+
+/* Critical: Restore SVG display for toolbar icons */
+.excalidraw-wrapper .excalidraw svg {
+  display: inline;
+  vertical-align: middle;
+  max-width: none;
+}
+
+/* Restore img display */
+.excalidraw-wrapper .excalidraw img {
+  display: inline;
+  max-width: none;
+}
+
+/* Restore button styles */
+.excalidraw-wrapper .excalidraw button {
+  background: initial;
+  border: initial;
+  cursor: pointer;
+}
+
+/* Restore input/select styles */
+.excalidraw-wrapper .excalidraw input,
+.excalidraw-wrapper .excalidraw select,
+.excalidraw-wrapper .excalidraw textarea {
+  border: initial;
+}
+
+/* Fix the main canvas element (the drawing surface itself should stay block) */
+.excalidraw-wrapper .excalidraw canvas {
+  display: block;
+}
+
+/* Ensure Excalidraw tooltips and popovers render correctly */
+.excalidraw-wrapper .excalidraw .popover,
+.excalidraw-wrapper .excalidraw .dropdown-menu-container {
+  box-sizing: border-box;
+}
+
+/* Fix toolbar icon sizing — constrain SVGs within toolbar buttons */
+.excalidraw-wrapper .excalidraw .ToolIcon__icon svg,
+.excalidraw-wrapper .excalidraw .ToolIcon svg,
+.excalidraw-wrapper .excalidraw [class*="ToolIcon"] svg,
+.excalidraw-wrapper .excalidraw .Island svg {
+  width: 1em;
+  height: 1em;
+}
+
+/* ── Separator ── */
+.sd-separator {
+  width: 6px;
+  height: 100%;
+  flex-shrink: 0;
+  cursor: col-resize;
+  position: relative;
+  background: #e2e8f0;
+  transition: background 0.2s ease;
+}
+.sd-separator:hover { background: #cbd5e1; }
+.sd-separator-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 28px;
+  border-radius: 3px;
+  background: #94a3b8;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.sd-separator:hover .sd-separator-dot { opacity: 1; background: #3b82f6; }
+
+/* ── Animations ── */
+@keyframes sd-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes sd-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes sd-pulse {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 1; }
+}
+@keyframes sd-countdown-pop {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
+
+.sd-fade-in { animation: sd-fade-in 0.3s ease-out both; }
+.sd-slide-up { animation: sd-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* ── Hide scrollbar for horizontal scroll ── */
+.sd-no-scrollbar::-webkit-scrollbar { display: none; }
+.sd-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   macOS Desktop — 首页高保真还原
+   壁纸为整幅 SVG 风景（天空 / 群山 / 湖面倒影），
+   浅色 = 白昼，深色 = 星夜，均走 prefers-color-scheme。
+   ══════════════════════════════════════════════════ */
+
+/* ── 壁纸容器：整幅 SVG 风景铺满 ── */
+.desktop-wallpaper {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.desktop-scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── 细腻颗粒噪点（照片质感，极轻） ── */
+.desktop-wallpaper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* ── 桌面图标（macOS：选中 = 图标压暗 + 蓝色标签胶囊） ── */
+.desktop-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 88px;
+  padding: 6px 4px;
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.desktop-icon-tile {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  transition:
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    filter 0.12s ease;
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.28));
+}
+.desktop-icon:hover .desktop-icon-tile { transform: scale(1.05); }
+.desktop-icon:active .desktop-icon-tile { transform: scale(0.92); }
+.desktop-icon[data-selected='true'] .desktop-icon-tile {
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.28)) brightness(0.72);
+}
+.desktop-icon-label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  padding: 0 7px;
+  border-radius: 5px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desktop-icon[data-selected='true'] .desktop-icon-label {
+  background: #2f7df6;
+  text-shadow: none;
+}
+
+/* ── Apple-like Adaptive Placeholder Styles for Light/Dark Modes ── */
+textarea::placeholder {
+  transition: color 0.3s ease;
+}
+
+.light textarea::placeholder {
+  color: #64748b !important; /* Secondary text style (Slate 500), has excellent 4.5+:1 contrast ratio on white/light gray background */
+  opacity: 0.9 !important;
+}
+
+.dark textarea::placeholder {
+  color: #94a3b8 !important; /* Secondary text style (Slate 400), perfectly visible on slate/dark background */
+  opacity: 0.65 !important;
+}
+
+/* ══════════════════════════════════════════════════
+   Mobile Responsive
+   ══════════════════════════════════════════════════ */
+
+/* Hide separator on mobile */
+@media (max-width: 767px) {
+  .sd-separator { display: none !important; }
+}
+
+/* ── Mobile Tab Bar ── */
+.sd-mobile-tab-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
+  flex-shrink: 0;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid;
+  padding: 6px 0;
+  padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+}
+.sd-mobile-tab-bar--light {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: #e2e8f0;
+}
+.sd-mobile-tab-bar--dark {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: #1e293b;
+}
+
+.sd-mobile-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 24px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.sd-mobile-tab-icon {
+  width: 22px;
+  height: 22px;
+  color: #94a3b8;
+  transition: color 0.2s ease;
+}
+.sd-mobile-tab-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  transition: color 0.2s ease;
+}
+.sd-mobile-tab--active .sd-mobile-tab-icon {
+  color: #6366f1;
+}
+.sd-mobile-tab--active .sd-mobile-tab-label {
+  color: #6366f1;
+}
+
+/* Canvas dot indicator */
+.sd-mobile-tab-dot {
+  position: absolute;
+  top: -1px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6366f1;
+  box-shadow: 0 0 6px rgba(99, 102, 241, 0.5);
+  animation: sd-pulse 1.5s ease-in-out infinite;
+}
+
+/* ── Mobile safe area bottom padding ── */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .sd-mobile-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Mobile Canvas adjustments */
+@media (max-width: 767px) {
+  /* Empty canvas: smaller title, tighter spacing */
+  .sd-mobile-empty-title {
+    font-size: 1.5rem !important;
+  }
+  .sd-mobile-empty-desc {
+    font-size: 0.8125rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .sd-mobile-tab-bar {
+    min-height: 58px;
+    padding-top: 4px;
+  }
+
+  .sd-mobile-tab {
+    min-width: 96px;
+    min-height: 48px;
+    justify-content: center;
+    padding: 5px 20px;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  [role='dialog'] {
+    max-width: calc(100vw - 20px);
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   Custom CAPTCHA Widget (Turnstile-inspired)
+   ══════════════════════════════════════════════════ */
+
+.captcha-widget {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1.5px solid #e2e8f0;
+  background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  -webkit-user-select: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.captcha-widget:hover {
+  border-color: #cbd5e1;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.captcha-widget:active {
+  transform: scale(0.995);
+}
+.captcha-widget[data-state="verified"] {
+  border-color: #86efac;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  cursor: default;
+}
+.captcha-widget[data-state="verifying"] {
+  border-color: #93c5fd;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  cursor: wait;
+}
+.captcha-widget[data-state="error"] {
+  border-color: #fca5a5;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  cursor: pointer;
+}
+
+.captcha-checkbox-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.captcha-checkbox {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 2px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: white;
+}
+.captcha-widget:hover .captcha-checkbox {
+  border-color: #94a3b8;
+}
+.captcha-widget[data-state="verified"] .captcha-checkbox {
+  border-color: #22c55e;
+  background: #22c55e;
+}
+.captcha-widget[data-state="verifying"] .captcha-checkbox {
+  border-color: #3b82f6;
+  background: transparent;
+}
+.captcha-widget[data-state="error"] .captcha-checkbox {
+  border-color: #ef4444;
+  background: transparent;
+}
+
+.captcha-checkbox-inner {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+.captcha-widget:hover .captcha-checkbox-inner {
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.captcha-spinner {
+  width: 18px;
+  height: 18px;
+  color: #3b82f6;
+  animation: captcha-spin 0.8s linear infinite;
+}
+
+.captcha-check {
+  width: 18px;
+  height: 18px;
+  color: white;
+  animation: captcha-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.captcha-error-icon {
+  width: 16px;
+  height: 16px;
+  color: #ef4444;
+  animation: captcha-shake 0.4s ease both;
+}
+
+.captcha-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #475569;
+  letter-spacing: -0.01em;
+  transition: color 0.25s ease;
+}
+.captcha-widget[data-state="verified"] .captcha-label {
+  color: #16a34a;
+  font-weight: 600;
+}
+.captcha-widget[data-state="verifying"] .captcha-label {
+  color: #2563eb;
+}
+.captcha-widget[data-state="error"] .captcha-label {
+  color: #dc2626;
+}
+
+.captcha-branding {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+.captcha-branding svg {
+  width: 16px;
+  height: 16px;
+  opacity: 0.6;
+}
+.captcha-branding span {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+}
+
+@keyframes captcha-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes captcha-pop {
+  0% { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes captcha-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-3px); }
+  40%, 80% { transform: translateX(3px); }
+}

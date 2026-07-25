@@ -1,0 +1,66 @@
+{
+  "variantId": "risk-matrix",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "risk-table",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "slot": "pageTitle",
+      "x": 56,
+      "y": 36,
+      "w": 900,
+      "h": 52,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 32,
+        "bold": true
+      }
+    },
+    {
+      "id": "claim",
+      "type": "callout",
+      "role": "key-message",
+      "slot": "claim",
+      "x": 56,
+      "y": 100,
+      "w": 1168,
+      "h": 70,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "tone": "primary"
+      }
+    },
+    {
+      "id": "overview",
+      "type": "card",
+      "role": "overview",
+      "slot": "overview",
+      "x": 56,
+      "y": 200,
+      "w": 420,
+      "h": 440,
+      "z": 3,
+      "editable": true
+    },
+    {
+      "id": "matrix",
+      "type": "table",
+      "role": "matrix",
+      "slot": "matrixRows",
+      "x": 520,
+      "y": 200,
+      "w": 700,
+      "h": 440,
+      "z": 4,
+      "editable": true
+    }
+  ]
+}

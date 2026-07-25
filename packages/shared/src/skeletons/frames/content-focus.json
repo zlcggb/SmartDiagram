@@ -1,0 +1,54 @@
+{
+  "variantId": "content-focus",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "generic-cards",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "slot": "pageTitle",
+      "x": 56,
+      "y": 36,
+      "w": 900,
+      "h": 52,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 32,
+        "bold": true
+      }
+    },
+    {
+      "id": "focus",
+      "type": "callout",
+      "role": "focus",
+      "slot": "focus",
+      "x": 56,
+      "y": 120,
+      "w": 700,
+      "h": 520,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "tone": "primary"
+      }
+    },
+    {
+      "id": "bullets",
+      "type": "card",
+      "role": "bullets",
+      "slot": "bullets",
+      "x": 800,
+      "y": 120,
+      "w": 420,
+      "h": 520,
+      "z": 3,
+      "editable": true
+    }
+  ]
+}

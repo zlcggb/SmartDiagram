@@ -1,0 +1,78 @@
+{
+  "variantId": "status-triptych",
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "recommendedLayout": "status-cards",
+  "lockGeometry": true,
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "role": "title",
+      "slot": "pageTitle",
+      "x": 56,
+      "y": 36,
+      "w": 900,
+      "h": 52,
+      "z": 1,
+      "editable": true,
+      "style": {
+        "fontSize": 32,
+        "bold": true
+      }
+    },
+    {
+      "id": "claim",
+      "type": "callout",
+      "role": "key-message",
+      "slot": "claim",
+      "x": 56,
+      "y": 100,
+      "w": 1168,
+      "h": 90,
+      "z": 2,
+      "editable": true,
+      "style": {
+        "tone": "primary"
+      }
+    },
+    {
+      "id": "c1",
+      "type": "card",
+      "role": "status",
+      "slot": "cards.0",
+      "x": 56,
+      "y": 230,
+      "w": 370,
+      "h": 400,
+      "z": 3,
+      "editable": true
+    },
+    {
+      "id": "c2",
+      "type": "card",
+      "role": "status",
+      "slot": "cards.1",
+      "x": 455,
+      "y": 230,
+      "w": 370,
+      "h": 400,
+      "z": 4,
+      "editable": true
+    },
+    {
+      "id": "c3",
+      "type": "card",
+      "role": "status",
+      "slot": "cards.2",
+      "x": 854,
+      "y": 230,
+      "w": 370,
+      "h": 400,
+      "z": 5,
+      "editable": true
+    }
+  ]
+}

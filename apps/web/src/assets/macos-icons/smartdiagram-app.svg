@@ -1,0 +1,93 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1024 1024"
+  fill="none"
+  role="img"
+  aria-label="SmartDiagram"
+>
+  <defs>
+    <linearGradient id="tile" x1="512" y1="72" x2="512" y2="952" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FCFDFF" />
+      <stop offset="0.58" stop-color="#F5F7FE" />
+      <stop offset="1" stop-color="#EEF2FA" />
+    </linearGradient>
+    <linearGradient id="edge" x1="512" y1="78" x2="512" y2="946" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E3E9F4" />
+      <stop offset="0.46" stop-color="#D8E0EF" />
+      <stop offset="1" stop-color="#C8D3E6" />
+    </linearGradient>
+    <linearGradient id="sheen" x1="512" y1="80" x2="512" y2="330" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.96" />
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="spark" x1="688" y1="196" x2="796" y2="330" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8FA9F5" />
+      <stop offset="1" stop-color="#4B74ED" />
+    </linearGradient>
+    <filter id="tile-shadow" x="24" y="22" width="976" height="994" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="26" flood-color="#526581" flood-opacity="0.24" />
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#6D7D97" flood-opacity="0.15" />
+    </filter>
+    <filter id="glyph-shadow" x="160" y="240" width="720" height="560" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#315BC4" flood-opacity="0.12" />
+    </filter>
+    <clipPath id="tile-clip">
+      <rect x="90" y="70" width="844" height="874" rx="222" />
+    </clipPath>
+  </defs>
+
+  <!-- 圆角瓷砖底 -->
+  <rect
+    x="90"
+    y="70"
+    width="844"
+    height="874"
+    rx="222"
+    fill="url(#tile)"
+    filter="url(#tile-shadow)"
+  />
+  <g clip-path="url(#tile-clip)">
+    <ellipse cx="512" cy="112" rx="392" ry="242" fill="url(#sheen)" />
+    <path
+      d="M144 838C282 892 741 893 880 838"
+      stroke="#DCE5F5"
+      stroke-width="20"
+      stroke-linecap="round"
+      opacity="0.34"
+    />
+  </g>
+  <rect
+    x="99"
+    y="79"
+    width="826"
+    height="856"
+    rx="213"
+    stroke="url(#edge)"
+    stroke-width="9"
+  />
+  <path
+    d="M184 203C240 119 329 106 512 106C695 106 784 119 840 203"
+    stroke="#FFFFFF"
+    stroke-width="13"
+    stroke-linecap="round"
+    opacity="0.68"
+  />
+
+  <!-- 图表字形：顶层节点 + 总线分叉 + 两个子节点 -->
+  <g stroke="#4B74ED" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" filter="url(#glyph-shadow)">
+    <rect x="424" y="302" width="176" height="122" rx="30" />
+    <path d="M512 424V508" />
+    <path d="M340 508H684" />
+    <path d="M340 508V586" />
+    <path d="M684 508V586" />
+    <rect x="252" y="586" width="176" height="122" rx="30" />
+    <rect x="596" y="586" width="176" height="122" rx="30" />
+  </g>
+
+  <!-- AI 灵感火花 -->
+  <path
+    d="M724 196C730 232 748 256 786 266C748 276 730 300 724 336C718 300 700 276 662 266C700 256 718 232 724 196Z"
+    fill="url(#spark)"
+    filter="url(#glyph-shadow)"
+  />
+</svg>
