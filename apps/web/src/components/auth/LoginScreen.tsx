@@ -13,7 +13,6 @@ import {
   UserRound,
 } from 'lucide-react';
 import {
-  DEMO_LOGIN_HINTS,
   fetchCaptchaConfig,
   loginWithPassword,
   registerWithPassword,
@@ -177,9 +176,10 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
       setCaptchaConfig(config);
       setCaptchaConfigState('ready');
       // Auto-fill demo credentials only when demo presets are enabled
-      if (config.show_demo_presets) {
-        setEmail(DEMO_LOGIN_HINTS.user.email);
-        setPassword(DEMO_LOGIN_HINTS.user.password);
+      const userPreset = config.demo_presets?.user;
+      if (config.show_demo_presets && userPreset) {
+        setEmail(userPreset.email);
+        setPassword(userPreset.password);
       }
     }).catch(() => {
       if (!cancelled) setCaptchaConfigState('unavailable');
@@ -203,7 +203,7 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
       setEmail('');
       setPassword('');
       setConfirmPassword('');
-    } else if (captchaConfig?.show_demo_presets) {
+    } else if (captchaConfig?.show_demo_presets && captchaConfig.demo_presets?.user) {
       applyPreset('user');
     } else {
       setEmail('');
@@ -212,7 +212,8 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
   };
 
   const applyPreset = (nextPreset: LoginPreset) => {
-    const hint = DEMO_LOGIN_HINTS[nextPreset];
+    const hint = captchaConfig?.demo_presets?.[nextPreset];
+    if (!hint) return;
     setPreset(nextPreset);
     setEmail(hint.email);
     setPassword(hint.password);
@@ -400,7 +401,7 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
             </div>
 
             {/* Demo user presets (login mode only, controlled by env) */}
-            {mode === 'login' && captchaConfig?.show_demo_presets && (
+            {mode === 'login' && captchaConfig?.show_demo_presets && captchaConfig.demo_presets && (
               <div className="mb-5 flex gap-2">
                 <button type="button" className={presetClass(preset === 'user')} onClick={() => applyPreset('user')}>
                   <UserRound className="h-4 w-4" />

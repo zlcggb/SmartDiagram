@@ -21,7 +21,9 @@ import type { EditableGrade } from "../lib/exportMode";
 import { upsertProjectMaterial } from "../components/materials/materialUploadModel";
 import { guestProjectRepository } from "../lib/guestProjectStore";
 import { classifyProjectLoadFailure, type ProjectLoadFailure } from "../lib/projectLoadError";
-import { isPptGuest } from "../lib/pptRequestContext";
+import { currentPptIdentityHeaders, isPptGuest } from "../lib/pptRequestContext";
+import { streamProjectProgress, type PptProgressEvent } from "../lib/progressStream";
+import { createLatestAsyncCommit } from "../lib/usageRefresh";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 type Direction = "up" | "down";
@@ -187,135 +189,129 @@ function makeLog(message: string, stage?: string): AgentLogEntry {
 }
 
 // SSE 进度连接管理（旁路：失败不影响主 AI 请求）
-let progressEventSource: EventSource | null = null;
+let progressAbortController: AbortController | null = null;
+let progressReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+const commitLatestAiUsage = createLatestAsyncCommit<AiUsageSummary | null>(
+  (aiUsageSummary) => useWorkbenchStore.setState({ aiUsageSummary }),
+  () => useWorkbenchStore.setState({ aiUsageSummary: null }),
+);
+
+function handleProgressEvent(data: PptProgressEvent) {
+  const { stage, status, message, current, total, delta, subStage, clearDelta, timestamp, slideId, slideTitle } = data;
+  const at = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+
+  // API 事件语义是 start/progress/done/error，界面状态统一为 running/done/error。
+  const normalizedStatus: ProgressStageState["status"] =
+    status === "start" || status === "progress"
+      ? "running"
+      : status === "done" || status === "error" || status === "skip"
+        ? status
+        : "idle";
+
+  useWorkbenchStore.setState((prev) => {
+    const pipelineRunning = prev.progressStages.pipeline?.status === "running";
+    // 单独执行一个任务时，右侧只保留本次执行；全流程运行时才累计各阶段。
+    const isStandaloneStart = status === "start" && clearDelta && stage !== "pipeline" && !pipelineRunning;
+    const next = isStandaloneStart ? {} : { ...prev.progressStages };
+    const existing = next[stage];
+    const isStart = status === "start";
+    const shouldClear = isStart || clearDelta;
+    const deltaChunks = shouldClear ? [] : [...(existing?.deltaChunks ?? [])];
+    const logs = shouldClear ? [] : [...(existing?.logs ?? [])];
+    let accumulatedDelta = shouldClear ? "" : (existing?.delta ?? "");
+
+    if (delta) {
+      accumulatedDelta += delta;
+      deltaChunks.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        at,
+        text: delta,
+        subStage
+      });
+    }
+
+    if (message && status !== "progress") {
+      logs.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        at,
+        message,
+        level: status === "error" ? "error" : status === "done" ? "success" : "info",
+        slideId,
+        slideTitle
+      });
+    }
+
+    // 自动展开运行中阶段，折叠已完成阶段（只保留当前 running 展开）
+    const isRunning = normalizedStatus === "running";
+    const expanded = isRunning
+      ? true
+      : normalizedStatus === "done" || normalizedStatus === "error" || normalizedStatus === "skip"
+        ? false
+        : existing?.expanded;
+
+    next[stage] = {
+      status: normalizedStatus,
+      message,
+      current,
+      total,
+      delta: accumulatedDelta,
+      deltaChunks: deltaChunks.slice(-500),
+      logs: logs.slice(-200),
+      expanded,
+      startedAt: isStart ? timestamp : existing?.startedAt,
+      endedAt: status === "done" || status === "error" || status === "skip" ? timestamp : existing?.endedAt,
+      slideId: slideId ?? existing?.slideId
+    };
+
+    return {
+      progressStages: next,
+      // 用户即使手动折叠过，新任务开始时也要自动展开并展示流。
+      progressPanelOpen: isStart ? true : prev.progressPanelOpen
+    };
+  });
+
+  if (status === "done" || status === "error") {
+    useWorkbenchStore.getState().pushAgentLog(message, stage);
+    void useWorkbenchStore.getState().refreshAiUsage();
+  }
+}
 
 function connectProgressSSE(projectId: string) {
   disconnectProgressSSE();
+  const controller = new AbortController();
+  progressAbortController = controller;
 
-  // 必须与 api.ts 同源：曾误用 VITE_API_BASE（空）→ 打到 Vite:5173 刷 404
-  const apiBase = getApiBase();
-  if (!apiBase.startsWith("http")) return;
-
-  const url = `${apiBase}/api/projects/${projectId}/progress`;
-  const es = new EventSource(url);
-  let opened = false;
-
-  es.onopen = () => {
-    opened = true;
-  };
-
-  es.onmessage = (event) => {
+  const open = async () => {
     try {
-      const data = JSON.parse(event.data) as {
-        stage: string;
-        status: string;
-        message: string;
-        current?: number;
-        total?: number;
-        delta?: string;
-        chunkId?: string;
-        subStage?: string;
-        clearDelta?: boolean;
-        timestamp?: string;
-        slideId?: string;
-        slideTitle?: string;
-      };
-      const { stage, status, message, current, total, delta, subStage, clearDelta, timestamp, slideId, slideTitle } = data;
-      const at = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-
-      // API 事件语义是 start/progress/done/error，界面状态统一为 running/done/error。
-      const normalizedStatus: ProgressStageState["status"] =
-        status === "start" || status === "progress"
-          ? "running"
-          : status === "done" || status === "error" || status === "skip"
-            ? status
-            : "idle";
-
-      useWorkbenchStore.setState((prev) => {
-        const pipelineRunning = prev.progressStages.pipeline?.status === "running";
-        // 单独执行一个任务时，右侧只保留本次执行；全流程运行时才累计各阶段。
-        const isStandaloneStart = status === "start" && clearDelta && stage !== "pipeline" && !pipelineRunning;
-        const next = isStandaloneStart ? {} : { ...prev.progressStages };
-        const existing = next[stage];
-        const isStart = status === "start";
-        const shouldClear = isStart || clearDelta;
-        const deltaChunks = shouldClear ? [] : [...(existing?.deltaChunks ?? [])];
-        const logs = shouldClear ? [] : [...(existing?.logs ?? [])];
-        let accumulatedDelta = shouldClear ? "" : (existing?.delta ?? "");
-
-        if (delta) {
-          accumulatedDelta += delta;
-          deltaChunks.push({
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-            at,
-            text: delta,
-            subStage
-          });
-        }
-
-        if (message && status !== "progress") {
-          logs.push({
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-            at,
-            message,
-            level: status === "error" ? "error" : status === "done" ? "success" : "info",
-            slideId,
-            slideTitle
-          });
-        }
-
-        // 自动展开运行中阶段，折叠已完成阶段（只保留当前 running 展开）
-        const isRunning = normalizedStatus === "running";
-        const expanded = isRunning
-          ? true
-          : normalizedStatus === "done" || normalizedStatus === "error" || normalizedStatus === "skip"
-            ? false
-            : existing?.expanded;
-
-        next[stage] = {
-          status: normalizedStatus,
-          message,
-          current,
-          total,
-          delta: accumulatedDelta,
-          deltaChunks: deltaChunks.slice(-500),
-          logs: logs.slice(-200),
-          expanded,
-          startedAt: isStart ? timestamp : existing?.startedAt,
-          endedAt: status === "done" || status === "error" || status === "skip" ? timestamp : existing?.endedAt,
-          slideId: slideId ?? existing?.slideId
-        };
-
-        return {
-          progressStages: next,
-          // 用户即使手动折叠过，新任务开始时也要自动展开并展示流。
-          progressPanelOpen: isStart ? true : prev.progressPanelOpen
-        };
+      await streamProjectProgress({
+        apiBase: getApiBase(),
+        projectId,
+        identityHeaders: currentPptIdentityHeaders(),
+        signal: controller.signal,
+        onEvent: handleProgressEvent,
       });
-
-      if (status === "done" || status === "error") {
-        useWorkbenchStore.getState().pushAgentLog(message, stage);
-      }
     } catch {
-      // 忽略解析失败
+      // 进度流是旁路；主生成请求仍按原路径返回错误。
+    }
+
+    if (
+      !controller.signal.aborted &&
+      progressAbortController === controller &&
+      useWorkbenchStore.getState().busy
+    ) {
+      progressReconnectTimer = setTimeout(() => void open(), 1_000);
     }
   };
 
-  es.onerror = () => {
-    // 浏览器默认会自动重连；连不上时立刻关掉，避免控制台被 404 刷屏
-    if (!opened || !useWorkbenchStore.getState().busy) {
-      disconnectProgressSSE();
-    }
-  };
-
-  progressEventSource = es;
+  void open();
 }
 
 function disconnectProgressSSE() {
-  if (progressEventSource) {
-    progressEventSource.close();
-    progressEventSource = null;
-  }
+  progressAbortController?.abort();
+  progressAbortController = null;
+  if (progressReconnectTimer) clearTimeout(progressReconnectTimer);
+  progressReconnectTimer = null;
 }
 
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
@@ -416,13 +412,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       }
     }),
   async refreshAiUsage() {
-    try {
-      const projectId = get().project?.id;
-      const aiUsageSummary = await api.getAiUsageSummary(projectId);
-      set({ aiUsageSummary });
-    } catch {
-      set({ aiUsageSummary: null });
-    }
+    const projectId = get().project?.id;
+    await commitLatestAiUsage(() => api.getAiUsageSummary(projectId));
   },
   async createProject(input) {
     set({ busy: "创建项目中", error: null });

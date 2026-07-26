@@ -116,6 +116,15 @@ is_placeholder() {
   return 1
 }
 
+is_disabled_boolean() {
+  local value
+  value="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    false|0|no|off) return 0 ;;
+  esac
+  return 1
+}
+
 db_name_from_url() {
   local url="$1"
   local path
@@ -371,6 +380,25 @@ validate_deploy_platform() {
   fi
 }
 
+validate_production_auth() {
+  local local_login show_demo_presets
+
+  local_login="$(env_get "$ENV_FILE" "AUTH_LOCAL_LOGIN_ENABLED" || true)"
+  show_demo_presets="$(env_get "$ENV_FILE" "AUTH_SHOW_DEMO_PRESETS" || true)"
+
+  if is_disabled_boolean "$local_login"; then
+    ok "生产测试账号登录已关闭"
+  else
+    fail "生产部署禁止启用 AUTH_LOCAL_LOGIN_ENABLED"
+  fi
+
+  if is_disabled_boolean "$show_demo_presets"; then
+    ok "生产登录页测试账号入口已关闭"
+  else
+    fail "生产部署禁止启用 AUTH_SHOW_DEMO_PRESETS"
+  fi
+}
+
 detect_stale_legacy_files() {
   local found=0
   for legacy in \
@@ -432,6 +460,7 @@ validate_deploy_env() {
   validate_db_password
   validate_secrets_and_keys
   validate_deploy_platform
+  validate_production_auth
   echo ""
   detect_stale_legacy_files
   echo ""

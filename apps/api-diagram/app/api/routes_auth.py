@@ -450,10 +450,23 @@ async def captcha_challenge():
 @router.get("/auth/captcha-config")
 async def captcha_config():
     """Return public auth config — frontend auto-selects provider."""
-    return {
+    show_demo_presets = settings.AUTH_LOCAL_LOGIN_ENABLED and settings.AUTH_SHOW_DEMO_PRESETS
+    payload = {
         "provider": "altcha",
         "challenge_url": "/api/auth/captcha-challenge",
         "turnstile_site_key": "",
         "enabled": settings.AUTH_REGISTRATION_ENABLED,
-        "show_demo_presets": settings.AUTH_SHOW_DEMO_PRESETS,
+        "show_demo_presets": show_demo_presets,
     }
+    if show_demo_presets:
+        payload["demo_presets"] = {
+            "user": {
+                "email": settings.AUTH_DEMO_USER_EMAIL,
+                "password": settings.AUTH_DEMO_USER_PASSWORD,
+            },
+            "admin": {
+                "email": settings.AUTH_DEMO_ADMIN_EMAIL,
+                "password": settings.AUTH_DEMO_ADMIN_PASSWORD,
+            },
+        }
+    return payload

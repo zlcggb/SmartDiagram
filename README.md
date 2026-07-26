@@ -163,9 +163,12 @@ AI_PROVIDER=mock
 #### 生产环境建议额外修改
 
 ```env
+AUTH_LOCAL_LOGIN_ENABLED=false
 AUTH_SHOW_DEMO_PRESETS=false
 GATEWAY_PORT=9237
 ```
+
+`AUTH_LOCAL_LOGIN_ENABLED` 与 `AUTH_SHOW_DEMO_PRESETS` 只供本机演示；生产部署校验会拒绝开启，避免测试账号及管理员入口暴露到公网。
 
 ---
 

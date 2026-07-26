@@ -24,17 +24,6 @@ export interface AuthSession {
 
 const AUTH_STORAGE_KEY = 'smartdiagram.auth.session';
 
-export const DEMO_LOGIN_HINTS = {
-  user: {
-    email: 'user@smartdiagram.local',
-    password: 'user123456',
-  },
-  admin: {
-    email: 'admin@smartdiagram.local',
-    password: 'admin123456',
-  },
-};
-
 export function readAuthSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
   const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
@@ -177,6 +166,7 @@ export interface CaptchaConfig {
   turnstile_site_key: string; // Turnstile site key (empty = disabled)
   enabled: boolean;
   show_demo_presets: boolean;
+  demo_presets?: Record<'user' | 'admin', { email: string; password: string }>;
 }
 
 export async function fetchCaptchaConfig(): Promise<CaptchaConfig> {

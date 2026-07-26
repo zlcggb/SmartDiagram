@@ -60,7 +60,7 @@ class Settings:
     WORKER_JOB_LOCK_TTL_SECONDS: int = int(os.getenv("WORKER_JOB_LOCK_TTL_SECONDS", "1800"))
 
     # Local auth gateway
-    AUTH_LOCAL_LOGIN_ENABLED: bool = os.getenv("AUTH_LOCAL_LOGIN_ENABLED", "true").lower() == "true"
+    AUTH_LOCAL_LOGIN_ENABLED: bool = os.getenv("AUTH_LOCAL_LOGIN_ENABLED", "false").lower() == "true"
     AUTH_REGISTRATION_ENABLED: bool = os.getenv("AUTH_REGISTRATION_ENABLED", "true").lower() == "true"
     AUTH_SESSION_SECRET: str = os.getenv(
         "AUTH_SESSION_SECRET",
@@ -72,10 +72,7 @@ class Settings:
     AUTH_DEMO_ADMIN_EMAIL: str = os.getenv("AUTH_DEMO_ADMIN_EMAIL", "admin@smartdiagram.local")
     AUTH_DEMO_ADMIN_PASSWORD: str = os.getenv("AUTH_DEMO_ADMIN_PASSWORD", "admin123456")
     # Comma-separated emails allowed to access /api/platform/* (cross-tenant user center)
-    PLATFORM_ADMIN_EMAILS: str = os.getenv(
-        "PLATFORM_ADMIN_EMAILS",
-        os.getenv("AUTH_DEMO_ADMIN_EMAIL", "admin@smartdiagram.local"),
-    )
+    PLATFORM_ADMIN_EMAILS: str = os.getenv("PLATFORM_ADMIN_EMAILS", "")
 
     # ALTCHA (self-hosted Proof-of-Work CAPTCHA — fallback for restricted regions)
     ALTCHA_HMAC_KEY: str = os.getenv("ALTCHA_HMAC_KEY", "smartdiagram-dev-altcha-hmac-key-change-me")
@@ -91,7 +88,7 @@ class Settings:
     AUTH_RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60"))
 
     # Show demo user presets on login page (disable for production)
-    AUTH_SHOW_DEMO_PRESETS: bool = os.getenv("AUTH_SHOW_DEMO_PRESETS", "true").lower() == "true"
+    AUTH_SHOW_DEMO_PRESETS: bool = os.getenv("AUTH_SHOW_DEMO_PRESETS", "false").lower() == "true"
 
     # Unified guest sessions (Diagram + PPT)
     GUEST_SESSION_ENABLED: bool = os.getenv("GUEST_SESSION_ENABLED", "true").lower() == "true"

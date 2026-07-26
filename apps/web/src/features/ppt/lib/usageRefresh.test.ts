@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { startAiUsageAutoRefresh } from "./usageRefresh.ts";
+import { createLatestAsyncCommit, startAiUsageAutoRefresh } from "./usageRefresh.ts";
 
 test("refreshes once immediately while idle without starting a timer", async () => {
   let refreshCount = 0;
@@ -54,4 +54,20 @@ test("does not leak rejected refresh promises", async () => {
 
   await new Promise((resolve) => setTimeout(resolve, 0));
   cleanup();
+});
+
+test("only commits the newest overlapping refresh result", async () => {
+  const commits: number[] = [];
+  const resolvers: Array<(value: number) => void> = [];
+  const refresh = createLatestAsyncCommit<number>((value) => commits.push(value));
+
+  const first = refresh(() => new Promise<number>((resolve) => resolvers.push(resolve)));
+  const second = refresh(() => new Promise<number>((resolve) => resolvers.push(resolve)));
+
+  resolvers[1]?.(2);
+  await second;
+  resolvers[0]?.(1);
+  await first;
+
+  assert.deepEqual(commits, [2]);
 });

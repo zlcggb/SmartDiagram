@@ -533,3 +533,27 @@ def test_web_uses_current_backend_service_and_deploy_verifies_the_spa() -> None:
     assert "healthcheck:" in web_block
     assert "web:\n        condition: service_healthy" in gateway_block
     assert 'wait_for_url "统一前端" "http://127.0.0.1:${gateway_port}/"' in deploy
+
+
+def test_production_deploy_disables_demo_login_by_default() -> None:
+    config = (REPO_ROOT / "apps" / "api-diagram" / "app" / "core" / "config.py").read_text(
+        encoding="utf-8"
+    )
+    example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    validator = (REPO_ROOT / "scripts" / "validate-deploy-env.sh").read_text(encoding="utf-8")
+    auth_client = (REPO_ROOT / "apps" / "web" / "src" / "shared" / "lib" / "config" / "auth.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'os.getenv("AUTH_LOCAL_LOGIN_ENABLED", "false")' in config
+    assert 'os.getenv("AUTH_SHOW_DEMO_PRESETS", "false")' in config
+    assert 'PLATFORM_ADMIN_EMAILS: str = os.getenv("PLATFORM_ADMIN_EMAILS", "")' in config
+    assert "AUTH_LOCAL_LOGIN_ENABLED=false" in example
+    assert "AUTH_SHOW_DEMO_PRESETS=false" in example
+    assert "\nPLATFORM_ADMIN_EMAILS=\n" in example
+    assert "validate_production_auth" in validator
+    assert validator.count("validate_production_auth") >= 2
+    assert 'fail "生产部署禁止启用 AUTH_LOCAL_LOGIN_ENABLED"' in validator
+    assert 'fail "生产部署禁止启用 AUTH_SHOW_DEMO_PRESETS"' in validator
+    assert "user@smartdiagram.local" not in auth_client
+    assert "admin123456" not in auth_client
