@@ -367,4 +367,4 @@ PPT：浏览器打开 `/ppt` 进入工作台。
 
 ## 📄 许可证
 
-[MIT License](./LICENSE)
+本项目采用 [GNU Affero General Public License v3.0 (AGPL-3.0)](./LICENSE) 协议开源。

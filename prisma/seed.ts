@@ -16,7 +16,7 @@ async function main() {
       audience: "客户信息化负责人、销售总监、项目管理办公室",
       purpose: "说明本周进展、交付风险、待确认事项与下周计划",
       pageCount: 6,
-      theme: "unilumin-blue",
+      theme: "white-blue",
       sourceTexts: {
         create: {
           content: demoSourceText

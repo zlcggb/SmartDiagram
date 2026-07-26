@@ -24,7 +24,7 @@ function setting(name: string, fallback = "") {
 export function ttsRuntimeStatus() {
   return {
     configured: Boolean(setting("TTS_API_KEY")),
-    baseUrl: setting("TTS_API_BASE_URL", "https://tts.zlcggb.com"),
+    baseUrl: setting("TTS_API_BASE_URL", "https://api.example.com/tts"),
     model: setting("TTS_DEFAULT_MODEL", "gemini-3.1-flash-tts-preview"),
     voice: setting("TTS_DEFAULT_VOICE", "Kore"),
     languageCode: setting("TTS_LANGUAGE_CODE", "cmn-CN")
@@ -33,7 +33,7 @@ export function ttsRuntimeStatus() {
 
 export async function ttsCatalog() {
   const apiKey = setting("TTS_API_KEY");
-  const baseUrl = setting("TTS_API_BASE_URL", "https://tts.zlcggb.com").replace(/\/+$/, "");
+  const baseUrl = setting("TTS_API_BASE_URL", "https://api.example.com/tts").replace(/\/+$/, "");
   if (!apiKey) return { voices: fallbackVoices, models: fallbackModels };
   try {
     const response = await fetch(`${baseUrl}/v1/tts/models`, {
@@ -60,7 +60,7 @@ function wait(ms: number) {
 export async function synthesizeToFile(text: string, outputPath: string, options: TtsOptions = {}) {
   const apiKey = setting("TTS_API_KEY");
   if (!apiKey) throw new Error("未配置 TTS_API_KEY");
-  const baseUrl = setting("TTS_API_BASE_URL", "https://tts.zlcggb.com").replace(/\/+$/, "");
+  const baseUrl = setting("TTS_API_BASE_URL", "https://api.example.com/tts").replace(/\/+$/, "");
   const payload = {
     text,
     voice: options.voice || setting("TTS_DEFAULT_VOICE", "Kore"),

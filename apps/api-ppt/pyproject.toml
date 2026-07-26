@@ -3,6 +3,7 @@ name = "ppt-agent-api"
 version = "0.1.0"
 description = "FastAPI gateway and LangGraph orchestration backend for PPT Agent"
 requires-python = ">=3.11"
+license = "AGPL-3.0-only"
 dependencies = [
   "fastapi>=0.115,<1.0",
   "httpx>=0.28,<1.0",

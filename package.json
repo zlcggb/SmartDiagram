@@ -3,6 +3,7 @@
     "version": "0.2.0",
     "private": true,
     "description": "SmartDiagram AI — 用自然语言生成专业图表",
+    "license": "AGPL-3.0-only",
     "scripts": {
         "dev": "bash dev.sh",
         "dev:gateway": "bash start-all.sh",

@@ -18,7 +18,7 @@ model Project {
   audience     String
   purpose      String
   pageCount    Int           @default(6)
-  theme        String        @default("unilumin-blue")
+  theme        String        @default("white-blue")
   presentationStyle String    @default("consulting")
   mode         String        @default("paste")
   topic        String?

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "SmartDiagram AI - Intelligent Visualization Platform Backend"
 readme = "README.md"
 requires-python = ">=3.12"
-license = "MIT"
+license = "AGPL-3.0-only"
 dependencies = [
     "asyncpg>=0.31.0",
     "fastapi>=0.115.0",
