@@ -135,7 +135,11 @@ services:
     volumes:
       - knowledgedata:/app/storage
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f run_enterprise_workers.py >/dev/null || exit 1"]
+      test:
+        - CMD
+        - python
+        - -c
+        - "from pathlib import Path; command = Path('/proc/1/cmdline').read_bytes(); raise SystemExit(0 if b'run_enterprise_workers.py' in command else 1)"
       interval: 30s
       timeout: 5s
       retries: 3

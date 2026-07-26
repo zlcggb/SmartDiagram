@@ -508,3 +508,14 @@ def test_worker_deployment_scripts_exist_and_deploy_verifies_them() -> None:
     assert "run_enterprise_workers.py" in compose
     assert "worker-local.sh" in package
     assert "worker:verify" in package
+
+
+def test_worker_liveness_checks_do_not_require_procps() -> None:
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    verify_script = (REPO_ROOT / "scripts" / "verify-worker-deployment.sh").read_text(encoding="utf-8")
+    worker_block = compose[compose.index("  worker:") : compose.index("\n  web:")]
+
+    assert "pgrep" not in worker_block
+    assert "pgrep" not in verify_script
+    assert "/proc/1/cmdline" in worker_block
+    assert "/proc/1/cmdline" in verify_script

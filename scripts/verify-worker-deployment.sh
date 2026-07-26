@@ -75,8 +75,10 @@ PY
 ok "API /health 报告 Redis 依赖正常"
 
 info "检查 worker 进程..."
-if ! docker compose --profile worker exec -T worker pgrep -f run_enterprise_workers.py >/dev/null 2>&1; then
-  fail "worker 容器内未找到 run_enterprise_workers.py 进程"
+if ! docker compose --profile worker exec -T worker python -c \
+  "from pathlib import Path; command = Path('/proc/1/cmdline').read_bytes(); raise SystemExit(0 if b'run_enterprise_workers.py' in command else 1)" \
+  >/dev/null 2>&1; then
+  fail "worker 容器 PID 1 不是预期的 run_enterprise_workers.py 进程"
 fi
 ok "worker 主进程存在"
 
