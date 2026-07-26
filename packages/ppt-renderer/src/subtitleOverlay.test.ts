@@ -57,7 +57,8 @@ test("brand-accent 使用紧凑胶囊和橙色品牌短线", () => {
 
 test("renderSubtitleOverlayPng 使用指定中文字体生成透明 PNG", () => {
   const outputPath = path.join(os.tmpdir(), `ppt-subtitle-${Date.now()}.png`);
-  const fontPath = path.resolve("apps/service-ppt-renderer/assets/fonts/NotoSansCJKsc-Regular.otf");
+  const workspaceRoot = path.resolve(import.meta.dirname, "../../..");
+  const fontPath = path.join(workspaceRoot, "apps/service-ppt-renderer/assets/fonts/NotoSansCJKsc-Regular.otf");
   try {
     renderSubtitleOverlayPng("这是一段测试字幕，用来检查中文字体。", outputPath, {
       width: 1920,

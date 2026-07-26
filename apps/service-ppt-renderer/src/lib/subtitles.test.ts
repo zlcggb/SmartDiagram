@@ -3,8 +3,8 @@ import test from "node:test";
 import { videoExportSchema } from "@ppt-agent/shared";
 import { buildSubtitleCues, splitSubtitleText, subtitleCuesToSrt } from "./subtitles.js";
 
-test("videoExportSchema 校验字幕样式并默认使用轻描边", () => {
-  assert.equal(videoExportSchema.parse({}).subtitleStyle, "minimal-outline");
+test("videoExportSchema 校验字幕样式并默认使用柔和胶囊", () => {
+  assert.equal(videoExportSchema.parse({}).subtitleStyle, "soft-capsule");
   assert.equal(videoExportSchema.parse({ subtitleStyle: "brand-accent" }).subtitleStyle, "brand-accent");
   assert.throws(() => videoExportSchema.parse({ subtitleStyle: "giant-banner" }));
 });

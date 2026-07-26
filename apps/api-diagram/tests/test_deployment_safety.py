@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -148,6 +149,70 @@ def test_deploy_prunes_only_current_project_unused_images_above_85_percent() -> 
 
     assert "docker volume prune" not in script
     assert "docker system prune --volumes" not in script
+
+
+def test_release_verification_builds_every_production_typescript_target() -> None:
+    package_json = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))
+    verify_script = (REPO_ROOT / "scripts" / "verify-release.sh").read_text(encoding="utf-8")
+
+    assert package_json["scripts"]["verify:release"] == "bash scripts/verify-release.sh"
+    assert "test:typescript" in verify_script
+    assert "test:python" in verify_script
+    for package_name in (
+        "@ppt-agent/shared",
+        "@ppt-agent/ppt-renderer",
+        "@ppt-agent/agents",
+        "@ppt-agent/api",
+        "@smartdiagram/web",
+    ):
+        assert f"--filter {package_name} build" in verify_script
+
+
+def test_deploy_completes_the_release_build_before_creating_a_backup() -> None:
+    script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
+    deploy_body = script[script.index("deploy() {") : script.index("backup_only() {")]
+
+    disk_check_at = deploy_body.index("require_deploy_disk_headroom")
+    pull_at = deploy_body.index("prefetch_runtime_images")
+    build_at = deploy_body.index("build_application_images")
+    backup_at = deploy_body.index("backup_data")
+    migrate_at = deploy_body.index("migrate_databases")
+    assert disk_check_at < pull_at < build_at < backup_at < migrate_at
+    assert deploy_body.count("require_deploy_disk_headroom") == 2
+    assert "COMPOSE_PARALLEL_LIMIT" in deploy_body
+
+
+def test_deploy_defaults_to_strictly_sequential_service_builds() -> None:
+    script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
+
+    assert 'DEPLOY_BUILD_PARALLEL_LIMIT="${DEPLOY_BUILD_PARALLEL_LIMIT:-1}"' in script
+    assert "build_application_images()" in script
+    assert 'if [ "$DEPLOY_BUILD_PARALLEL_LIMIT" -eq 1 ]; then' in script
+    assert "api-diagram web ppt-node-api ppt-python-api gateway" in script
+    assert 'if [ "$WITH_WORKER" = true ]; then' in script
+    assert 'compose build "${build_args[@]}" "$service"' in script
+
+
+def test_deploy_prefetches_non_buildable_runtime_images_before_backup() -> None:
+    script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
+
+    assert "prefetch_runtime_images()" in script
+    assert "compose pull --ignore-buildable --policy missing" in script
+
+
+def test_debian_build_steps_retry_transient_package_download_failures() -> None:
+    for relative_path in ("Dockerfile", "apps/web/Dockerfile", "gateway/Dockerfile"):
+        dockerfile = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+        assert "Acquire::Retries=5" in dockerfile, relative_path
+
+
+def test_ppt_node_build_receives_the_detected_cn_mirror_setting() -> None:
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    ppt_node_block = compose[compose.index("  ppt-node-api:") : compose.index("  ppt-python-api:")]
+
+    assert "ARG CN_MIRROR" in dockerfile
+    assert "CN_MIRROR: ${CN_MIRROR:-false}" in ppt_node_block
 
 
 def test_deploy_script_never_removes_named_volumes() -> None:

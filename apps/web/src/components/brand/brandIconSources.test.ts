@@ -9,8 +9,8 @@ function source(path: string) {
 }
 
 test("Dock and desktop module artwork use shared SVG marks instead of legacy PNG files", () => {
-  const macIcons = source("components/macos/MacOSIcons.tsx");
-  const appShell = source("components/shell/AppShell.tsx");
+  const macIcons = source("shared/ui/macos/MacOSIcons.tsx");
+  const appShell = source("shared/ui/shell/AppShell.tsx");
 
   assert.match(macIcons, /SmartDiagramIconMark/);
   assert.match(macIcons, /PptAgentIconMark/);
@@ -22,15 +22,15 @@ test("Dock and desktop module artwork use shared SVG marks instead of legacy PNG
 });
 
 test("PPT page branding delegates to the same mark used by the shell", () => {
-  const pptLogo = source("ppt/components/AppLogo.tsx");
+  const pptLogo = source("features/ppt/components/AppLogo.tsx");
 
   assert.match(pptLogo, /import \{ PptAgentIconMark \}/);
   assert.match(pptLogo, /<PptAgentIconMark/);
 });
 
 test("SmartDiagram brand surfaces reuse the shared purple pen mark", () => {
-  const canvasPanel = source("components/layout/CanvasPanel.tsx");
-  const chatPanel = source("components/chat/ChatPanel.tsx");
+  const canvasPanel = source("features/diagram/ui/layout/CanvasPanel.tsx");
+  const chatPanel = source("features/diagram/ui/chat/ChatPanel.tsx");
 
   assert.match(canvasPanel, /import \{ SmartDiagramIconMark \}/);
   assert.doesNotMatch(canvasPanel, /<PenTool/);

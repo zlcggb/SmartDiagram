@@ -51,26 +51,23 @@ test("示例环境声明主 Material Gateway 和批处理预算", () => {
 test("生产启动会先执行纯增量 migration，并检查材料表已初始化", () => {
   const dockerfile = fs.readFileSync(path.join(workspaceRoot, "Dockerfile"), "utf8");
   const prismaSource = fs.readFileSync(
-    path.join(workspaceRoot, "apps/api/src/lib/prisma.ts"),
+    path.join(workspaceRoot, "apps/service-ppt-renderer/src/lib/prisma.ts"),
     "utf8"
   );
 
-  assert.match(dockerfile, /apply-migrations\.ts[\s\S]*?node apps\/api\/dist\/index\.js/);
+  assert.match(dockerfile, /apply-migrations\.ts[\s\S]*?node apps\/service-ppt-renderer\/dist\/index\.js/);
   assert.match(prismaSource, /prisma\.projectMaterial\.count\(\)/);
   assert.match(prismaSource, /evidenceJson/);
 });
 
 test("本地 API 启动也会先执行 migration", () => {
-  const packageJson = JSON.parse(fs.readFileSync(path.join(workspaceRoot, "package.json"), "utf8")) as {
-    scripts: Record<string, string>;
-  };
+  const devCommon = fs.readFileSync(path.join(workspaceRoot, "scripts/dev-common.sh"), "utf8");
 
-  assert.match(packageJson.scripts["dev:api"] ?? "", /db:migrate/);
-  assert.match(packageJson.scripts["dev:legacy-api"] ?? "", /db:migrate/);
+  assert.match(devCommon, /prepare_ppt_stack\(\)[\s\S]*?prisma\/apply-migrations\.ts/);
 });
 
 test("Compose 首次启动会自动创建 PPT 数据库，再启动 migration", () => {
-  const compose = fs.readFileSync(path.resolve(workspaceRoot, "../docker-compose.yml"), "utf8");
+  const compose = fs.readFileSync(path.join(workspaceRoot, "docker-compose.yml"), "utf8");
 
   assert.match(compose, /ppt-db-init:/);
   assert.match(compose, /pg_database[\s\S]*?ppt_agent/);

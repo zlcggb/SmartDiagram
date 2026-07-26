@@ -44,7 +44,8 @@ export function evaluatePasswordStrength(password: string): PasswordStrengthResu
   return { level: "strong", score: 4, checks };
 }
 
-export const passwordStrengthBarColors: Record<Exclude<PasswordStrengthLevel, "empty">, string> = {
+export const passwordStrengthBarColors: Record<PasswordStrengthLevel, string> = {
+  empty: "bg-slate-200",
   weak: "bg-rose-500",
   fair: "bg-amber-500",
   good: "bg-blue-500",

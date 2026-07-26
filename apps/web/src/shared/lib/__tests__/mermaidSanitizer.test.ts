@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { normalizeMermaidCode, balanceBlocks } from '../mermaidSanitizer';
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { normalizeMermaidCode, balanceBlocks } from '../mermaidSanitizer.ts';
 
 describe('balanceBlocks', () => {
   it('移除多余的 end（用户报告的原始 bug）', () => {
@@ -19,7 +20,7 @@ end`;
     const result = balanceBlocks(code);
     // 应该只有 2 个 end（对应 2 个 alt），第 3 个多余的 end 被移除
     const endCount = result.split('\n').filter(l => l.trim() === 'end').length;
-    expect(endCount).toBe(2);
+    assert.equal(endCount, 2);
   });
 
   it('补全缺失的 end（流式生成场景）', () => {
@@ -30,7 +31,7 @@ end`;
         A->>B: 其他消息`;
     const result = balanceBlocks(code);
     const endCount = result.split('\n').filter(l => l.trim() === 'end').length;
-    expect(endCount).toBe(1);
+    assert.equal(endCount, 1);
   });
 
   it('移除孤立的 else（不在 alt 内）', () => {
@@ -39,7 +40,7 @@ end`;
     else 这是孤立的
     B-->>A: 回复`;
     const result = balanceBlocks(code);
-    expect(result).not.toContain('else');
+    assert.equal(result.includes('else'), false);
   });
 
   it('处理嵌套的 loop + alt 混合', () => {
@@ -53,10 +54,10 @@ end`;
     end`;
     const result = balanceBlocks(code);
     const endCount = result.split('\n').filter(l => l.trim() === 'end').length;
-    expect(endCount).toBe(2);
+    assert.equal(endCount, 2);
     // 确保内容完整保留
-    expect(result).toContain('loop 每天');
-    expect(result).toContain('alt 条件');
+    assert.ok(result.includes('loop 每天'));
+    assert.ok(result.includes('alt 条件'));
   });
 
   it('处理 flowchart subgraph 的多余 end', () => {
@@ -67,14 +68,14 @@ end`;
 end`;
     const result = balanceBlocks(code);
     const endCount = result.split('\n').filter(l => l.trim() === 'end').length;
-    expect(endCount).toBe(1);
+    assert.equal(endCount, 1);
   });
 
   it('不影响无块关键字的图表', () => {
     const code = `erDiagram
     USER ||--o{ ORDER : places
     ORDER ||--|{ LINE_ITEM : contains`;
-    expect(balanceBlocks(code)).toBe(code);
+    assert.equal(balanceBlocks(code), code);
   });
 });
 
@@ -84,7 +85,7 @@ describe('normalizeMermaidCode', () => {
     A->>B: 消息;
     B-->>A: 回复;`;
     const result = normalizeMermaidCode(code);
-    expect(result).not.toMatch(/;$/m);
+    assert.doesNotMatch(result, /;$/m);
   });
 
   it('保留 classDef 行中的分号', () => {
@@ -92,7 +93,7 @@ describe('normalizeMermaidCode', () => {
     A --> B
     classDef red fill:#f00,stroke:#333,stroke-width:2px;`;
     const result = normalizeMermaidCode(code);
-    expect(result).toContain('stroke-width:2px;');
+    assert.ok(result.includes('stroke-width:2px;'));
   });
 
   it('去重 autonumber', () => {
@@ -102,7 +103,7 @@ describe('normalizeMermaidCode', () => {
     A->>B: 消息`;
     const result = normalizeMermaidCode(code);
     const autonumberCount = result.split('\n').filter(l => l.trim() === 'autonumber').length;
-    expect(autonumberCount).toBe(1);
+    assert.equal(autonumberCount, 1);
   });
 
   it('去重 participant 声明', () => {
@@ -113,13 +114,13 @@ describe('normalizeMermaidCode', () => {
     A->>B: 消息`;
     const result = normalizeMermaidCode(code);
     const partCount = result.split('\n').filter(l => l.trim().startsWith('participant A')).length;
-    expect(partCount).toBe(1);
+    assert.equal(partCount, 1);
   });
 
   it('处理 Windows 换行符', () => {
     const code = "sequenceDiagram\r\n    A->>B: 消息\r\n    B-->>A: 回复";
     const result = normalizeMermaidCode(code);
-    expect(result).not.toContain('\r');
+    assert.equal(result.includes('\r'), false);
   });
 
   it('折叠多余空行', () => {
@@ -132,14 +133,14 @@ describe('normalizeMermaidCode', () => {
 
     B-->>A: 回复`;
     const result = normalizeMermaidCode(code);
-    expect(result).not.toMatch(/\n{3,}/);
+    assert.doesNotMatch(result, /\n{3,}/);
   });
 
   it('移除代码围栏', () => {
     const code = '```mermaid\nsequenceDiagram\n    A->>B: hi\n```';
     const result = normalizeMermaidCode(code);
-    expect(result).not.toContain('```');
-    expect(result).toContain('sequenceDiagram');
+    assert.equal(result.includes('```'), false);
+    assert.ok(result.includes('sequenceDiagram'));
   });
 
   it('综合场景：用户报告的完整序列图', () => {
@@ -167,10 +168,10 @@ end`;
     // 不应抛异常，多余的 end 应被移除
     const result = normalizeMermaidCode(code);
     const endCount = result.split('\n').filter(l => l.trim() === 'end').length;
-    expect(endCount).toBe(2);
+    assert.equal(endCount, 2);
     // 核心内容完整
-    expect(result).toContain('终端用户');
-    expect(result).toContain('输入违反安全策略');
-    expect(result).toContain('输出合规');
+    assert.ok(result.includes('终端用户'));
+    assert.ok(result.includes('输入违反安全策略'));
+    assert.ok(result.includes('输出合规'));
   });
 });

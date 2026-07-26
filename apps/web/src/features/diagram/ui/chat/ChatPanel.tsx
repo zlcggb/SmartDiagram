@@ -3040,7 +3040,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
               textOverflow: 'ellipsis',
             }}>
               {guestExhausted
-                ? `${t('guest.quotaExhausted')}${guestQuota.resetAt ? ` · ${t('guest.resetIn', { time: formatResetTime(guestQuota.resetAt) })}` : ''}`
+                ? `${t('guest.quotaExhausted')}${guestQuota.nextAvailableAt ? ` · ${t('guest.resetIn', { time: formatResetTime(guestQuota.nextAvailableAt) })}` : ''}`
                 : t('guest.quotaRemaining', { remaining: guestQuota.remaining, total: guestQuota.total })
               }
             </span>

@@ -9,7 +9,8 @@ RUN if [ "$CN_MIRROR" = "true" ]; then \
         sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null; \
     fi
 
-RUN apt-get update && apt-get install -y nginx && \
+RUN apt-get -o Acquire::Retries=5 update && \
+    apt-get -o Acquire::Retries=5 install -y nginx && \
     rm -rf /var/lib/apt/lists/* && \
     rm -f /etc/nginx/sites-enabled/default
 

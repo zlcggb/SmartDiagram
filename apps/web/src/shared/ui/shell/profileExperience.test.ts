@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const authSource = readFileSync(new URL("../../config/auth.ts", import.meta.url), "utf8");
+const authSource = readFileSync(new URL("../../lib/config/auth.ts", import.meta.url), "utf8");
 const authStoreSource = readFileSync(new URL("../../store/authStore.ts", import.meta.url), "utf8");
 const desktopStoreSource = readFileSync(new URL("../../store/desktopStore.ts", import.meta.url), "utf8");
 const shellSource = readFileSync(new URL("./AppShell.tsx", import.meta.url), "utf8");
-const profileWindowSource = readFileSync(new URL("../profile/ProfileWindow.tsx", import.meta.url), "utf8");
-const homeSource = readFileSync(new URL("../../pages/HomePage.tsx", import.meta.url), "utf8");
+const profileWindowSource = readFileSync(new URL("../../../features/profile/ProfileWindow.tsx", import.meta.url), "utf8");
+const homeSource = readFileSync(new URL("../../../pages/home/HomePage.tsx", import.meta.url), "utf8");
 
 test("profile updates persist the renewed user and avatar in the shared session", () => {
   assert.match(authSource, /avatar_url\?:\s*string\s*\|\s*null/);

@@ -4,9 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { ensureSubtitleFonts, subtitleFontsSourceDir } from "./subtitleFonts.js";
+import { workspaceRoot } from "./paths.js";
 
 test("字幕字体源位于 API 运行资产目录", () => {
-  assert.equal(subtitleFontsSourceDir, path.resolve("apps/service-ppt-renderer/assets/fonts"));
+  assert.equal(subtitleFontsSourceDir, path.join(workspaceRoot, "apps/service-ppt-renderer/assets/fonts"));
   assert.ok(!subtitleFontsSourceDir.includes(`${path.sep}docs${path.sep}`));
   assert.ok(fs.existsSync(path.join(subtitleFontsSourceDir, "NotoSansCJKsc-Regular.otf")));
   assert.ok(fs.existsSync(path.join(subtitleFontsSourceDir, "NotoSansCJK_LICENSE.txt")));

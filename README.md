@@ -202,7 +202,11 @@ npm run env:merge-legacy
 - ✅ 自动生成项已就绪
 - ⚠️ 警告项（如演示账号未关闭）不会阻断本地，生产 deploy 会提示
 
-**`./deploy.sh` 在备份和构建前也会自动跑同一套检查**；不通过则不会构建镜像。
+**`./deploy.sh` 在构建和备份前也会自动跑同一套检查**；不通过则不会构建镜像。
+
+提交或部署前可执行 `npm run verify:release`。它会先运行 TypeScript 与 Python 全量自动化测试，再按生产镜像依赖顺序构建全部 TypeScript workspace 和统一前端；任何一步失败都会停止，不应继续部署。
+
+部署脚本默认要求宿主根分区和项目分区各至少保留 10 GiB，并按应用服务严格串行构建，避免并发下载把 Docker 存储层打满。高配置服务器可把 `DEPLOY_BUILD_PARALLEL_LIMIT` 调为大于 `1` 以启用批量构建；磁盘安全线可通过 `DEPLOY_MIN_FREE_GB` 调整，但不建议降低。
 
 手动查看关键项：
 
@@ -289,7 +293,7 @@ cd /opt/SmartDiagram
 # 可选：备份当前 .env
 cp .env .env.backup.$(date +%Y%m%d)
 
-# 一条命令：拉代码 → 校验 env → 备份数据库 → 迁移 → 构建 → 重启 → 健康检查
+# 一条命令：拉代码 → 校验 env → 构建预检 → 备份数据库 → 迁移 → 重启 → 健康检查
 ./deploy.sh --update --with-worker
 ```
 

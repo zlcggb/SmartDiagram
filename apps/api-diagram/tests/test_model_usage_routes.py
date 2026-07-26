@@ -78,10 +78,14 @@ def test_ingest_derives_identity_and_is_idempotent(monkeypatch):
     client, _ = _client(monkeypatch)
     captured = []
 
+    async def pricing(_session, _env_raw):
+        return {"model-a": {"input": 0.1, "output": 0.2, "cache": 0.05, "currency": "CNY"}}
+
     async def persist(_session, *, tenant_id, user_id, payload, pricing):
         captured.append((tenant_id, user_id, payload, pricing))
         return {"id": "row-1", "external_event_id": payload["external_event_id"]}, len(captured) == 1
 
+    monkeypatch.setattr(routes_billing, "resolve_model_pricing", pricing)
     monkeypatch.setattr(routes_billing, "persist_model_usage_event", persist)
 
     headers = {
@@ -98,6 +102,7 @@ def test_ingest_derives_identity_and_is_idempotent(monkeypatch):
     assert captured[0][0:2] == ("tenant-1", "user-1")
     assert captured[0][2].get("tenant_id") is None
     assert captured[0][2].get("user_id") is None
+    assert captured[0][3]["model-a"]["currency"] == "CNY"
 
 
 def test_query_returns_month_project_summary_and_events(monkeypatch):

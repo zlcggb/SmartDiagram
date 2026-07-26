@@ -1,5 +1,5 @@
-import { API_BASE, enterpriseHeaders } from '@/shared/lib/config/enterpriseContext.ts';
-import type { DiagramEngineType, DiagramTaskType } from '@/types/diagram';
+import { API_BASE, enterpriseHeaders } from '../../../shared/lib/config/enterpriseContext.ts';
+import type { DiagramEngineType, DiagramTaskType } from '../../../types/diagram';
 
 export type HistoryAgentProcess = {
   run_id?: string;

@@ -5,19 +5,25 @@
 ARG NODE_IMAGE=node:22-bookworm-slim
 ARG PYTHON_IMAGE=python:3.12-slim-bookworm
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.10.5
+ARG CN_MIRROR=false
 
 # BuildKit 不会可靠展开 COPY --from=${UV_IMAGE}，须先声明命名 stage。
 FROM ${UV_IMAGE} AS uv-bin
 
 FROM ${NODE_IMAGE} AS node-deps
 
+ARG CN_MIRROR
 ENV PNPM_HOME=/pnpm
 ENV PATH=${PNPM_HOME}:${PATH}
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates openssl \
+RUN if [ "$CN_MIRROR" = "true" ]; then \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null; \
+    fi \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable \
     && corepack prepare pnpm@9.15.0 --activate
@@ -45,6 +51,7 @@ RUN pnpm exec prisma generate --schema prisma/schema.prisma \
 
 FROM ${NODE_IMAGE} AS node-api
 
+ARG CN_MIRROR
 ENV NODE_ENV=production
 ENV API_HOST=0.0.0.0
 ENV API_PORT=4010
@@ -52,17 +59,26 @@ ENV STORAGE_DIR=/data/storage
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+RUN set -eux; \
+    if [ "$CN_MIRROR" = "true" ]; then \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null; \
+    fi; \
+    apt-get -o Acquire::Retries=5 update; \
+    attempt=1; \
+    until apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
         ca-certificates \
         curl \
         ffmpeg \
         fontconfig \
         fonts-noto-cjk \
-        openssl \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /data/storage /data/langgraph \
-    && chown -R node:node /data
+        openssl; do \
+        if [ "$attempt" -ge 3 ]; then exit 1; fi; \
+        attempt=$((attempt + 1)); \
+    done; \
+    rm -rf /var/lib/apt/lists/*; \
+    mkdir -p /data/storage /data/langgraph; \
+    chown -R node:node /data
 
 COPY --from=node-build --chown=node:node /app /app
 

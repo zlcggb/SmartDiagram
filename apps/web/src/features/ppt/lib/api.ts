@@ -36,7 +36,7 @@ import type { PageRenderResultWithGrade } from "./exportMode";
 import { collectPageGrades } from "./exportMode";
 import { guestProjectRepository } from "./guestProjectStore";
 import { isPptApiError, PptApiError, shouldUseGuestProjectFallback } from "./pptApiError";
-import { currentPptIdentityHeaders, isPptGuest } from "./pptRequestContext";
+import { createPptRequestHeaders, isPptGuest } from "./pptRequestContext";
 
 export { isPptApiError, PptApiError };
 import { parseModelUsageDashboard, type ModelUsageEventDto } from "./modelUsage";
@@ -215,7 +215,7 @@ export function parseAiUsageSummary(payload: unknown): AiUsageSummary | null {
 async function fetchJsonLoose(apiPath: string): Promise<unknown | null> {
   try {
     const response = await fetch(`${API_BASE}${apiPath}`, {
-      headers: currentPptIdentityHeaders(),
+      headers: createPptRequestHeaders(),
       credentials: "include"
     });
     if (!response.ok) return null;
@@ -234,17 +234,10 @@ async function requestWith<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
-  const headers =
-    options.body === undefined || isFormData
-      ? {
-          ...currentPptIdentityHeaders(),
-          ...options.headers
-        }
-      : {
-          "Content-Type": "application/json",
-          ...currentPptIdentityHeaders(),
-          ...options.headers
-        };
+  const headers = createPptRequestHeaders({
+    headers: options.headers,
+    includeJsonContentType: options.body !== undefined && !isFormData,
+  });
 
   const response = await fetcher(`${apiBase}${apiPath}`, {
     ...options,
@@ -583,7 +576,7 @@ export function absoluteDownloadUrl(url: string) {
 /** 触发浏览器下载（导出成功后自动拉文件；兼容相对路径） */
 export async function triggerBrowserDownload(url: string, fileName?: string) {
   const response = await fetch(absoluteDownloadUrl(url), {
-    headers: currentPptIdentityHeaders(),
+    headers: createPptRequestHeaders(),
     credentials: "include"
   });
   if (!response.ok) throw new Error(`下载失败（HTTP ${response.status}）`);

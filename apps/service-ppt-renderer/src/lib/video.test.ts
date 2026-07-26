@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildNarratedClipArgs } from "./video.js";
+import { buildNarratedClipArgs, SUBTITLE_BOTTOM_MARGIN } from "./video.js";
 
 test("buildNarratedClipArgs 为字幕 PNG 生成按时间显示的 overlay 滤镜", () => {
   const args = buildNarratedClipArgs({
@@ -19,7 +19,7 @@ test("buildNarratedClipArgs 为字幕 PNG 生成按时间显示的 overlay 滤�
   const filter = args[args.indexOf("-filter_complex") + 1];
   assert.match(filter || "", /\[2:v\]format=rgba\[subtitle0\]/);
   assert.match(filter || "", /enable='between\(t,0\.100,1\.500\)'/);
-  assert.match(filter || "", /overlay=0:H-h-70:/);
+  assert.ok((filter || "").includes(`overlay=0:H-h-${Math.round(1080 * SUBTITLE_BOTTOM_MARGIN)}:`));
   assert.match(filter || "", /\[video1\]format=yuv420p\[outv\]/);
   assert.deepEqual(args.slice(-4), ["-shortest", "-movflags", "+faststart", "/tmp/clip.mp4"]);
 });

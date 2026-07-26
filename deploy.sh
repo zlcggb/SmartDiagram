@@ -33,6 +33,8 @@ cd "$ROOT_DIR"
 BACKUP_ROOT="${BACKUP_ROOT:-$ROOT_DIR/backups}"
 LAST_BACKUP_DIR=""
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+DEPLOY_MIN_FREE_GB="${DEPLOY_MIN_FREE_GB:-10}"
+DEPLOY_BUILD_PARALLEL_LIMIT="${DEPLOY_BUILD_PARALLEL_LIMIT:-1}"
 PROFILE_ARGS=()
 PAUSED_SERVICES=()
 LEGACY_STORAGE_FILE_COUNT=0
@@ -206,6 +208,27 @@ prune_unused_images_when_disk_is_high() {
 
     remaining_percent="$(root_disk_usage_percent)"
     ok "${project_name} 项目的未使用镜像清理完成，根分区使用率 ${remaining_percent}%"
+}
+
+require_deploy_disk_headroom() {
+    local required_kb available_kb label path entry
+    case "$DEPLOY_MIN_FREE_GB" in
+        ''|*[!0-9]*|0) error "DEPLOY_MIN_FREE_GB 必须是正整数" ;;
+    esac
+    required_kb=$((DEPLOY_MIN_FREE_GB * 1024 * 1024))
+
+    for entry in "宿主根分区:/" "项目分区:$ROOT_DIR"; do
+        label="${entry%%:*}"
+        path="${entry#*:}"
+        available_kb="$(df -Pk "$path" | awk 'NR == 2 { print $4 }')"
+        case "$available_kb" in
+            ''|*[!0-9]*) error "无法读取${label}可用空间，已停止部署" ;;
+        esac
+        if [ "$available_kb" -lt "$required_kb" ]; then
+            error "${label}可用空间不足 ${DEPLOY_MIN_FREE_GB} GiB，已在构建、备份和迁移前停止。请先清理未使用的构建缓存或扩容"
+        fi
+    done
+    ok "部署磁盘余量检查通过（至少 ${DEPLOY_MIN_FREE_GB} GiB）"
 }
 
 # ── 检查 .env（合并旧文件 + 双库/密钥校验） ──
@@ -541,6 +564,36 @@ verify_deployment() {
     verify_worker_deployment
 }
 
+prefetch_runtime_images() {
+    info "预拉取数据库、Redis、Drawio 等非构建镜像..."
+    compose pull --ignore-buildable --policy missing
+}
+
+build_application_images() {
+    local build_args=()
+    local services=(api-diagram web ppt-node-api ppt-python-api gateway)
+    local service
+
+    if [ "$FORCE_REBUILD" = true ]; then
+        build_args+=(--no-cache)
+    fi
+
+    if [ "$DEPLOY_BUILD_PARALLEL_LIMIT" -eq 1 ]; then
+        if [ "$WITH_WORKER" = true ]; then
+            services+=(worker)
+        fi
+        info "按服务严格串行构建，降低峰值磁盘、内存和网络压力"
+        for service in "${services[@]}"; do
+            info "构建镜像: $service"
+            compose build "${build_args[@]}" "$service"
+        done
+        return
+    fi
+
+    info "批量构建镜像，Compose 最大并发: $DEPLOY_BUILD_PARALLEL_LIMIT"
+    compose build "${build_args[@]}"
+}
+
 # ── 部署 ──
 deploy() {
     check_docker
@@ -563,17 +616,20 @@ deploy() {
     # 导出 CN_MIRROR 供 docker-compose.yml 的 build args 读取
     export CN_MIRROR
 
-    # 每次更新都先做逻辑数据库备份和用户文件卷只读归档。
-    # 备份成功之前不会构建、迁移或替换任何业务容器。
-    backup_data
+    require_deploy_disk_headroom
+    prefetch_runtime_images
+    # 运行镜像本身也会占用 Docker 数据盘；下载后再次确认构建余量。
+    require_deploy_disk_headroom
+    case "$DEPLOY_BUILD_PARALLEL_LIMIT" in
+        ''|*[!0-9]*|0) error "DEPLOY_BUILD_PARALLEL_LIMIT 必须是正整数" ;;
+    esac
+    export COMPOSE_PARALLEL_LIMIT="$DEPLOY_BUILD_PARALLEL_LIMIT"
 
-    if [ "$FORCE_REBUILD" = true ]; then
-        info "强制重建所有镜像..."
-        compose build --no-cache
-    else
-        info "构建最新应用镜像..."
-        compose build
-    fi
+    # 构建属于只读发布预检。先完成全部镜像构建，避免编译失败时反复生成完整备份。
+    build_application_images
+
+    # 只有发布产物全部构建成功后才备份；迁移和容器切换仍严格依赖备份成功。
+    backup_data
 
     # 构建期间保持服务在线；迁移与容器切换期间短暂停写。
     pause_writers

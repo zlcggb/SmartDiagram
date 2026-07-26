@@ -92,9 +92,10 @@
 ### `--update` 做什么？
 
 1. `git pull --ff-only origin main`（工作区有未提交修改会中止）
-2. 备份 `smartdiagram` + `ppt_agent` + 用户文件卷
-3. 构建镜像 → 增量 migrate → `compose up -d`
-4. 健康检查：主 API、网关、`/ppt-api/api/health`
+2. 预拉运行镜像，再完整构建所有目标镜像（失败时不会备份、迁移或切换容器）
+3. 备份 `smartdiagram` + `ppt_agent` + 用户文件卷
+4. 增量 migrate → `compose up -d --remove-orphans`
+5. 健康检查：主 API、网关、`/ppt-api/api/health`
 
 **不会**执行 `down -v` 或删除命名卷。
 
