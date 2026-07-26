@@ -206,7 +206,7 @@ npm run env:merge-legacy
 
 提交或部署前可执行 `npm run verify:release`。它会先运行 TypeScript 与 Python 全量自动化测试，再按生产镜像依赖顺序构建全部 TypeScript workspace 和统一前端；任何一步失败都会停止，不应继续部署。
 
-部署脚本默认要求宿主根分区和项目分区各至少保留 10 GiB，并按应用服务严格串行构建，避免并发下载把 Docker 存储层打满。高配置服务器可把 `DEPLOY_BUILD_PARALLEL_LIMIT` 调为大于 `1` 以启用批量构建；磁盘安全线可通过 `DEPLOY_MIN_FREE_GB` 调整，但不建议降低。
+部署脚本默认要求宿主根分区和项目分区各至少保留 5 GiB，并按应用服务严格串行构建，适配小容量服务器并降低并发下载把 Docker 存储层打满的风险。高配置服务器可把 `DEPLOY_BUILD_PARALLEL_LIMIT` 调为大于 `1` 以启用批量构建；磁盘安全线可通过 `DEPLOY_MIN_FREE_GB` 调高。`--rebuild` 全量无缓存构建建议临时使用至少 10 GiB 安全线。
 
 手动查看关键项：
 
