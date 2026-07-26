@@ -5,6 +5,7 @@ export type DesignRecipeId =
   | "dual-engine-bridge"
   | "radial-ecosystem"
   | "risk-register"
+  | "risk-signal-story"
   | "stepped-roadmap"
   | "evidence-dashboard"
   | "matrix-contrast"
