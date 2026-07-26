@@ -222,6 +222,18 @@ def test_ppt_node_build_receives_the_detected_cn_mirror_setting() -> None:
     assert "CN_MIRROR: ${CN_MIRROR:-false}" in ppt_node_block
 
 
+def test_ppt_python_build_uses_detected_cn_pypi_mirror() -> None:
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    ppt_python_block = compose[
+        compose.index("  ppt-python-api:") : compose.index("\n  # PPT Agent 前端")
+    ]
+
+    assert "ARG CN_MIRROR" in dockerfile
+    assert "UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple" in dockerfile
+    assert "CN_MIRROR: ${CN_MIRROR:-false}" in ppt_python_block
+
+
 def test_deploy_script_never_removes_named_volumes() -> None:
     script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
 

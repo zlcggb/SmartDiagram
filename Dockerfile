@@ -90,6 +90,8 @@ CMD ["sh", "-c", "./node_modules/.bin/tsx prisma/apply-migrations.ts && exec nod
 
 FROM ${PYTHON_IMAGE} AS python-api
 
+ARG CN_MIRROR
+
 COPY --from=uv-bin /uv /uvx /bin/
 
 ENV PYTHONUNBUFFERED=1
@@ -106,11 +108,17 @@ RUN groupadd --gid 10001 app \
 COPY --chown=app:app apps/api-ppt/pyproject.toml apps/api-ppt/uv.lock ./apps/api-ppt/
 
 RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
+    if [ "$CN_MIRROR" = "true" ]; then \
+        export UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple; \
+    fi; \
     uv sync --frozen --no-dev --no-install-project --project apps/api-ppt
 
 COPY --chown=app:app apps/api-ppt ./apps/api-ppt
 
 RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
+    if [ "$CN_MIRROR" = "true" ]; then \
+        export UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple; \
+    fi; \
     uv sync --frozen --no-dev --project apps/api-ppt
 
 USER app
