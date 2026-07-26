@@ -200,6 +200,8 @@ graph TB
 | Exports | `ExportsSpace` | PPTX / 视频导出 |
 
 API 封装：`lib/api.ts`（base = `/ppt-api`）。状态：`store/workbenchStore.ts`。
+Studio 设计稿按页懒加载最近 5 个 `SlideDesignVersion`；版本导航切换会同步
+`activeDesignVersionId` 与 `svgPreview`，因此预览、代码编辑器和导出始终读取同一当前版本。
 
 ---
 
@@ -268,7 +270,14 @@ Agent 文件目录：`app/agents/*_agent.py`；企业向服务在 `app/services/
 | service-ppt-renderer | `DATABASE_URL` → `ppt_agent` | Prisma |
 | api-ppt | 主要调 Node + 文件卷 | — |
 
-共享包：`packages/shared`、`packages/agents`、`packages/ppt-renderer`。
+共享包：`packages/shared`、`packages/agents`、`packages/ppt-renderer`。其中
+`packages/agents/src/designKnowledge/` 统一维护 PPT 的视觉配方、Apple 编辑式 SVG
+提示契约，以及生成后的空间碰撞、DOM 层级和视觉反模式质量门禁。
+
+PPT 设计历史由 Prisma `SlideDesignVersion` 按页持久化，AI 生成与手动 SVG 保存都通过
+`apps/service-ppt-renderer/src/lib/slideDesignVersions.ts` 的事务入口写入并裁剪至最近 5 条。
+`Slide.activeDesignVersionId` 标识活跃版本，`Slide.svgPreview` 保留为活跃 SVG 的物化副本，
+使现有 PPTX、PNG、视频和媒体渲染链路无需感知版本表。
 
 ---
 
@@ -298,6 +307,7 @@ Agent 文件目录：`app/agents/*_agent.py`；企业向服务在 `app/services/
 | **平台用户中心（跨租户）** | `routes_platform_admin.py` + `PlatformUserCenterWindow.tsx` / `PlatformUserCenterPanel.tsx` / `PlatformQuotaProfilesPanel.tsx`（桌面入口；`PLATFORM_ADMIN_EMAILS`） |
 | **平台用量配额 / 超限拦截** | `user_quota_service.py` + `guest_quota_settings_service.py` + `routes.py` chat/stream；文档 [`docs/plans/2026-07-26-platform-quota-management-execution.md`](docs/plans/2026-07-26-platform-quota-management-execution.md) |
 | 改 PPT 工作流 | `api-ppt/src/` + `features/ppt/pages/` |
+| 改 PPT 单页设计版本历史 | `prisma/schema.prisma` + `service-ppt-renderer/src/lib/slideDesignVersions.ts` + `routes/slideDesignVersions.ts` + `features/ppt/components/studio/DesignVersionNavigator.tsx` |
 | 改 PPTX 渲染 | `packages/ppt-renderer/` + `service-ppt-renderer/` |
 | 改生产路由 | `gateway/nginx.conf` |
 | 改本地 proxy | `apps/web/vite.config.ts` |

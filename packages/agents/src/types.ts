@@ -11,14 +11,17 @@ import type {
   SlidePlanDto,
   SlideSearchJson,
   PptExportTheme,
+  PresentationStyleId,
   SpeechWritingStyleId,
   ThemeSurfaceId
 } from "@ppt-agent/shared";
 
 export interface SvgGenerationOptions {
   revisionNotes?: string[];
+  previousSvg?: string;
   accentId?: string | null;
   surfaceId?: ThemeSurfaceId | string | null;
+  presentationStyle?: PresentationStyleId | string | null;
 }
 
 export interface BriefQuestionResult {

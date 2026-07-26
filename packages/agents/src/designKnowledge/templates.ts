@@ -11,19 +11,21 @@ export const DESIGN_RECIPES: DesignRecipe[] = [
     minBlocks: 2,
     maxBlocks: 2,
     zones: [
-      { id: "title-zone", role: "title", x: 78, y: 62, w: 710, h: 112, layer: 30, instruction: "左对齐两级标题，关键词可拆色；右侧保留空气感和章节微标。" },
-      { id: "key-message-zone", role: "key-message", x: 420, y: 176, w: 440, h: 68, layer: 35, instruction: "结论做成跨越左右系统的桥梁色带，不作为普通副标题。" },
-      { id: "content-zone-1", role: "content", x: 78, y: 276, w: 448, h: 346, layer: 20, instruction: "左系统：层叠切角面板 + 圆章图形 + 3 条短证据。" },
-      { id: "visual-anchor", role: "visual-anchor", x: 570, y: 326, w: 140, h: 210, layer: 40, instruction: "中心融合枢纽：同心圆、关键词、上下短轨道，承担全页视觉焦点。" },
-      { id: "content-zone-2", role: "content", x: 754, y: 276, w: 448, h: 346, layer: 20, instruction: "右系统：与左侧同语法但轮廓/强调位不同，避免镜像复制。" },
-      { id: "connector-layer", role: "connector", x: 490, y: 300, w: 300, h: 270, layer: 25, instruction: "两侧各 2 条曲线路径汇入中心，表达融合关系。" }
+      { id: "title-zone", role: "title", x: 72, y: 52, w: 710, h: 106, layer: 40, instruction: "左对齐两级标题，以字阶与短细线建立起点；右侧保留空气感。" },
+      { id: "key-message-zone", role: "key-message", x: 812, y: 58, w: 396, h: 92, layer: 40, instruction: "结论作为右上编辑式导语，以关键词着色，不使用高饱和色带。" },
+      { id: "content-zone-1", role: "content", x: 72, y: 226, w: 440, h: 388, layer: 20, instruction: "左系统：单层浅表面 + 顶部短细线 + 2-3 条短证据。" },
+      { id: "connector-layer", role: "connector", x: 512, y: 286, w: 256, h: 270, layer: 10, instruction: "两侧细路径在内容后方汇入中心，端点避开文字。" },
+      { id: "visual-anchor", role: "visual-anchor", x: 548, y: 300, w: 184, h: 220, layer: 30, instruction: "中心融合枢纽拥有独立槽位；用克制圆环与关键词承担视觉焦点。" },
+      { id: "content-zone-2", role: "content", x: 768, y: 226, w: 440, h: 388, layer: 20, instruction: "右系统：同一编辑语法但通过关键词和短顶线区分，避免复制感。" }
     ],
-    backgroundProgram: ["柔色底 + 左右两块低透明度圆形光域", "叠加稀疏坐标点或水平基线，强调左右汇聚轴"],
+    minGutter: 24,
+    allowedOverlaps: [],
+    backgroundProgram: ["主题纯色底 + 一条低对比水平基线", "不使用泛用光晕或巨型透明圆"],
     titleProgram: ["标题左对齐，不居中", "标题下用 72-120px 强调短线建立阅读起点"],
-    keyMessageProgram: ["结论压缩为中心桥接梁或横向标签", "从结论中选 1 个输入已有关键词做强调色，禁止补词"],
-    contentProgram: ["两个模块分别映射到左右系统", "每侧使用不同侧边色带/切角方向", "每条 item 配一个小几何符号或序号节点，不用普通 bullet 墙"],
-    connectorProgram: ["path 从左右内容区指向 visual-anchor", "连接线端点用 circle 标记，中心汇聚线比外围线更粗"],
-    signatureMotif: "中央圆形融合枢纽 + 左右双系统 + 跨栏结论桥",
+    keyMessageProgram: ["结论作为右上编辑式导语，不悬浮压住正文", "从结论中选 1 个输入已有关键词做强调色，禁止补词"],
+    contentProgram: ["两个模块分别映射到左右系统", "每侧使用单层浅表面、低对比边框和顶部短细线", "每条 item 配一个小几何符号或序号节点，不用普通 bullet 墙"],
+    connectorProgram: ["path 从左右内容区边缘指向 visual-anchor", "连接线先绘制并位于内容后方，端点用 circle 标记"],
+    signatureMotif: "独立中央融合枢纽 + 左右双系统 + 右上编辑式结论",
     forbidden: ["两个同尺寸白色圆角卡片直接并排", "标题与结论全部居中", "用双向箭头图标代替完整关系结构"],
     requiredGroupIds: ["background-layer", "title-zone", "visual-anchor", "content-zone-1", "content-zone-2", "connector-layer"],
     requiredPrimitives: ["path", "circle"]
@@ -38,17 +40,19 @@ export const DESIGN_RECIPES: DesignRecipe[] = [
     minBlocks: 3,
     maxBlocks: 6,
     zones: [
-      { id: "title-zone", role: "title", x: 70, y: 54, w: 600, h: 116, layer: 30, instruction: "左上编辑式标题，章节标签与短横线形成起点。" },
-      { id: "key-message-zone", role: "key-message", x: 70, y: 170, w: 470, h: 78, layer: 30, instruction: "结论作为左侧导语块，与中心系统建立引导线。" },
-      { id: "visual-anchor", role: "visual-anchor", x: 490, y: 220, w: 300, h: 300, layer: 40, instruction: "中心 2-3 层圆环/六边形，放核心关键词，不堆正文。" },
+      { id: "title-zone", role: "title", x: 70, y: 54, w: 600, h: 116, layer: 40, instruction: "左上编辑式标题，章节标签与短横线形成起点。" },
+      { id: "key-message-zone", role: "key-message", x: 70, y: 170, w: 470, h: 78, layer: 40, instruction: "结论作为左侧导语块，与中心系统建立引导线。" },
+      { id: "visual-anchor", role: "visual-anchor", x: 566, y: 250, w: 260, h: 300, layer: 30, instruction: "中心 2-3 层圆环/六边形，放核心关键词，不堆正文。" },
       { id: "content-zone-1", role: "content", x: 70, y: 286, w: 330, h: 150, layer: 20, instruction: "外围节点 1。" },
       { id: "content-zone-2", role: "content", x: 70, y: 470, w: 330, h: 150, layer: 20, instruction: "外围节点 2。" },
       { id: "content-zone-3", role: "content", x: 880, y: 214, w: 330, h: 126, layer: 20, instruction: "外围节点 3。" },
       { id: "content-zone-4", role: "content", x: 880, y: 370, w: 330, h: 126, layer: 20, instruction: "外围节点 4。" },
       { id: "content-zone-5", role: "content", x: 880, y: 526, w: 330, h: 110, layer: 20, instruction: "外围节点 5；没有第 5 块时留白。" },
-      { id: "connector-layer", role: "connector", x: 360, y: 200, w: 560, h: 430, layer: 25, instruction: "用折线路径/曲线把外围节点接入中心。" }
+      { id: "connector-layer", role: "connector", x: 360, y: 200, w: 560, h: 430, layer: 10, instruction: "用折线路径/曲线把外围节点接入中心，先于节点绘制。" }
     ],
-    backgroundProgram: ["深浅两级底色 + 中心低透明度轨道圆", "可加稀疏网格点，但不能盖过文字"],
+    minGutter: 24,
+    allowedOverlaps: [],
+    backgroundProgram: ["主题纯色底 + 中心低对比轨道", "可加一组稀疏基线，但不能盖过文字"],
     titleProgram: ["左上标题区与系统图错位，不做居中封面"],
     keyMessageProgram: ["结论作为图例式导语或中心外环标签"],
     contentProgram: ["模块按重要度分配不同面积", "节点使用标签槽 + 1-3 条证据，至少一种节点采用非矩形轮廓"],
@@ -57,6 +61,72 @@ export const DESIGN_RECIPES: DesignRecipe[] = [
     forbidden: ["六张等宽卡片排成网格", "中心只放装饰图标", "线条穿过正文"],
     requiredGroupIds: ["background-layer", "title-zone", "visual-anchor", "content-zone-1", "content-zone-2", "content-zone-3", "connector-layer"],
     requiredPrimitives: ["circle", "path"]
+  },
+  {
+    id: "risk-register",
+    label: "编辑式风险登记",
+    story: "先给出治理结论，再把风险、影响与闭环动作放进并列但有节奏差异的登记卡，适合安全与治理页面。",
+    useWhen: "风险表、风险清单、安全风险、控制缺口、治理闭环，正文为 3-5 个风险模块。",
+    layoutHints: ["risk-table", "risk-register", "risk-cards", "风险表", "风险清单"],
+    semanticTags: ["风险", "安全", "泄露", "越权", "隔离", "治理", "闭环", "缓解"],
+    minBlocks: 3,
+    maxBlocks: 5,
+    zones: [
+      { id: "title-zone", role: "title", x: 72, y: 50, w: 720, h: 104, layer: 40, instruction: "左上标题采用强字阶和 72-108px 短细线，不使用高饱和标题条。" },
+      { id: "key-message-zone", role: "key-message", x: 834, y: 58, w: 374, h: 92, layer: 40, instruction: "右上放治理原则短文，以一个输入关键词着色，保持轻量留白。" },
+      { id: "content-zone-1", role: "content", x: 72, y: 202, w: 350, h: 414, layer: 20, instruction: "风险 1：顶部短细线 + 风险标题 + 影响与缓解动作；不得使用侧边整高色条。" },
+      { id: "content-zone-2", role: "content", x: 465, y: 202, w: 350, h: 414, layer: 20, instruction: "风险 2：沿用同一信息语法，通过序号、关键词与小型节点区分。" },
+      { id: "content-zone-3", role: "content", x: 858, y: 202, w: 350, h: 414, layer: 20, instruction: "风险 3：强调闭环动作，顶部短细线长度与前两卡形成节奏差异。" }
+    ],
+    minGutter: 32,
+    allowedOverlaps: [],
+    backgroundProgram: ["浅色纯色底 + 一条贯穿三卡的低对比基线", "可用极少量小圆节点表示优先级，禁止泛用光晕"],
+    titleProgram: ["标题左对齐并限制在 2 行内", "标题下仅使用 72-108px 顶部短细线作为阅读起点"],
+    keyMessageProgram: ["右上用编辑式导语说明治理原则", "只给输入中已有的一个关键词着色，不使用整块警示色底"],
+    contentProgram: [
+      "每个风险模块按 风险表现—影响范围—缓解方向 的顺序组织",
+      "三个模块使用单层浅表面和低对比边框，顶部短细线不得超过卡宽 30%",
+      "用序号圆点、短横线或小型 polygon 建立扫描节奏，禁止附着式整高色条"
+    ],
+    connectorProgram: ["风险登记页不绘制跨卡连接线；用水平基线、序号和对齐关系表达同一治理体系"],
+    signatureMotif: "治理结论 + 三列风险登记 + 顶部短细线节奏",
+    forbidden: ["附着式整高强调色条", "中心辐射生态图", "跨越风险卡的连接线", "传统 Excel 网格表"],
+    requiredGroupIds: ["background-layer", "title-zone", "key-message-zone", "content-zone-1", "content-zone-2", "content-zone-3"],
+    requiredPrimitives: ["line", "polygon"]
+  },
+  {
+    id: "risk-signal-story",
+    label: "风险信号叙事",
+    story: "以首要风险作为主叙事焦点，再沿一条定性信号路径展开两项关联风险与治理动作；强调证据阅读顺序，不伪造数值。",
+    useWhen: "数据叙事风格下的风险清单、控制缺口与治理页面，正文为 3 个主要风险模块且没有可靠量化指标。",
+    layoutHints: ["risk-table", "risk-register", "risk-cards", "风险表", "风险清单"],
+    semanticTags: ["风险", "安全", "泄露", "越权", "治理", "信号", "证据", "闭环"],
+    minBlocks: 3,
+    maxBlocks: 3,
+    zones: [
+      { id: "title-zone", role: "title", x: 72, y: 50, w: 700, h: 104, layer: 40, instruction: "左上标题与信号路径起点同轴，标题下只用一条短细线。" },
+      { id: "key-message-zone", role: "key-message", x: 808, y: 58, w: 400, h: 92, layer: 40, instruction: "右上放治理结论，关键词着色，不使用警示色大底。" },
+      { id: "visual-anchor", role: "visual-anchor", x: 72, y: 196, w: 520, h: 420, layer: 15, instruction: "首要风险的定性信号场：用折线、节点和面积层级形成主视觉，禁止虚构百分比、刻度或严重度。" },
+      { id: "content-zone-1", role: "content", x: 92, y: 218, w: 480, h: 376, layer: 20, instruction: "首要风险作为大焦点，突出风险表现、影响与闭环动作；只使用输入已有的定性信息。" },
+      { id: "content-zone-2", role: "content", x: 640, y: 214, w: 568, h: 168, layer: 20, instruction: "关联风险 2：横向证据带，标题、影响与动作形成三段阅读节奏。" },
+      { id: "content-zone-3", role: "content", x: 640, y: 430, w: 568, h: 164, layer: 20, instruction: "关联风险 3：横向证据带，以闭环动作收束，不复制上一条的轮廓。" },
+      { id: "connector-layer", role: "connector", x: 584, y: 250, w: 72, h: 280, layer: 10, instruction: "一条定性信号路径把主风险与两条证据带连接起来，连接线先绘制并避开文字。" }
+    ],
+    minGutter: 36,
+    allowedOverlaps: [["visual-anchor", "content-zone-1"]],
+    backgroundProgram: ["干净浅色画布 + 一条低对比信号基线", "只允许少量定性节点，不绘制伪坐标轴、伪趋势或装饰光晕"],
+    titleProgram: ["标题左对齐且最多两行", "用 72-108px 短细线建立阅读起点"],
+    keyMessageProgram: ["右上结论说明治理原则", "仅强调输入已有关键词，不制造数据口径"],
+    contentProgram: [
+      "第一个 contentBlock 占据最大面积，第二、第三块作为右侧上下证据带",
+      "每块按 风险表现—影响范围—缓解方向 组织，优先用字阶与留白而非卡片边框",
+      "没有真实数字时使用定性节点、路径和关键词建立叙事，严禁生成百分比、评分或伪图表"
+    ],
+    connectorProgram: ["path 从首要风险右缘分叉到两条证据带", "端点使用小 circle，连接线位于内容后方且不得穿字"],
+    signatureMotif: "一大两辅风险信号路径 + 先主风险后治理证据",
+    forbidden: ["三张等宽等高风险卡", "虚构严重度或百分比", "后台仪表盘式 KPI 碎片", "附着式整高强调色条", "连接线穿过正文"],
+    requiredGroupIds: ["background-layer", "title-zone", "key-message-zone", "visual-anchor", "content-zone-1", "content-zone-2", "content-zone-3", "connector-layer"],
+    requiredPrimitives: ["path", "circle", "polygon"]
   },
   {
     id: "stepped-roadmap",
@@ -68,14 +138,21 @@ export const DESIGN_RECIPES: DesignRecipe[] = [
     minBlocks: 2,
     maxBlocks: 6,
     zones: [
-      { id: "title-zone", role: "title", x: 76, y: 56, w: 700, h: 106, layer: 30, instruction: "左上标题，与路线起点同轴。" },
-      { id: "key-message-zone", role: "key-message", x: 800, y: 68, w: 390, h: 86, layer: 32, instruction: "右上结论标签，成为路线终点的方向说明。" },
-      { id: "visual-anchor", role: "visual-anchor", x: 78, y: 210, w: 1120, h: 390, layer: 25, instruction: "折线路径自左下向右上推进，3-6 个节点随阶段抬升。" },
-      { id: "content-zone-1", role: "content", x: 88, y: 420, w: 230, h: 176, layer: 30, instruction: "阶段 1 节点。" },
-      { id: "content-zone-2", role: "content", x: 342, y: 350, w: 230, h: 176, layer: 30, instruction: "阶段 2 节点。" },
-      { id: "content-zone-3", role: "content", x: 596, y: 280, w: 230, h: 176, layer: 30, instruction: "阶段 3 节点。" },
-      { id: "content-zone-4", role: "content", x: 850, y: 210, w: 330, h: 176, layer: 30, instruction: "最终阶段节点，面积更大。" },
-      { id: "connector-layer", role: "connector", x: 90, y: 260, w: 1060, h: 290, layer: 20, instruction: "阶梯折线/轨道连接各节点。" }
+      { id: "title-zone", role: "title", x: 76, y: 56, w: 700, h: 106, layer: 40, instruction: "左上标题，与路线起点同轴。" },
+      { id: "key-message-zone", role: "key-message", x: 800, y: 68, w: 390, h: 86, layer: 40, instruction: "右上结论标签，成为路线终点的方向说明。" },
+      { id: "visual-anchor", role: "visual-anchor", x: 78, y: 210, w: 1120, h: 390, layer: 15, instruction: "折线路径自左下向右上推进，3-6 个节点随阶段抬升。" },
+      { id: "content-zone-1", role: "content", x: 88, y: 420, w: 230, h: 176, layer: 20, instruction: "阶段 1 节点。" },
+      { id: "content-zone-2", role: "content", x: 342, y: 350, w: 230, h: 176, layer: 20, instruction: "阶段 2 节点。" },
+      { id: "content-zone-3", role: "content", x: 596, y: 280, w: 230, h: 176, layer: 20, instruction: "阶段 3 节点。" },
+      { id: "content-zone-4", role: "content", x: 850, y: 210, w: 330, h: 176, layer: 20, instruction: "最终阶段节点，面积更大。" },
+      { id: "connector-layer", role: "connector", x: 90, y: 260, w: 1060, h: 290, layer: 10, instruction: "阶梯折线/轨道连接各节点，先于节点绘制。" }
+    ],
+    minGutter: 24,
+    allowedOverlaps: [
+      ["visual-anchor", "content-zone-1"],
+      ["visual-anchor", "content-zone-2"],
+      ["visual-anchor", "content-zone-3"],
+      ["visual-anchor", "content-zone-4"]
     ],
     backgroundProgram: ["底部起点深色块向右上逐渐打开", "用水平基线或稀疏刻度强化进度"],
     titleProgram: ["标题与起点对齐，不占据路线中心"],
@@ -97,13 +174,15 @@ export const DESIGN_RECIPES: DesignRecipe[] = [
     minBlocks: 1,
     maxBlocks: 5,
     zones: [
-      { id: "title-zone", role: "title", x: 70, y: 54, w: 760, h: 108, layer: 30, instruction: "左上标题，右上保留数据口径标签。" },
-      { id: "key-message-zone", role: "key-message", x: 70, y: 172, w: 420, h: 100, layer: 32, instruction: "结论作为左侧洞察短文，不重复图表标题。" },
-      { id: "visual-anchor", role: "visual-anchor", x: 500, y: 170, w: 710, h: 310, layer: 25, instruction: "主图表/主指标，占全页最大面积。" },
-      { id: "content-zone-1", role: "content", x: 70, y: 302, w: 390, h: 304, layer: 25, instruction: "主证据解释块，允许大关键词或真实数字。" },
-      { id: "content-zone-2", role: "content", x: 500, y: 510, w: 335, h: 112, layer: 25, instruction: "证据条 2。" },
-      { id: "content-zone-3", role: "content", x: 864, y: 510, w: 346, h: 112, layer: 25, instruction: "证据条 3。" }
+      { id: "title-zone", role: "title", x: 70, y: 54, w: 760, h: 108, layer: 40, instruction: "左上标题，右上保留数据口径标签。" },
+      { id: "key-message-zone", role: "key-message", x: 70, y: 172, w: 420, h: 100, layer: 40, instruction: "结论作为左侧洞察短文，不重复图表标题。" },
+      { id: "visual-anchor", role: "visual-anchor", x: 500, y: 170, w: 710, h: 310, layer: 20, instruction: "主图表/主指标，占全页最大面积。" },
+      { id: "content-zone-1", role: "content", x: 70, y: 302, w: 390, h: 304, layer: 20, instruction: "主证据解释块，允许大关键词或真实数字。" },
+      { id: "content-zone-2", role: "content", x: 500, y: 510, w: 335, h: 112, layer: 20, instruction: "证据条 2。" },
+      { id: "content-zone-3", role: "content", x: 864, y: 510, w: 346, h: 112, layer: 20, instruction: "证据条 3。" }
     ],
+    minGutter: 24,
+    allowedOverlaps: [],
     backgroundProgram: ["干净数据画布，图表区用轻微色域分区", "只保留一种坐标/网格语法"],
     titleProgram: ["标题和数据口径分离；不制造日期或来源"],
     keyMessageProgram: ["结论紧邻主图表起点，形成先结论后证据"],
@@ -124,12 +203,18 @@ export const DESIGN_RECIPES: DesignRecipe[] = [
     minBlocks: 2,
     maxBlocks: 4,
     zones: [
-      { id: "title-zone", role: "title", x: 70, y: 52, w: 720, h: 104, layer: 30, instruction: "标题左对齐。" },
-      { id: "key-message-zone", role: "key-message", x: 820, y: 58, w: 390, h: 92, layer: 32, instruction: "右上结论强调块。" },
-      { id: "visual-anchor", role: "visual-anchor", x: 70, y: 194, w: 1140, h: 420, layer: 20, instruction: "中轴或 2x2 对照矩阵，主选项突出。" },
-      { id: "content-zone-1", role: "content", x: 98, y: 228, w: 500, h: 340, layer: 25, instruction: "对照侧 A。" },
-      { id: "content-zone-2", role: "content", x: 682, y: 228, w: 500, h: 340, layer: 25, instruction: "对照侧 B。" },
-      { id: "connector-layer", role: "connector", x: 604, y: 220, w: 72, h: 360, layer: 30, instruction: "中轴、差异标记或方向符号。" }
+      { id: "title-zone", role: "title", x: 70, y: 52, w: 720, h: 104, layer: 40, instruction: "标题左对齐。" },
+      { id: "key-message-zone", role: "key-message", x: 820, y: 58, w: 390, h: 92, layer: 40, instruction: "右上结论强调块。" },
+      { id: "visual-anchor", role: "visual-anchor", x: 70, y: 194, w: 1140, h: 420, layer: 10, instruction: "中轴或 2x2 对照矩阵的底层结构，主选项突出。" },
+      { id: "content-zone-1", role: "content", x: 98, y: 228, w: 500, h: 340, layer: 20, instruction: "对照侧 A。" },
+      { id: "content-zone-2", role: "content", x: 682, y: 228, w: 500, h: 340, layer: 20, instruction: "对照侧 B。" },
+      { id: "connector-layer", role: "connector", x: 604, y: 220, w: 72, h: 360, layer: 15, instruction: "中轴、差异标记或方向符号，位于内容后方。" }
+    ],
+    minGutter: 24,
+    allowedOverlaps: [
+      ["visual-anchor", "content-zone-1"],
+      ["visual-anchor", "content-zone-2"],
+      ["visual-anchor", "connector-layer"]
     ],
     backgroundProgram: ["左右使用同一色系不同明度，选中侧用强调色", "中轴保持高对比"],
     titleProgram: ["左对齐，必要时加入小型比较维度标签"],
@@ -151,12 +236,14 @@ export const DESIGN_RECIPES: DesignRecipe[] = [
     minBlocks: 0,
     maxBlocks: 2,
     zones: [
-      { id: "title-zone", role: "title", x: 76, y: 104, w: 650, h: 240, layer: 35, instruction: "左侧超大标题，最多 3 行，形成整页最强字阶。" },
-      { id: "key-message-zone", role: "key-message", x: 80, y: 382, w: 520, h: 112, layer: 35, instruction: "标题下方结论色带/短文块。" },
-      { id: "visual-anchor", role: "visual-anchor", x: 716, y: 72, w: 500, h: 560, layer: 25, instruction: "右侧抽象图形系统：轨道、巨型字母轮廓或模块化图腾。" },
+      { id: "title-zone", role: "title", x: 76, y: 104, w: 650, h: 240, layer: 40, instruction: "左侧超大标题，最多 3 行，形成整页最强字阶。" },
+      { id: "key-message-zone", role: "key-message", x: 80, y: 382, w: 520, h: 112, layer: 40, instruction: "标题下方编辑式结论短文。" },
+      { id: "visual-anchor", role: "visual-anchor", x: 750, y: 72, w: 458, h: 560, layer: 20, instruction: "右侧抽象图形系统：轨道、巨型字母轮廓或模块化图腾。" },
       { id: "content-zone-1", role: "content", x: 80, y: 534, w: 510, h: 88, layer: 30, instruction: "可选底部证据/章节标签，不足则留白。" }
     ],
-    backgroundProgram: ["大面积底色 + 右侧 30%-40% 强色域", "加入一条贯穿分栏的细线或巨型透明编号"],
+    minGutter: 24,
+    allowedOverlaps: [],
+    backgroundProgram: ["主题纯色底 + 右侧低对比浅表面分区", "加入一条贯穿分栏的细线，不使用巨型透明编号"],
     titleProgram: ["标题字阶 54-76px，左对齐", "允许关键词断行形成形状，不做普通居中标题"],
     keyMessageProgram: ["用强调色带或细边框短文块承载，不做居中副标题"],
     contentProgram: ["内容极少时主动留白", "可把一个模块做成底部证据条，禁止补齐卡片"],
@@ -176,15 +263,17 @@ export const DESIGN_RECIPES: DesignRecipe[] = [
     minBlocks: 3,
     maxBlocks: 5,
     zones: [
-      { id: "title-zone", role: "title", x: 72, y: 54, w: 670, h: 108, layer: 35, instruction: "左上标题。" },
-      { id: "key-message-zone", role: "key-message", x: 780, y: 60, w: 430, h: 100, layer: 35, instruction: "右上结论块。" },
-      { id: "visual-anchor", role: "visual-anchor", x: 72, y: 196, w: 560, h: 420, layer: 25, instruction: "主模块，占正文 45%-55% 面积，包含抽象图形或大关键词。" },
-      { id: "content-zone-1", role: "content", x: 72, y: 196, w: 560, h: 420, layer: 30, instruction: "最重要内容块，层叠面板。" },
-      { id: "content-zone-2", role: "content", x: 668, y: 196, w: 542, h: 188, layer: 30, instruction: "次级宽卡。" },
-      { id: "content-zone-3", role: "content", x: 668, y: 420, w: 250, h: 196, layer: 30, instruction: "次级小卡。" },
-      { id: "content-zone-4", role: "content", x: 954, y: 420, w: 256, h: 196, layer: 30, instruction: "次级小卡。" }
+      { id: "title-zone", role: "title", x: 72, y: 54, w: 670, h: 108, layer: 40, instruction: "左上标题。" },
+      { id: "key-message-zone", role: "key-message", x: 780, y: 60, w: 430, h: 100, layer: 40, instruction: "右上编辑式结论块。" },
+      { id: "visual-anchor", role: "visual-anchor", x: 72, y: 196, w: 560, h: 420, layer: 15, instruction: "主模块底层图形，占正文 45%-55% 面积，包含抽象图形或大关键词。" },
+      { id: "content-zone-1", role: "content", x: 72, y: 196, w: 560, h: 420, layer: 20, instruction: "最重要内容块，单层主信息面。" },
+      { id: "content-zone-2", role: "content", x: 668, y: 196, w: 542, h: 188, layer: 20, instruction: "次级宽卡。" },
+      { id: "content-zone-3", role: "content", x: 668, y: 420, w: 250, h: 196, layer: 20, instruction: "次级小卡。" },
+      { id: "content-zone-4", role: "content", x: 954, y: 420, w: 256, h: 196, layer: 20, instruction: "次级小卡。" }
     ],
-    backgroundProgram: ["柔色底 + 主模块背后错位色片", "用一条竖向或斜向视觉轴组织信息"],
+    minGutter: 24,
+    allowedOverlaps: [["visual-anchor", "content-zone-1"]],
+    backgroundProgram: ["主题纯色底 + 主模块局部浅表面分区", "用一条竖向或斜向细轴组织信息，不使用错位叠片"],
     titleProgram: ["标题与主模块左边界对齐"],
     keyMessageProgram: ["放在右上独立强调区，与主模块形成对角关系"],
     contentProgram: ["第一模块必须明显大于其他模块", "至少两种轮廓/填色处理", "小模块只保留标题和 1-2 条证据"],
@@ -204,11 +293,13 @@ export const DESIGN_RECIPES: DesignRecipe[] = [
     minBlocks: 0,
     maxBlocks: 2,
     zones: [
-      { id: "title-zone", role: "title", x: 78, y: 60, w: 430, h: 82, layer: 30, instruction: "小标题退居左上。" },
+      { id: "title-zone", role: "title", x: 78, y: 60, w: 430, h: 82, layer: 40, instruction: "小标题退居左上。" },
       { id: "key-message-zone", role: "key-message", x: 178, y: 210, w: 924, h: 250, layer: 40, instruction: "核心结论成为 48-68px 的主视觉文字块。" },
-      { id: "visual-anchor", role: "visual-anchor", x: 110, y: 160, w: 1060, h: 390, layer: 25, instruction: "巨型引号/框线/圆弧构成纪念碑轮廓。" },
-      { id: "content-zone-1", role: "content", x: 180, y: 526, w: 920, h: 88, layer: 30, instruction: "可选证据条；没有则保持留白。" }
+      { id: "visual-anchor", role: "visual-anchor", x: 110, y: 160, w: 1060, h: 390, layer: 20, instruction: "巨型引号/框线/圆弧构成纪念碑轮廓。" },
+      { id: "content-zone-1", role: "content", x: 180, y: 574, w: 920, h: 64, layer: 30, instruction: "可选证据条；没有则保持留白。" }
     ],
+    minGutter: 24,
+    allowedOverlaps: [["visual-anchor", "key-message-zone"]],
     backgroundProgram: ["单色或双色大色域，装饰极少", "一个巨型透明字符或圆弧建立尺度"],
     titleProgram: ["标题小而克制，让位给结论"],
     keyMessageProgram: ["结论拆成 2-4 行，关键词单独着色", "不重复标题"],
@@ -224,4 +315,3 @@ export const DESIGN_RECIPES: DesignRecipe[] = [
 export function getDesignRecipe(id: string) {
   return DESIGN_RECIPES.find((recipe) => recipe.id === id) ?? DESIGN_RECIPES.find((recipe) => recipe.id === "asymmetric-card-stack")!;
 }
-

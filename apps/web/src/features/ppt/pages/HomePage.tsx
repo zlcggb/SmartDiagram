@@ -128,7 +128,8 @@ export function HomePage() {
         audience: "待确认受众",
         purpose: "待确认目的",
         pageCount: 8,
-        theme: "white-blue"
+        theme: "white-blue",
+        presentationStyle: "consulting"
       });
       if (!project) return;
       projectId = project.id;

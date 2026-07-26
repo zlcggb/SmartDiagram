@@ -13,18 +13,21 @@ import type {
   NarrationStyleInput,
   PageRenderResult,
   PptExportTheme,
+  PresentationStyleId,
   ProjectDetailDto,
   ProjectMaterialDto,
   ProjectDto,
   RenderStrategy,
   ResearchJson,
   SlideDto,
+  SlideDesignHistoryDto,
   SlideIrDto,
   SlideNarrationDto,
   SlidePlanDto,
   SlideSearchJson,
   SourceTextDto,
   SpeechScriptRequestInput,
+  SvgQualityFailureDto,
   SubtitleLayout,
   SubtitleStyleId,
   TtsPreviewInput,
@@ -51,7 +54,12 @@ const API_BASE = getApiBase();
 
 export interface GenerateDesignsResult {
   slides: SlideDto[];
-  failures: Array<{ slideId: string; title: string; message: string }>;
+  failures: Array<{
+    slideId: string;
+    title: string;
+    message: string;
+    qualityFailure?: SvgQualityFailureDto;
+  }>;
   /** 本轮实际生成 SVG 的页数（按策略） */
   generatedSvgCount?: number;
   /** 本轮跳过 SVG、走 IR ensure 的页数 */
@@ -258,7 +266,7 @@ async function requestWith<T>(
     throw new Error("服务返回了无法解析的响应");
   }
   if (!response.ok || !payload.success) {
-    throw new PptApiError(payload.message || "请求失败", response.status);
+    throw new PptApiError(payload.message || "请求失败", response.status, payload.data);
   }
   return payload.data;
 }
@@ -352,6 +360,17 @@ export const api = {
   updateSlide(projectId: string, slideId: string, input: UpdateSlideInput) {
     return request<SlideDto>(`/api/projects/${projectId}/slides/${slideId}`, json("PATCH", input));
   },
+  listSlideDesignVersions(projectId: string, slideId: string) {
+    return request<SlideDesignHistoryDto>(
+      `/api/projects/${projectId}/slides/${slideId}/design-versions`
+    );
+  },
+  activateSlideDesignVersion(projectId: string, slideId: string, versionId: string) {
+    return request<SlideDto>(
+      `/api/projects/${projectId}/slides/${slideId}/design-versions/${versionId}/activate`,
+      json("PATCH")
+    );
+  },
   reorderSlides(projectId: string, slideIds: string[]) {
     return request<SlideDto[]>(`/api/projects/${projectId}/slides/reorder`, json("POST", { slideIds }));
   },
@@ -381,16 +400,16 @@ export const api = {
   generateAllIr(projectId: string, theme: PptExportTheme) {
     return request<SlideDto[]>(`/api/projects/${projectId}/generate-all-ir`, json("POST", { theme }));
   },
-  generateSvgPreview(projectId: string, slideId: string, theme: PptExportTheme, options?: { accentId?: string; surfaceId?: string }) {
+  generateSvgPreview(projectId: string, slideId: string, theme: PptExportTheme, options?: { accentId?: string; surfaceId?: string; presentationStyle?: PresentationStyleId }) {
     return request<{ svgPreview: string; slide: SlideDto }>(`/api/projects/${projectId}/slides/${slideId}/generate-svg-preview`, json("POST", { theme, ...options }));
   },
-  generateSlideDesign(projectId: string, slideId: string, theme: PptExportTheme, mode: ExportMode = "standard", options?: { accentId?: string; surfaceId?: string }) {
+  generateSlideDesign(projectId: string, slideId: string, theme: PptExportTheme, mode: ExportMode = "standard", options?: { accentId?: string; surfaceId?: string; presentationStyle?: PresentationStyleId }) {
     return request<{ svgPreview: string; slide: SlideDto }>(
       `/api/projects/${projectId}/slides/${slideId}/generate-design`,
       json("POST", { theme, mode, ...options })
     );
   },
-  generateAllDesigns(projectId: string, theme: PptExportTheme, mode: ExportMode = "standard", options?: { accentId?: string; surfaceId?: string }) {
+  generateAllDesigns(projectId: string, theme: PptExportTheme, mode: ExportMode = "standard", options?: { accentId?: string; surfaceId?: string; presentationStyle?: PresentationStyleId }) {
     return request<GenerateDesignsResult>(
       `/api/projects/${projectId}/generate-all-designs`,
       json("POST", { theme, force: true, mode, ...options })
@@ -515,7 +534,7 @@ export const api = {
       concurrency?: number;
     }>(`/api/projects/${projectId}/search-all`, json("POST", {}));
   },
-  runPipeline(projectId: string, input: { theme?: PptExportTheme; accentId?: string; surfaceId?: string; mode?: ExportMode; skipDesign?: boolean } = {}) {
+  runPipeline(projectId: string, input: { theme?: PptExportTheme; accentId?: string; surfaceId?: string; presentationStyle?: PresentationStyleId; mode?: ExportMode; skipDesign?: boolean } = {}) {
     return request<{ detail: ProjectDetailDto; logs: string[] }>(
       `/api/projects/${projectId}/run-pipeline`,
       json("POST", input)

@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Download, Search, WandSparkles } from "lucide-react";
-import type { PptExportTheme, SlidePlanDto } from '@ppt-agent/shared';
+import type { PptExportTheme, PresentationStyleId, SlidePlanDto } from '@ppt-agent/shared';
 import {
   fitSvgTextToBounds,
   getAccentPresetHex,
   getThemePack,
   getThemeSurfacePreset,
+  normalizePresentationStyleId,
   recolorSvgPreview,
+  resolvePresentationStyleId,
   searchReferenceForDraft
 } from '@ppt-agent/shared';
 import {
@@ -16,11 +18,24 @@ import {
   exportThemePreviewBg,
   isSlideDesignReady
 } from "../lib/exportMode";
-import { ThemeConfigPanel } from "../components/studio/ThemeConfigPanel";
+import {
+  DesignConfigPanel,
+  type DesignConfigTab
+} from "../components/studio/DesignConfigPanel";
 import { AgentExecutionPanel } from "../components/AgentExecutionPanel";
 import { useWorkbenchStore, type StudioPhase } from '@/features/ppt/store/workbenchStore';
 import { useStudioWizard } from '@/features/ppt/hooks/useStudioWizard';
 import { WizardWaitBanner } from "../components/studio/WizardWaitBanner";
+import { DesignVersionNavigator } from "../components/studio/DesignVersionNavigator";
+import { DesignQualityFailurePanel } from "../components/studio/DesignQualityFailurePanel";
+import {
+  PageStyleChangePrompt,
+  PageStyleControl
+} from "../components/studio/PageStyleControl";
+import {
+  resolveAppliedPageStyle,
+  styleSelectionNeedsRegeneration
+} from "../lib/pageStyleState";
 
 const phases: Array<{ id: StudioPhase; label: string; step: number }> = [
   { id: "search", label: "检索素材", step: 1 },
@@ -288,12 +303,15 @@ function PlanDraftEditor({
 }
 
 export function StudioSpace() {
-  const [searchParams, setSearchParams] = useSearchParams();  const slides = useWorkbenchStore((s) => s.slides);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const slides = useWorkbenchStore((s) => s.slides);
+  const project = useWorkbenchStore((s) => s.project);
   const busy = useWorkbenchStore((s) => s.busy);
   const searchSlide = useWorkbenchStore((s) => s.searchSlide);
   const searchAllSlides = useWorkbenchStore((s) => s.searchAllSlides);
   const generateSlidePlan = useWorkbenchStore((s) => s.generateSlidePlan);
   const generateAllPlans = useWorkbenchStore((s) => s.generateAllPlans);
+  const generateSlideDesign = useWorkbenchStore((s) => s.generateSlideDesign);
   const generateAllDesigns = useWorkbenchStore((s) => s.generateAllDesigns);
   const saveSlideSvg = useWorkbenchStore((s) => s.saveSlideSvg);
   const updateSlide = useWorkbenchStore((s) => s.updateSlide);
@@ -302,10 +320,18 @@ export function StudioSpace() {
   const themeSurfaceId = useWorkbenchStore((s) => s.themeSurfaceId);
   const setThemeAccentId = useWorkbenchStore((s) => s.setThemeAccentId);
   const setThemeSurfaceId = useWorkbenchStore((s) => s.setThemeSurfaceId);
+  const setProjectPresentationStyle = useWorkbenchStore((s) => s.setProjectPresentationStyle);
   const setExportTheme = useWorkbenchStore((s) => s.setExportTheme);
   const exportPptx = useWorkbenchStore((s) => s.exportPptx);
   const exportWarnings = useWorkbenchStore((s) => s.exportWarnings);
   const progressStages = useWorkbenchStore((s) => s.progressStages);
+  const designVersions = useWorkbenchStore((s) => s.designVersions);
+  const designVersionsSlideId = useWorkbenchStore((s) => s.designVersionsSlideId);
+  const designVersionsLoading = useWorkbenchStore((s) => s.designVersionsLoading);
+  const loadSlideDesignVersions = useWorkbenchStore((s) => s.loadSlideDesignVersions);
+  const activateSlideDesignVersion = useWorkbenchStore((s) => s.activateSlideDesignVersion);
+  const designQualityFailure = useWorkbenchStore((s) => s.designQualityFailure);
+  const clearDesignQualityFailure = useWorkbenchStore((s) => s.clearDesignQualityFailure);
 
   const currentSlideId = searchParams.get("slide") ?? slides[0]?.id ?? null;
   const currentPhase = (searchParams.get("phase") as StudioPhase) ?? "search";
@@ -332,11 +358,15 @@ export function StudioSpace() {
   const [planDraft, setPlanDraft] = useState<PlanDraft | null>(null);
   const [draftEntryGenerating, setDraftEntryGenerating] = useState(false);
   const [designViewMode, setDesignViewMode] = useState<DesignViewMode>("preview");
+  const [designConfigTab, setDesignConfigTab] = useState<DesignConfigTab>("theme");
   const [svgEditorValue, setSvgEditorValue] = useState("");
   const [svgEditorBaseline, setSvgEditorBaseline] = useState("");
   const [svgEditorSaving, setSvgEditorSaving] = useState(false);
   const [exportPromptOpen, setExportPromptOpen] = useState(false);
   const [exportScope, setExportScope] = useState<"current" | "ready" | "all">("all");
+  const [pendingPageStyles, setPendingPageStyles] = useState<
+    Record<string, { configuredStyle: PresentationStyleId | null }>
+  >({});
   const metaSlideIdRef = useRef<string | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const planSaveTimerRef = useRef<number | null>(null);
@@ -354,6 +384,43 @@ export function StudioSpace() {
   const selected = useMemo(() => {
     return slides.find((s) => s.id === currentSlideId) ?? slides[0] ?? null;
   }, [slides, currentSlideId]);
+  const projectPresentationStyle = normalizePresentationStyleId(
+    project?.presentationStyle
+  );
+  const slidePresentationStyle = selected?.presentationStyle ?? null;
+  const fallbackAppliedPageStyle = resolvePresentationStyleId(
+    projectPresentationStyle,
+    slidePresentationStyle
+  );
+  const appliedPageStyle = selected
+    ? resolveAppliedPageStyle({
+        slideId: selected.id,
+        loadedSlideId: designVersionsSlideId,
+        activeVersionId: selected.activeDesignVersionId ?? null,
+        versions: designVersions,
+        fallbackStyle: fallbackAppliedPageStyle
+      })
+    : projectPresentationStyle;
+  const storedPendingPageStyleChange = selected
+    ? pendingPageStyles[selected.id]
+    : undefined;
+  const pendingPageStyleChange =
+    selected &&
+    storedPendingPageStyleChange &&
+    styleSelectionNeedsRegeneration(
+      projectPresentationStyle,
+      appliedPageStyle,
+      storedPendingPageStyleChange.configuredStyle
+    )
+      ? storedPendingPageStyleChange
+      : undefined;
+  const selectedConfiguredPageStyle = pendingPageStyleChange
+    ? pendingPageStyleChange.configuredStyle
+    : slidePresentationStyle;
+  const requestedPageStyle = resolvePresentationStyleId(
+    projectPresentationStyle,
+    selectedConfiguredPageStyle
+  );
 
   const flushMetaSave = async () => {
     if (saveTimerRef.current != null) {
@@ -496,6 +563,51 @@ export function StudioSpace() {
     await action();
   };
 
+  const clearPendingPageStyle = (slideId: string) => {
+    setPendingPageStyles((current) => {
+      if (!Object.hasOwn(current, slideId)) return current;
+      const next = { ...current };
+      delete next[slideId];
+      return next;
+    });
+  };
+
+  const handlePageStyleChange = (configuredStyle: PresentationStyleId | null) => {
+    if (!selected) return;
+    const needsRegeneration =
+      Boolean(selected.svgPreview) &&
+      styleSelectionNeedsRegeneration(
+        projectPresentationStyle,
+        appliedPageStyle,
+        configuredStyle
+      );
+
+    if (!needsRegeneration) {
+      clearPendingPageStyle(selected.id);
+      if (configuredStyle !== slidePresentationStyle) {
+        void updateSlide(selected.id, { presentationStyle: configuredStyle });
+      }
+      return;
+    }
+
+    setPendingPageStyles((current) => ({
+      ...current,
+      [selected.id]: { configuredStyle }
+    }));
+  };
+
+  const regenerateWithPendingPageStyle = async () => {
+    if (!selected || !pendingPageStyleChange || busy) return;
+    const slideId = selected.id;
+    const configuredStyle = pendingPageStyleChange.configuredStyle;
+    await flushMetaSave();
+    await flushPlanSave();
+    const succeeded = await generateSlideDesign(slideId, {
+      presentationStyle: configuredStyle
+    });
+    if (succeeded) clearPendingPageStyle(slideId);
+  };
+
   const generateAndEnterDraft = () => {
     if (!selected || busy) return;
     const slideId = selected.id;
@@ -568,6 +680,24 @@ export function StudioSpace() {
   }, [selected?.id]);
 
   useEffect(() => {
+    if (
+      currentPhase !== "design" ||
+      !selected?.id ||
+      designVersionsLoading ||
+      designVersionsSlideId === selected.id
+    ) {
+      return;
+    }
+    void loadSlideDesignVersions(selected.id);
+  }, [
+    currentPhase,
+    designVersionsLoading,
+    designVersionsSlideId,
+    loadSlideDesignVersions,
+    selected?.id
+  ]);
+
+  useEffect(() => {
     if (showDesignCodeStream) {
       wasDesignStreamingRef.current = true;
       return;
@@ -601,9 +731,31 @@ export function StudioSpace() {
     }
   };
 
+  const activateDesignVersion = async (versionId: string) => {
+    if (!selected || versionId === selected.activeDesignVersionId) return;
+    if (
+      svgEditorDirty &&
+      !window.confirm("当前 SVG 修改尚未保存，切换版本将放弃这些修改。是否继续？")
+    ) {
+      return;
+    }
+    if (svgEditorDirty) {
+      setSvgEditorValue(svgEditorBaseline);
+    }
+    try {
+      await activateSlideDesignVersion(selected.id, versionId);
+    } catch {
+      // Store 已保留当前版本并展示错误；避免产生未处理的 Promise rejection。
+    }
+  };
+
   /** AI 按主题重排布局（深色/浅色构图差异大时用） */
   const regenerateCurrentForTheme = async () => {
     if (!selected) return;
+    if (pendingPageStyleChange) {
+      await regenerateWithPendingPageStyle();
+      return;
+    }
     await runWizard(selected.id);
   };
 
@@ -619,6 +771,10 @@ export function StudioSpace() {
 
   const readySlides = useMemo(() => slides.filter((slide) => isSlideDesignReady(slide)), [slides]);
   const currentDesignReady = Boolean(selected && isSlideDesignReady(selected));
+  const selectedDesignQualityFailure =
+    selected && designQualityFailure?.slideId === selected.id
+      ? designQualityFailure
+      : null;
 
   const runExport = async (svgExportMode: "fidelity" | "editable") => {
     setExportPromptOpen(false);
@@ -719,12 +875,20 @@ export function StudioSpace() {
                 disabled={Boolean(busy) || !selected || isWizardRunning}
                 onClick={() => {
                   if (!selected) return;
-                  void runWizard(selected.id);
+                  if (pendingPageStyleChange) {
+                    void regenerateWithPendingPageStyle();
+                  } else {
+                    void runWizard(selected.id);
+                  }
                 }}
-                title="生成本页 SVG 设计稿（未检索/初稿会自动补齐）"
+                title={
+                  pendingPageStyleChange
+                    ? "按已选择的新风格重新生成本页"
+                    : "生成本页 SVG 设计稿（未检索/初稿会自动补齐）"
+                }
               >
                 <WandSparkles className="h-4 w-4" />
-                生成本页设计稿
+                {pendingPageStyleChange ? "按新风格重新生成" : "生成本页设计稿"}
               </button>
               <button
                 type="button"
@@ -933,43 +1097,85 @@ export function StudioSpace() {
                     </p>
                   </div>
                 </div>
-                <div
-                  className="inline-flex rounded-full border border-[rgba(0,0,0,0.13)] bg-[rgba(0,0,0,0.03)] p-1"
-                  role="tablist"
-                  aria-label="设计稿查看方式"
-                >
-                  {(
-                    [
-                      ["preview", "预览"],
-                      ["code", "代码"]
-                    ] as const
-                  ).map(([mode, label]) => {
-                    const active = effectiveDesignViewMode === mode;
-                    return (
-                      <button
-                        key={mode}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        disabled={mode === "preview" && showDesignCodeStream}
-                        title={
-                          mode === "preview"
-                            ? showDesignCodeStream
-                              ? "SVG 生成完成后自动返回预览"
-                              : "查看设计稿预览"
-                            : "查看当前 SVG 源码"
-                        }
-                        className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                          active ? "bg-[rgba(0,0,0,0.9)] text-white" : "text-[rgba(0,0,0,0.9)] hover:bg-[rgba(0,0,0,0.06)]"
-                        } disabled:cursor-not-allowed disabled:opacity-45`}
-                        onClick={() => setDesignViewMode(mode)}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <PageStyleControl
+                    busy={Boolean(busy)}
+                    projectStyle={projectPresentationStyle}
+                    configuredStyle={slidePresentationStyle}
+                    appliedStyle={appliedPageStyle}
+                    pendingStyle={pendingPageStyleChange?.configuredStyle}
+                    hasPendingChange={Boolean(pendingPageStyleChange)}
+                    onChange={handlePageStyleChange}
+                  />
+                  <DesignVersionNavigator
+                    versions={
+                      designVersionsSlideId === selected.id
+                        ? designVersions
+                        : []
+                    }
+                    activeVersionId={selected.activeDesignVersionId ?? null}
+                    disabled={
+                      Boolean(busy) ||
+                      designVersionsLoading ||
+                      showDesignCodeStream
+                    }
+                    onActivate={(versionId) =>
+                      void activateDesignVersion(versionId)
+                    }
+                  />
+                  <div
+                    className="inline-flex rounded-full border border-[rgba(0,0,0,0.13)] bg-[rgba(0,0,0,0.03)] p-1"
+                    role="tablist"
+                    aria-label="设计稿查看方式"
+                  >
+                    {(
+                      [
+                        ["preview", "预览"],
+                        ["code", "代码"]
+                      ] as const
+                    ).map(([mode, label]) => {
+                      const active = effectiveDesignViewMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          disabled={mode === "preview" && showDesignCodeStream}
+                          title={
+                            mode === "preview"
+                              ? showDesignCodeStream
+                                ? "SVG 生成完成后自动返回预览"
+                                : "查看设计稿预览"
+                              : "查看当前 SVG 源码"
+                          }
+                          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                            active ? "bg-[rgba(0,0,0,0.9)] text-white" : "text-[rgba(0,0,0,0.9)] hover:bg-[rgba(0,0,0,0.06)]"
+                          } disabled:cursor-not-allowed disabled:opacity-45`}
+                          onClick={() => setDesignViewMode(mode)}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
+              {pendingPageStyleChange ? (
+                <PageStyleChangePrompt
+                  appliedStyle={appliedPageStyle}
+                  requestedStyle={requestedPageStyle}
+                  busy={Boolean(busy)}
+                  onRegenerate={() => void regenerateWithPendingPageStyle()}
+                  onIgnore={() => selected && clearPendingPageStyle(selected.id)}
+                />
+              ) : null}
+              {selectedDesignQualityFailure ? (
+                <DesignQualityFailurePanel
+                  failure={selectedDesignQualityFailure}
+                  onDismiss={clearDesignQualityFailure}
+                />
+              ) : null}
               {effectiveDesignViewMode === "code" ? (
                 <div
                   className="svg-stream-canvas h-[420px] overflow-hidden rounded-xl border"
@@ -1063,14 +1269,23 @@ export function StudioSpace() {
 
         <div className="flex h-full min-h-0 flex-col gap-4">
           {currentPhase === "design" ? (
-            <ThemeConfigPanel
+            <DesignConfigPanel
               busy={busy}
+              activeTab={designConfigTab}
+              projectStyle={projectPresentationStyle}
+              slideStyle={slidePresentationStyle}
               exportTheme={exportTheme}
               themeAccentId={themeAccentId}
               themeSurfaceId={themeSurfaceId}
               exportWarnings={exportWarnings}
               slidesEmpty={slides.length === 0}
               hasSelected={Boolean(selected)}
+              onTabChange={setDesignConfigTab}
+              onProjectStyleChange={(style) => void setProjectPresentationStyle(style)}
+              onSlideStyleChange={(style) => {
+                if (!selected) return;
+                void updateSlide(selected.id, { presentationStyle: style });
+              }}
               onThemeChange={(theme) => void handleThemeChange(theme)}
               onAccentChange={setThemeAccentId}
               onSurfaceChange={setThemeSurfaceId}

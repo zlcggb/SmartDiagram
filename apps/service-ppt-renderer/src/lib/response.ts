@@ -4,6 +4,6 @@ export function ok<T>(data: T, message = ""): ApiSuccess<T> {
   return { success: true, data, message };
 }
 
-export function fail(message: string): ApiFailure {
-  return { success: false, data: null, message };
+export function fail<T = unknown>(message: string, data: T | null = null): ApiFailure<T> {
+  return { success: false, data, message };
 }

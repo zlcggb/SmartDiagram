@@ -1,4 +1,12 @@
-import type { FactDto, ProjectDto, PptExportTheme, SlideDto, SpeechWritingStyleId, ThemeSurfaceId } from "@ppt-agent/shared";
+import type {
+  FactDto,
+  PresentationStyleId,
+  ProjectDto,
+  PptExportTheme,
+  SlideDto,
+  SpeechWritingStyleId,
+  ThemeSurfaceId
+} from "@ppt-agent/shared";
 import {
   blueprintForLayout,
   formatCopyBudgetCatalog,
@@ -8,10 +16,12 @@ import {
   formatSkeletonGeometryInstruction,
   formatVariantCompositionInstruction,
   getAccentPresetHex,
+  getPresentationStylePreset,
   getSkeletonFrame,
   getThemePack,
   getThemeSurfacePreset,
   normalizeAccentPresetId,
+  normalizePresentationStyleId,
   normalizePptExportTheme,
   pickDefaultVariant,
   queryLayouts,
@@ -253,7 +263,7 @@ export function buildOutlinePrompt(
 
 
 export const svgPreviewSystemPrompt = [
-  "你是精通信息架构与 SVG 编码的专家（Design Bento）。",
+  "你是精通信息架构、演示叙事与 SVG 编码的高级企业演示设计专家。",
   "你的任务是将完整的单页策划稿转化为一张高质量、结构化、具备高级感、简洁感和专业感的 SVG 演示文稿页面。",
   "",
   "## 画布",
@@ -262,21 +272,26 @@ export const svgPreviewSystemPrompt = [
   "- 卡片与画布右边至少保留 32px；正文与卡片右边至少保留 20px，stroke 也不能越过画布。",
   "",
   "## 视觉基调",
-  "- 企业内部汇报风格：克制、清晰、专业，不做营销海报。",
+  "- 严格服从本页 STYLE_CONTRACT；风格决定构图、字阶、密度与叙事语言，主题只决定色板。",
+  "- 所有风格都必须克制、清晰、专业；强调依靠字阶、留白、细分隔线和单一页级强调色，不做营销海报或拟物界面。",
+  "- 四级层次：标题/核心结论为 primary，正文为 secondary，注释为 tertiary，边框与分隔为 quaternary；除风险/成功语义色外，每页只使用一个 keyColor。",
   "- 严格遵循当前 ThemePack 色值（主色/辅色/背景/卡片/成功/风险/系列色），不要另起一套色盘。",
   "- 图表或多系列色块只用 ThemePack.series 枚举色，禁止无限自由取色。",
   "- 不要生成后台管理系统 UI、网页仪表盘、按钮式控件或浏览器界面。",
+  "- 禁止整高侧边色条、泛用胶囊标签、无意义光晕、巨型透明圆和为了设计感制造的错位叠片。",
   "",
   "## 版式角色 + 视觉配方",
   "- recommendedLayout / layoutType 只规定页面角色（封面/指标/对比/流程/风险/行动等），不锁死 SVG 几何。",
   "- 必须执行本页注入的具体视觉配方：坐标区、形状组装程序、必要图元和语义分组优先于通用角色剪影。",
   "- 使用形状、连接关系、面积与字阶共同建立层级；最重要的信息必须形成可识别的视觉锚点。",
   "- 不同页面要选择不同构图母题，禁止整套 PPT 都是标题横幅加等宽卡片。",
+  "- 独立业务区不得相交；主视觉必须拥有独立槽位。只有背景、连接线和视觉配方 allowedOverlaps 明确声明的关系可以穿插。",
+  "- SVG 没有业务 z-index；必须按视觉配方 layer 从低到高输出语义 <g>，让 DOM 绘制顺序与层级一致。",
   "",
   "## 字体与文本框硬规则",
   "- font-family 统一使用 Microsoft YaHei, PingFang SC, Noto Sans CJK SC, Arial, sans-serif。",
   "- 中文标题建议 38-56px，普通卡片标题 24-32px，正文 18-23px，辅助说明 14-18px。",
-  "- font-weight 保持克制：正文 400/500，卡片标题 650/700，大标题 750/800；不要整页都 900 粗体。",
+  "- font-weight 保持克制：正文 400/500，卡片标题 600/700，大标题 600/700；不要整页都 800/900 粗体。",
   "- 每一个 <text> 都必须带 data-w 和 data-h。",
   "- data-w/data-h 必须贴合该段文字的真实区域，不能把一个文字框拉满半页或覆盖多个卡片。",
   "- 单行标题 data-h 通常为 font-size 的 1.3-1.7 倍；正文多行 data-h 按行数计算，不要超过所在卡片高度。",
@@ -287,7 +302,7 @@ export const svgPreviewSystemPrompt = [
   "- data-w 必须小于等于所在卡片的内容宽度；文字最后一行的右边界必须至少距卡片右边 20px。",
   "- 标题、正文、指标请拆成多个独立 <text>，不要把一整张卡片的全部文字塞进一个巨大文本框。",
   "- 禁止输出只有“•”“·”“-”“。”的孤立文本；bullet 必须写成完整短句，例如“• 完成联调测试”。",
-  "- 文字不能越过卡片边界，不能覆盖其他元素；不确定时减少文字、增加留白。",
+  "- 文字不能越过卡片边界，不能覆盖其他元素；独立文字框之间保留至少 8px，不确定时减少文字、增加留白。",
   "",
   "## 可编译 SVG 硬规则（导出门禁）",
   "- SVG 会被拆成 PowerPoint 原生文本框、形状和线条；业务正文以策划/IR 为准，勿虚构数字与日期。",
@@ -392,6 +407,27 @@ function surfaceInstruction(surfaceId?: ThemeSurfaceId | string | null) {
   const preset = getThemeSurfacePreset(surfaceId);
   if (!preset.regenerateHint) return "";
   return `质感预设「${preset.label}」构图提示：${preset.regenerateHint}。`;
+}
+
+function presentationStyleInstruction(
+  presentationStyle?: PresentationStyleId | string | null
+) {
+  const style = getPresentationStylePreset(
+    normalizePresentationStyleId(presentationStyle)
+  );
+  return [
+    "# STYLE_CONTRACT（演示风格，决定布局与排版）",
+    `styleId: ${style.id}`,
+    `名称: ${style.label}`,
+    `适用场景: ${style.useCases.join(" / ")}`,
+    `构图: ${style.composition}`,
+    `排版: ${style.typography}`,
+    `信息密度: ${style.density}`,
+    `视觉指导: ${style.promptHint}`,
+    `偏好配方: ${style.preferredRecipeIds.join(" / ")}`,
+    `禁止模式: ${style.forbiddenPatterns.join(" / ")}`,
+    "主题色不得替代风格职责；不要因为换色而改变上述构图逻辑。"
+  ].join("\n");
 }
 
 function visualHintInstruction(slide: SlideDto) {
@@ -575,32 +611,44 @@ export function buildSvgPreviewPrompt(
   theme: PptExportTheme = "white-blue",
   surfaceId?: ThemeSurfaceId | string | null,
   revisionNotes: string[] = [],
-  accentId?: string | null
+  accentId?: string | null,
+  previousSvg?: string,
+  presentationStyle?: PresentationStyleId | string | null
 ) {
   const surfaceLine = surfaceInstruction(surfaceId);
+  const repairInstruction =
+    revisionNotes.length > 0
+      ? [
+          "上一次生成未通过质量门禁。请仅修复下列问题，保留候选 SVG 中已经正确的文字、语义分组、配方结构和视觉层级；禁止无关重写或重新设计整页：",
+          revisionNotes.map((note) => `- ${note}`).join("\n"),
+          previousSvg
+            ? `上一候选 SVG（必须以此为基准做定向修复，并输出修复后的完整 SVG）：\n${previousSvg}`
+            : "没有可用候选 SVG 时，仍须逐条落实以上修复项并输出完整 SVG。"
+        ].join("\n\n")
+      : "";
   return [
-    "请严格按照下面方法生成 SVG 演示文稿页面（Design Bento）。",
+    "请严格按照下面契约生成专业企业演示 SVG 页面。",
     themeInstruction(theme, accentId),
+    presentationStyleInstruction(presentationStyle),
     layoutBlueprintInstruction(slide, theme, { lockGeometry: false }),
-    buildDesignRecipeInstruction(slide),
+    buildDesignRecipeInstruction(slide, presentationStyle),
     visualHintInstruction(slide),
     designGuideInstruction(slide),
     surfaceLine,
-    revisionNotes.length > 0
-      ? `上一次生成未通过质量门禁，必须逐条修复后重新输出完整 SVG：\n${revisionNotes.map((note) => `- ${note}`).join("\n")}`
-      : "",
+    repairInstruction,
     "",
     "我的内容是：",
     JSON.stringify(
       {
         slideId: slide.id,
         ...designHandoff(slide),
-        visualRecipe: designRecipeMeta(slide)
+        presentationStyle: normalizePresentationStyleId(presentationStyle),
+        visualRecipe: designRecipeMeta(slide, presentationStyle)
       },
       null,
       2
     ),
     "",
-    "输出前自检：viewBox 是否为 0 0 1280 720；全部业务内容是否处于 x=32..1248、y=24..696 安全区；是否存在视觉配方规定的全部 <g id> 与必要非矩形图元；是否逐步执行背景、标题、结论、正文和关系层的形状组装程序；是否没有退化成标题居中、等宽白卡和纯文字平铺；是否存在明确主视觉；是否体现 visualHint；是否所有 text 都有贴合文字范围的 data-w/data-h；超过 data-w 的文字是否已用带 x/dy 的 tspan 显式换行；文字右边是否与容器保留至少 20px；是否没有孤立 bullet/标点、重复事实和文字截断；是否能被拆成可编辑 PPT 文本和形状。"
+    "输出前自检：是否完整执行 STYLE_CONTRACT 的构图、排版、密度和禁止模式；viewBox 是否为 0 0 1280 720；全部业务内容是否处于 x=32..1248、y=24..696 安全区；独立业务区是否完全不相交并保留配方 minGutter；是否按 layer 从低到高输出语义 <g>；连接线是否位于内容后方且没有穿过文字；是否没有整高侧边色条、泛用胶囊、无意义光晕和错位叠片；是否存在视觉配方规定的全部 <g id> 与必要非矩形图元；是否逐步执行背景、标题、结论、正文和关系层的形状组装程序；是否没有退化成标题居中、等宽白卡和纯文字平铺；是否存在明确主视觉；是否体现 visualHint；是否所有 text 都有贴合文字范围的 data-w/data-h；超过 data-w 的文字是否已用带 x/dy 的 tspan 显式换行；文字右边是否与容器保留至少 20px；是否没有孤立 bullet/标点、重复事实和文字截断；是否能被拆成可编辑 PPT 文本和形状。"
   ].filter(Boolean).join("\n\n");
 }

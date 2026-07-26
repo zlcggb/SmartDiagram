@@ -27,8 +27,8 @@ function designGuideText(value: unknown, fallback: string) {
 function blockShape(type: SlideContentBlockDto["type"]) {
   if (type === "timeline") return "带节点和连接线的时间轴形状";
   if (type === "table") return "分栏矩阵或对比面板";
-  if (type === "callout") return "高对比色带或聚焦引言卡";
-  return "圆角信息卡，使用左侧强调线或顶部标签";
+  if (type === "callout") return "以大字阶和留白构成的聚焦引言区";
+  return "单层圆角信息面，使用低对比边框、标题字重或顶部短细线";
 }
 
 function blockPlacement(index: number, total: number, layoutType: string) {
@@ -59,14 +59,14 @@ export function deriveSlideDesignGuide(input: DesignGuideInput): SlideDesignGuid
         ? "顶部标题区 + 中部核心结论锚点 + 下方连续流程主视觉"
         : isCompare
           ? "顶部标题区 + 结论强调带 + 下方对照矩阵，保持明显的左右或行列关系"
-          : "顶部标题区 + 独立核心结论形状 + 下方有主次的卡片组，留出明确呼吸感",
-    background: "使用浅色分层画布，通过柔和渐变、半透明几何色块或局部光晕建立景深；避免纯白空背景和大面积无目的装饰",
+          : "顶部标题区 + 编辑式核心结论 + 下方有主次的信息区，独立区域保持明确空气带",
+    background: "使用主题纯色或单一浅表面分区建立层级；同页最多一种低对比结构装饰，避免泛用光晕、巨型透明圆和无目的渐变",
     title: isHero
       ? "大字阶标题作为第一视觉重心，与短强调线或小标签组合，不放入普通卡片"
-      : "标题在顶部左对齐，配合小型强调线、章节标签或色块建立标题区，与正文保持明确间距",
+      : "标题在顶部左对齐，以字阶、留白和一条短细线建立标题区，与正文保持明确间距",
     keyMessage: isHero
       ? "作为标题下方的大号观点或关键词锚点，使用主色强调，不写成普通正文段落"
-      : "放入独立的高亮色带、悬浮结论卡或数字锚点中，字阶明显高于正文，不与模块内容重复",
+      : "作为编辑式导语或数字/关键词锚点，依靠字阶与留白突出；不默认放入高饱和色带或悬浮卡",
     blocks: contentBlocks.map((block, index) => ({
       blockIndex: index,
       shape: blockShape(block.type),
@@ -80,7 +80,7 @@ export function deriveSlideDesignGuide(input: DesignGuideInput): SlideDesignGuid
               ? "放大最重要的词或数字，使用色彩、留白和对比构成次级视觉焦点"
               : "每条 item 使用短标签、图标点或小序号组织，保留层级与留白，禁止大段文字"
     })),
-    decoration: "只使用服务于结构的连接线、几何块、微光晕和小型节点；装饰不得抢过标题与结论"
+    decoration: "只使用服务于结构的细连接线、局部浅色面和小型节点；禁止整高侧边色条，装饰不得抢过标题与结论"
   };
 }
 

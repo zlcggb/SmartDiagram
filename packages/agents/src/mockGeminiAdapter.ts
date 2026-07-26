@@ -184,7 +184,7 @@ export class MockGeminiAdapter implements GeminiAdapter {
     const draftKeyMessage = slide.planJson?.keyMessage || slide.keyMessage;
     const planBlocks = slide.planJson?.contentBlocks.filter((block) => block.type !== "summary") ?? [];
     const fallbackItems = slideItems(slide, facts, 4);
-    const selection = selectDesignRecipe(slide);
+    const selection = selectDesignRecipe(slide, _options?.presentationStyle);
     const recipe = selection.recipe;
     const zoneById = new Map(recipe.zones.map((zone) => [zone.id, zone]));
     const titleZone = zoneById.get("title-zone") ?? { x: 72, y: 54, w: 720, h: 108 };
@@ -200,11 +200,43 @@ export class MockGeminiAdapter implements GeminiAdapter {
         const blockTitle = block?.title || `要点 ${index + 1}`;
         const body = block?.items[0] || fallbackItems[index] || draftKeyMessage;
         const accent = tokens.series[index % tokens.series.length] ?? tokens.primary;
-        return `<g id="${id}"><polygon points="${zone.x},${zone.y + 18} ${zone.x + 18},${zone.y} ${zone.x + zone.w},${zone.y} ${zone.x + zone.w},${zone.y + zone.h} ${zone.x},${zone.y + zone.h}" fill="${tokens.card}" stroke="${tokens.border}"/><rect x="${zone.x}" y="${zone.y + 18}" width="7" height="${Math.max(54, zone.h - 36)}" fill="${accent}"/><circle cx="${zone.x + 36}" cy="${zone.y + 48}" r="14" fill="${accent}" fill-opacity="0.16" stroke="${accent}"/><text x="${zone.x + 62}" y="${zone.y + 56}" data-w="${Math.max(100, zone.w - 88)}" data-h="32" font-size="22" font-weight="700" fill="${tokens.title}">${escapeSvgText(blockTitle.slice(0, 18))}</text><text x="${zone.x + 28}" y="${zone.y + 100}" data-w="${Math.max(100, zone.w - 56)}" data-h="${Math.max(36, zone.h - 118)}" font-size="17" fill="${tokens.body}">${escapeSvgText(body.slice(0, 34))}</text></g>`;
-      })
+        return `<g id="${id}"><rect x="${zone.x}" y="${zone.y}" width="${zone.w}" height="${zone.h}" rx="18" fill="${tokens.card}" stroke="${tokens.border}"/><line x1="${zone.x + 28}" y1="${zone.y + 28}" x2="${zone.x + 92}" y2="${zone.y + 28}" stroke="${accent}" stroke-width="4"/><polygon points="${zone.x + 28},${zone.y + 58} ${zone.x + 38},${zone.y + 48} ${zone.x + 48},${zone.y + 58} ${zone.x + 38},${zone.y + 68}" fill="${accent}" fill-opacity="0.16" stroke="${accent}"/><text x="${zone.x + 62}" y="${zone.y + 66}" data-w="${Math.max(100, zone.w - 90)}" data-h="32" font-size="22" font-weight="700" fill="${tokens.title}">${escapeSvgText(blockTitle.slice(0, 18))}</text><text x="${zone.x + 28}" y="${zone.y + 122}" data-w="${Math.max(100, zone.w - 56)}" data-h="${Math.max(36, Math.min(72, zone.h - 142))}" font-size="17" fill="${tokens.body}">${escapeSvgText(body.slice(0, 34))}</text></g>`;
+      });
+
+    const fragments = new Map<string, string>([
+      [
+        "background-layer",
+        `<g id="background-layer"><rect width="1280" height="720" fill="${tokens.bg}"/><line x1="72" y1="176" x2="1208" y2="176" stroke="${tokens.border}"/><path d="M72 650 C360 620 830 660 1208 606" fill="none" stroke="${tokens.primary}" stroke-opacity="0.10" stroke-width="2"/><polyline points="84,662 300,650 520,656 760,632 1010,640 1190,612" fill="none" stroke="${tokens.accentAlt}" stroke-opacity="0.12"/><ellipse cx="1160" cy="82" rx="46" ry="28" fill="${tokens.accent}" fill-opacity="0.08"/><polygon points="1170,46 1210,46 1210,86" fill="${tokens.primary}" fill-opacity="0.10"/></g>`
+      ],
+      [
+        "connector-layer",
+        `<g id="connector-layer"><path d="M${anchor.x - 36} ${anchor.y + anchor.h / 2} L${anchor.x} ${anchor.y + anchor.h / 2}" fill="none" stroke="${tokens.primary}" stroke-width="2"/><path d="M${anchor.x + anchor.w} ${anchor.y + anchor.h / 2} L${anchor.x + anchor.w + 36} ${anchor.y + anchor.h / 2}" fill="none" stroke="${tokens.accent}" stroke-width="2"/></g>`
+      ],
+      [
+        "title-zone",
+        `<g id="title-zone"><text x="${titleZone.x}" y="${titleZone.y + 52}" data-w="${titleZone.w}" data-h="58" font-size="44" font-weight="700" fill="${tokens.title}">${escapeSvgText(draftTitle)}</text><line x1="${titleZone.x}" y1="${titleZone.y + 78}" x2="${titleZone.x + 96}" y2="${titleZone.y + 78}" stroke="${tokens.primary}" stroke-width="4"/></g>`
+      ],
+      [
+        "key-message-zone",
+        `<g id="key-message-zone"><line x1="${keyZone.x}" y1="${keyZone.y + 18}" x2="${keyZone.x + 64}" y2="${keyZone.y + 18}" stroke="${tokens.primary}" stroke-width="3"/><text x="${keyZone.x}" y="${keyZone.y + 58}" data-w="${keyZone.w}" data-h="${Math.max(34, keyZone.h - 34)}" font-size="20" font-weight="600" fill="${tokens.title}">${escapeSvgText(draftKeyMessage.slice(0, 42))}</text></g>`
+      ],
+      [
+        "visual-anchor",
+        `<g id="visual-anchor"><circle cx="${anchor.x + anchor.w / 2}" cy="${anchor.y + anchor.h / 2}" r="${Math.min(anchor.w, anchor.h) / 2 - 18}" fill="${tokens.card}" stroke="${tokens.primary}" stroke-width="3"/><circle cx="${anchor.x + anchor.w / 2}" cy="${anchor.y + anchor.h / 2}" r="${Math.max(20, Math.min(anchor.w, anchor.h) / 2 - 48)}" fill="${tokens.bgSoft}" stroke="${tokens.accent}" stroke-width="2"/><path d="M${anchor.x + 28} ${anchor.y + anchor.h / 2} L${anchor.x + anchor.w - 28} ${anchor.y + anchor.h / 2}" stroke="${tokens.primary}" stroke-width="2"/><text x="${anchor.x + anchor.w / 2}" y="${anchor.y + anchor.h / 2 + 8}" data-w="${Math.max(90, anchor.w - 70)}" data-h="40" text-anchor="middle" font-size="24" font-weight="700" fill="${tokens.title}">${escapeSvgText(keyword)}</text></g>`
+      ]
+    ]);
+    for (const group of contentGroups) {
+      const id = group.match(/\bid="([^"]+)"/)?.[1];
+      if (id) fragments.set(id, group);
+    }
+    const layerFor = (id: string) =>
+      id === "background-layer" ? 0 : zoneById.get(id)?.layer ?? 50;
+    const orderedGroups = [...fragments.entries()]
+      .sort(([leftId], [rightId]) => layerFor(leftId) - layerFor(rightId))
+      .map(([, fragment]) => fragment)
       .join("");
 
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720"><g id="background-layer"><rect width="1280" height="720" fill="${tokens.bg}"/><circle cx="1040" cy="90" r="260" fill="${tokens.accent}" fill-opacity="0.07"/><ellipse cx="180" cy="650" rx="310" ry="150" fill="${tokens.primary}" fill-opacity="0.05"/><path d="M72 650 C360 570 830 680 1208 550" fill="none" stroke="${tokens.primary}" stroke-opacity="0.14" stroke-width="2"/><line x1="72" y1="176" x2="1208" y2="176" stroke="${tokens.border}"/><polyline points="84,662 300,630 520,644 760,596 1010,612 1190,560" fill="none" stroke="${tokens.accentAlt}" stroke-opacity="0.18"/><polygon points="1130,36 1210,36 1210,116" fill="${tokens.primary}" fill-opacity="0.12"/></g><g id="title-zone"><text x="${titleZone.x}" y="${titleZone.y + 52}" data-w="${titleZone.w}" data-h="68" font-size="44" font-weight="800" fill="${tokens.title}">${escapeSvgText(draftTitle)}</text><rect x="${titleZone.x}" y="${titleZone.y + 78}" width="112" height="6" fill="${tokens.primary}"/></g><g id="key-message-zone"><path d="M${keyZone.x} ${keyZone.y + 12} L${keyZone.x + keyZone.w - 24} ${keyZone.y + 12} L${keyZone.x + keyZone.w} ${keyZone.y + keyZone.h / 2} L${keyZone.x + keyZone.w - 24} ${keyZone.y + keyZone.h - 12} L${keyZone.x} ${keyZone.y + keyZone.h - 12} Z" fill="${tokens.primary}"/><text x="${keyZone.x + 24}" y="${keyZone.y + keyZone.h / 2 + 8}" data-w="${Math.max(120, keyZone.w - 58)}" data-h="36" font-size="20" font-weight="700" fill="#FFFFFF">${escapeSvgText(draftKeyMessage.slice(0, 42))}</text></g><g id="visual-anchor"><circle cx="${anchor.x + anchor.w / 2}" cy="${anchor.y + anchor.h / 2}" r="${Math.min(anchor.w, anchor.h) / 2 - 16}" fill="${tokens.primary}" fill-opacity="0.12" stroke="${tokens.primary}" stroke-width="3"/><circle cx="${anchor.x + anchor.w / 2}" cy="${anchor.y + anchor.h / 2}" r="${Math.min(anchor.w, anchor.h) / 2 - 42}" fill="${tokens.card}" stroke="${tokens.accent}" stroke-width="8"/><path d="M${anchor.x + 24} ${anchor.y + anchor.h / 2} L${anchor.x + anchor.w - 24} ${anchor.y + anchor.h / 2}" stroke="${tokens.primary}" stroke-width="4"/><text x="${anchor.x + anchor.w / 2}" y="${anchor.y + anchor.h / 2 + 8}" data-w="${Math.max(90, anchor.w - 70)}" data-h="44" text-anchor="middle" font-size="28" font-weight="800" fill="${tokens.title}">${escapeSvgText(keyword)}</text></g><g id="connector-layer"><path d="M${anchor.x - 90} ${anchor.y + anchor.h / 2} C${anchor.x - 36} ${anchor.y + 20} ${anchor.x - 20} ${anchor.y + anchor.h - 20} ${anchor.x + 12} ${anchor.y + anchor.h / 2}" fill="none" stroke="${tokens.primary}" stroke-width="3"/><path d="M${anchor.x + anchor.w - 12} ${anchor.y + anchor.h / 2} C${anchor.x + anchor.w + 30} ${anchor.y + 20} ${anchor.x + anchor.w + 52} ${anchor.y + anchor.h - 20} ${anchor.x + anchor.w + 90} ${anchor.y + anchor.h / 2}" fill="none" stroke="${tokens.accent}" stroke-width="3"/></g>${contentGroups}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">${orderedGroups}</svg>`;
   }
 
   async startBrief(topic: string) {

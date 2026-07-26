@@ -10,6 +10,7 @@ import { projectRoutes } from "./routes/projects.js";
 import { progressRoutes } from "./routes/progress.js";
 import { mediaRoutes } from "./routes/media.js";
 import { materialRoutes } from "./routes/materials.js";
+import { slideDesignVersionRoutes } from "./routes/slideDesignVersions.js";
 import { installPptAuthorization, type PptAuthorizationOptions } from "./lib/pptAuthorization.js";
 import { installProtectedExports } from "./lib/exportAccess.js";
 import { getPptPrincipal } from "./lib/pptAuthorization.js";
@@ -80,6 +81,7 @@ export async function buildApp(authOptions: PptAuthorizationOptions = {}) {
   });
 
   await app.register(projectRoutes);
+  await app.register(slideDesignVersionRoutes);
   await app.register(materialRoutes);
   await app.register(progressRoutes);
   await app.register(mediaRoutes);

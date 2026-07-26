@@ -104,10 +104,24 @@ async def health(request: Request) -> Response:
 
 @app.get("/api/ai/status")
 async def ai_status(request: Request) -> Response:
-    response = await legacy(request).raw_request("GET", "/api/ai/status")
-    payload = response.json()
-    payload.update({"apiBackend": "fastapi", "orchestrationBackend": "langgraph"})
-    return JSONResponse(status_code=response.status_code, content=payload)
+    try:
+        response = await legacy(request).raw_request("GET", "/api/ai/status")
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ValueError("legacy status response is not a JSON object")
+        payload.update({"apiBackend": "fastapi", "orchestrationBackend": "langgraph"})
+        return JSONResponse(status_code=response.status_code, content=payload)
+    except Exception as error:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "apiBackend": "fastapi",
+                "orchestrationBackend": "langgraph",
+                "legacy": "disconnected",
+                "message": str(error),
+            },
+        )
 
 
 @app.get("/api/orchestration/graph")
@@ -179,6 +193,7 @@ async def run_pipeline(request: Request, project_id: str, body: PipelineRequest)
         "theme": body.theme or "",
         "accent_id": body.accentId or "",
         "surface_id": body.surfaceId or "",
+        "presentation_style": body.presentationStyle or "",
         "mode": body.mode,
         "skip_design": body.skipDesign,
         "force": body.force,
@@ -277,12 +292,22 @@ async def _authorize_project(request: Request, project_id: str) -> None:
     raise LegacyApiError(message, response.status_code, data)
 
 
+def _request_has_body(request: Request) -> bool:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            return int(content_length) > 0
+        except ValueError:
+            return True
+    return bool(request.headers.get("transfer-encoding"))
+
+
 async def _proxy(request: Request, upstream_path: str) -> Response:
     headers = _forward_headers(request)
     response = await legacy(request).stream_request(
         request.method,
         upstream_path,
-        content=request.stream(),
+        content=request.stream() if _request_has_body(request) else None,
         params=request.query_params.multi_items(),
         headers=headers,
     )

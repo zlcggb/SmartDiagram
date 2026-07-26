@@ -19,6 +19,7 @@ model Project {
   purpose      String
   pageCount    Int           @default(6)
   theme        String        @default("unilumin-blue")
+  presentationStyle String    @default("consulting")
   mode         String        @default("paste")
   topic        String?
   briefJson    String?
@@ -99,8 +100,10 @@ model Slide {
   status            String          @default("draft")
   isContentLocked   Boolean         @default(false)
   isLayoutLocked    Boolean         @default(false)
+  presentationStyle String?
   planJson          String?
   svgPreview        String?
+  activeDesignVersionId String?
   searchJson        String?
   partTitle         String?
   generationStatus  String          @default("draft")
@@ -115,9 +118,28 @@ model Slide {
   project           Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   slideSources      SlideSource[]
   narration         SlideNarration?
+  designVersions    SlideDesignVersion[] @relation("SlideDesignHistory")
+  activeDesignVersion SlideDesignVersion? @relation("ActiveSlideDesignVersion", fields: [activeDesignVersionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([sortOrder])
+  @@index([activeDesignVersionId])
+}
+
+model SlideDesignVersion {
+  id         String   @id @default(cuid())
+  slideId    String
+  svgPreview String
+  source     String
+  theme      String?
+  accentId   String?
+  surfaceId  String?
+  presentationStyle String?
+  createdAt  DateTime @default(now())
+  slide      Slide    @relation("SlideDesignHistory", fields: [slideId], references: [id], onDelete: Cascade)
+  activeFor  Slide[]  @relation("ActiveSlideDesignVersion")
+
+  @@index([slideId, createdAt])
 }
 
 model SlideNarration {

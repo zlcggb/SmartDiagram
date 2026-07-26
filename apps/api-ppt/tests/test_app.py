@@ -6,7 +6,7 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from ppt_agent_api.legacy import LegacyApiClient
-from ppt_agent_api.main import _authorize_project, _proxy, app
+from ppt_agent_api.main import _authorize_project, _proxy, ai_status, app
 
 
 class TrackingStream(httpx.AsyncByteStream):
@@ -115,6 +115,31 @@ def multipart_streaming_request(legacy: FakeStreamingLegacy) -> Request:
     return Request(scope, receive)
 
 
+def bodyless_request(legacy: FakeStreamingLegacy) -> Request:
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "PATCH",
+        "scheme": "http",
+        "path": "/api/projects/project-1/slides/slide-1/design-versions/version-1/activate",
+        "raw_path": b"/api/projects/project-1/slides/slide-1/design-versions/version-1/activate",
+        "query_string": b"",
+        "headers": [
+            (b"host", b"ppt-agent.test"),
+            (b"x-request-id", b"bodyless-request-1"),
+        ],
+        "client": ("127.0.0.1", 12345),
+        "server": ("ppt-agent.test", 80),
+        "app": SimpleNamespace(state=SimpleNamespace(legacy=legacy)),
+    }
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    return Request(scope, receive)
+
+
 @pytest.mark.asyncio
 async def test_graph_description_is_visible_without_legacy_backend() -> None:
     transport = httpx.ASGITransport(app=app)
@@ -201,6 +226,39 @@ class FakeAuthorizationLegacy:
         )
 
 
+class FailingStatusLegacy:
+    async def raw_request(self, method, path, *, content=None, params=None, headers=None, internal=True):
+        raise httpx.ConnectError("legacy unavailable")
+
+
+def request_with_legacy(legacy) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/api/ai/status",
+            "raw_path": b"/api/ai/status",
+            "query_string": b"",
+            "headers": [(b"host", b"ppt-agent.test")],
+            "client": ("127.0.0.1", 12345),
+            "server": ("ppt-agent.test", 80),
+            "app": SimpleNamespace(state=SimpleNamespace(legacy=legacy)),
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_ai_status_maps_legacy_failure_to_stable_503_json() -> None:
+    response = await ai_status(request_with_legacy(FailingStatusLegacy()))
+
+    assert response.status_code == 503
+    assert b'"legacy":"disconnected"' in response.body
+    assert b'"apiBackend":"fastapi"' in response.body
+
+
 @pytest.mark.asyncio
 async def test_project_authorization_forwards_user_identity_but_strips_internal_header() -> None:
     legacy = FakeAuthorizationLegacy(200)
@@ -271,3 +329,19 @@ async def test_proxy_preserves_multipart_content_type_and_streams_binary_body() 
     assert response.background is not None
     await response.background()
     assert stream.closed
+
+
+@pytest.mark.asyncio
+async def test_proxy_keeps_bodyless_patch_bodyless_for_fastify() -> None:
+    stream = TrackingStream([b'{"success":true}'])
+    legacy = FakeStreamingLegacy(stream)
+
+    response = await _proxy(
+        bodyless_request(legacy),
+        "/api/projects/project-1/slides/slide-1/design-versions/version-1/activate",
+    )
+
+    assert legacy.content is None
+    assert legacy.headers == {"x-request-id": "bodyless-request-1"}
+    assert response.background is not None
+    await response.background()

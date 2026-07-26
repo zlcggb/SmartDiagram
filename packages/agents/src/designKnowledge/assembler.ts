@@ -1,11 +1,15 @@
-import type { SlideDto } from "@ppt-agent/shared";
+import type { PresentationStyleId, SlideDto } from "@ppt-agent/shared";
 import { SHAPE_GRAMMAR, SVG_EDITABILITY_CONTRACT, VISUAL_ANTI_PATTERNS } from "./shapeGrammar.js";
 import { selectDesignRecipe } from "./selector.js";
 
-export function buildDesignRecipeInstruction(slide: SlideDto) {
-  const selection = selectDesignRecipe(slide);
+export function buildDesignRecipeInstruction(
+  slide: SlideDto,
+  presentationStyle?: PresentationStyleId | string | null
+) {
+  const selection = selectDesignRecipe(slide, presentationStyle);
   const recipe = selection.recipe;
-  const zones = recipe.zones
+  const zones = [...recipe.zones]
+    .sort((left, right) => left.layer - right.layer)
     .map(
       (zone) =>
         `- <g id="${zone.id}">：x=${zone.x}, y=${zone.y}, w=${zone.w}, h=${zone.h}, z=${zone.layer}；${zone.instruction}`
@@ -21,7 +25,12 @@ export function buildDesignRecipeInstruction(slide: SlideDto) {
     "",
     "## 坐标区与语义分组",
     zones,
-    "可在每个区内调整内部几何，但不得把这些区域退化为等宽卡片栅格。未使用的可选 content-zone 保持留白，不得补写文案。",
+    `独立语义区最小间距：${recipe.minGutter}px。`,
+    recipe.allowedOverlaps.length > 0
+      ? `仅允许以下语义穿插：${recipe.allowedOverlaps.map(([left, right]) => `${left} ↔ ${right}`).join("；")}。`
+      : "本配方没有允许的跨区重叠；所有独立业务区不得相交。",
+    "可在每个区内调整内部几何，但不得越过本区边界或退化为等宽卡片栅格。未使用的可选 content-zone 保持留白，不得补写文案。",
+    "SVG 实际层级由 DOM 绘制顺序决定；必须按 layer 从低到高输出完整 <g>，同层按上述坐标区顺序输出。",
     "",
     "## 形状组装程序（按顺序执行）",
     `1. 背景层：${recipe.backgroundProgram.join("；")}。`,
@@ -49,8 +58,11 @@ export function buildDesignRecipeInstruction(slide: SlideDto) {
     .join("\n");
 }
 
-export function designRecipeMeta(slide: SlideDto) {
-  const selection = selectDesignRecipe(slide);
+export function designRecipeMeta(
+  slide: SlideDto,
+  presentationStyle?: PresentationStyleId | string | null
+) {
+  const selection = selectDesignRecipe(slide, presentationStyle);
   return {
     id: selection.recipe.id,
     label: selection.recipe.label,
@@ -59,4 +71,3 @@ export function designRecipeMeta(slide: SlideDto) {
     requiredPrimitives: selection.recipe.requiredPrimitives
   };
 }
-

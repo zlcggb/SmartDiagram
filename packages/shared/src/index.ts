@@ -4,6 +4,10 @@ export * from "./studioPipeline.js";
 import { pptExportThemes } from "./themePacks.js";
 import { recommendedLayouts } from "./layoutRoles.js";
 import { themeSurfaceIds } from "./themeSurfacePresets.js";
+import {
+  presentationStyleIds,
+  type PresentationStyleId
+} from "./presentationStyles.js";
 
 export const themeTokens = {
   pageBg: "#FFFFFF",
@@ -43,6 +47,7 @@ export const slideGenerationStatuses = [
   "svg-ready",
   "error"
 ] as const;
+export const slideDesignVersionSourceSchema = z.enum(["ai", "manual", "legacy"]);
 export const projectModes = ["topic", "paste"] as const;
 export const briefQuestionSources = ["ai", "fallback"] as const;
 export {
@@ -128,6 +133,20 @@ export {
   getThemeSurfacePreset
 } from "./themeSurfacePresets.js";
 export type { ThemeSurfaceId, ThemeSurfacePreset } from "./themeSurfacePresets.js";
+export {
+  defaultPresentationStyleId,
+  presentationStyleIds,
+  presentationStylePresets,
+  presentationStyleList,
+  isPresentationStyleId,
+  normalizePresentationStyleId,
+  getPresentationStylePreset,
+  resolvePresentationStyleId
+} from "./presentationStyles.js";
+export type {
+  PresentationStyleId,
+  PresentationStylePreset
+} from "./presentationStyles.js";
 /** svg/theme 为主路径；ir/hybrid 为前端工作室与兼容策略（可编辑 IR / 混合） */
 export const renderStrategies = ["svg", "theme", "ir", "hybrid"] as const;
 export const exportModes = ["draft", "standard", "visual"] as const;
@@ -144,6 +163,7 @@ export const ProjectModeSchema = z.enum(projectModes);
 export const BriefQuestionSourceSchema = z.enum(briefQuestionSources);
 export const PptExportThemeSchema = z.enum(pptExportThemes);
 export const ThemeSurfaceIdSchema = z.enum(themeSurfaceIds);
+export const PresentationStyleIdSchema = z.enum(presentationStyleIds);
 export const RecommendedLayoutSchema = z.enum(recommendedLayouts);
 export const RenderStrategySchema = z.enum(renderStrategies);
 export const ExportModeSchema = z.enum(exportModes);
@@ -343,6 +363,7 @@ export const createProjectSchema = z.object({
   purpose: z.string().min(1).default("待确认目的"),
   pageCount: z.coerce.number().int().min(1).max(16).default(8),
   theme: z.string().default("white-blue"),
+  presentationStyle: PresentationStyleIdSchema.default("consulting"),
   mode: ProjectModeSchema.default("paste"),
   topic: z.string().optional()
 });
@@ -474,6 +495,8 @@ export const exportPptxSchema = z
     accentId: z.string().min(1).optional(),
     /** 设计阶段的质感预设；与主题包一起传给 SVG 生成 */
     surfaceId: ThemeSurfaceIdSchema.optional(),
+    /** 演示风格；设计生成时约束构图、排版和配方选择 */
+    presentationStyle: PresentationStyleIdSchema.optional(),
     /** @deprecated 使用 mode；draft:true 等价 mode=draft */
     draft: z.boolean().optional(),
     mode: ExportModeSchema.optional(),
@@ -493,6 +516,7 @@ export const exportPptxSchema = z
       theme: value.theme,
       accentId: value.accentId,
       surfaceId: value.surfaceId,
+      presentationStyle: value.presentationStyle,
       mode,
       svgExportMode: value.svgExportMode,
       draft: mode === "draft",
@@ -606,6 +630,8 @@ export const updateSlideSchema = z.object({
   status: SlideStatusSchema.optional(),
   isContentLocked: z.boolean().optional(),
   isLayoutLocked: z.boolean().optional(),
+  /** 单页演示风格覆盖；null 表示继承项目默认 */
+  presentationStyle: PresentationStyleIdSchema.nullable().optional(),
   /** 按页覆盖渲染策略（svg|theme）；手动设置后默认 strategyLocked=true */
   renderStrategy: RenderStrategySchema.optional(),
   /** 为 true 时大纲重生成（非 force）与 layout 重算不会覆盖 renderStrategy */
@@ -615,7 +641,16 @@ export const updateSlideSchema = z.object({
   /** 更新可编辑初稿；保存后会使设计稿失效 */
   planJson: SlidePlanDtoSchema.optional(),
   /** 设计阶段手工编辑后的完整 SVG 源码 */
-  svgPreview: z.string().min(1).max(500_000).optional()
+  svgPreview: z.string().min(1).max(500_000).optional(),
+  /** 手动保存 SVG 时记录当前主题环境，供版本历史展示与追溯 */
+  designVersionMeta: z
+    .object({
+      theme: z.string().min(1).optional(),
+      accentId: z.string().min(1).optional(),
+      surfaceId: z.string().min(1).optional(),
+      presentationStyle: PresentationStyleIdSchema.optional()
+    })
+    .optional()
 });
 
 export const reorderSlidesSchema = z.object({
@@ -651,13 +686,21 @@ export interface ApiSuccess<T> {
   message: string;
 }
 
-export interface ApiFailure {
+export interface ApiFailure<T = unknown> {
   success: false;
-  data: null;
+  data: T | null;
   message: string;
 }
 
-export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
+export type ApiResponse<T, TError = unknown> = ApiSuccess<T> | ApiFailure<TError>;
+
+export interface SvgQualityFailureDto {
+  code: "SVG_QUALITY_VALIDATION_FAILED";
+  issues: string[];
+  /** 最后一轮未采用的候选稿，仅供诊断预览与源码检查。 */
+  svgPreview: string;
+  attemptCount: number;
+}
 
 export interface ProjectDto {
   id: string;
@@ -667,6 +710,7 @@ export interface ProjectDto {
   purpose: string;
   pageCount: number;
   theme: string;
+  presentationStyle: PresentationStyleId;
   mode: ProjectMode;
   topic?: string | null;
   briefJson?: BriefJson | null;
@@ -715,6 +759,25 @@ export interface ProjectMaterialDto {
 /** 页面 IR 设计稿（结构化可编辑中间表示）；字段随生成器演进，前端按透传处理 */
 export type SlideIrDto = Record<string, unknown>;
 
+export type SlideDesignVersionSource = z.infer<typeof slideDesignVersionSourceSchema>;
+
+export interface SlideDesignVersionDto {
+  id: string;
+  slideId: string;
+  svgPreview: string;
+  source: SlideDesignVersionSource;
+  theme: string | null;
+  accentId: string | null;
+  surfaceId: string | null;
+  presentationStyle: PresentationStyleId | null;
+  createdAt: string;
+}
+
+export interface SlideDesignHistoryDto {
+  activeVersionId: string | null;
+  versions: SlideDesignVersionDto[];
+}
+
 export interface SlideDto {
   id: string;
   projectId: string;
@@ -727,9 +790,12 @@ export interface SlideDto {
   status: SlideStatus;
   isContentLocked: boolean;
   isLayoutLocked: boolean;
+  /** 可空；空值表示继承项目默认风格 */
+  presentationStyle?: PresentationStyleId | null;
   sourceFactIds: string[];
   planJson?: SlidePlanDto | null;
   svgPreview?: string | null;
+  activeDesignVersionId?: string | null;
   /** IR 策略产物；与 svgPreview 二选一或并存 */
   irJson?: SlideIrDto | null;
   searchJson?: SlideSearchJson | null;

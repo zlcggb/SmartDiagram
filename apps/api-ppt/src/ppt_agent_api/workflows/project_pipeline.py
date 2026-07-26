@@ -17,6 +17,7 @@ class PipelineState(TypedDict, total=False):
     theme: str
     accent_id: str
     surface_id: str
+    presentation_style: str
     mode: Literal["draft", "standard", "visual"]
     skip_design: bool
     force: bool
@@ -46,6 +47,11 @@ def build_project_pipeline(client: LegacyApiClient, checkpointer: BaseCheckpoint
             "project_detail": detail,
             "slides": detail.get("slides", []),
             "theme": state.get("theme") or project.get("theme") or "white-blue",
+            "presentation_style": (
+                state.get("presentation_style")
+                or project.get("presentationStyle")
+                or "consulting"
+            ),
             "current_stage": "load_project",
         }
 
@@ -111,6 +117,7 @@ def build_project_pipeline(client: LegacyApiClient, checkpointer: BaseCheckpoint
                     "theme": state["theme"],
                     "accent_id": state.get("accent_id", ""),
                     "surface_id": state.get("surface_id", ""),
+                    "presentation_style": state.get("presentation_style", ""),
                     "mode": state["mode"],
                     "skip_design": state.get("skip_design", False),
                     "force": state.get("force", False),
@@ -207,6 +214,7 @@ def build_project_pipeline(client: LegacyApiClient, checkpointer: BaseCheckpoint
                     "theme": state["theme"],
                     "accent_id": state.get("accent_id", ""),
                     "surface_id": state.get("surface_id", ""),
+                    "presentation_style": state.get("presentation_style", ""),
                     "mode": state["mode"],
                     "skip_design": False,
                     "force": state.get("force", False),
@@ -226,6 +234,7 @@ def build_project_pipeline(client: LegacyApiClient, checkpointer: BaseCheckpoint
                     "theme": state["theme"],
                     "accentId": state.get("accent_id") or None,
                     "surfaceId": state.get("surface_id") or None,
+                    "presentationStyle": state.get("presentation_style") or None,
                     "mode": state["mode"],
                 },
             )

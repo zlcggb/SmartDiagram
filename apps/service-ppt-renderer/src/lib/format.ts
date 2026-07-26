@@ -15,7 +15,11 @@ import type {
   SlideSearchJson,
   SourceTextDto
 } from "@ppt-agent/shared";
-import { inferRenderStrategy, renderStrategies } from "@ppt-agent/shared";
+import {
+  inferRenderStrategy,
+  normalizePresentationStyleId,
+  renderStrategies
+} from "@ppt-agent/shared";
 import { exportDownloadUrl } from "./paths.js";
 
 type DateLike = Date | string;
@@ -76,6 +80,7 @@ export function formatProject(project: {
   purpose: string;
   pageCount: number;
   theme: string;
+  presentationStyle?: string | null;
   mode?: string | null;
   topic?: string | null;
   briefJson?: string | null;
@@ -91,6 +96,7 @@ export function formatProject(project: {
     purpose: project.purpose,
     pageCount: project.pageCount,
     theme: project.theme,
+    presentationStyle: normalizePresentationStyleId(project.presentationStyle),
     mode: (project.mode === "topic" ? "topic" : "paste") as ProjectMode,
     topic: project.topic ?? null,
     briefJson: parseJsonObject<BriefJson>(project.briefJson ?? null),
@@ -152,8 +158,10 @@ export function formatSlide(slide: {
   status: string;
   isContentLocked: boolean;
   isLayoutLocked: boolean;
+  presentationStyle?: string | null;
   planJson: string | null;
   svgPreview: string | null;
+  activeDesignVersionId?: string | null;
   searchJson?: string | null;
   partTitle?: string | null;
   generationStatus: string;
@@ -174,9 +182,13 @@ export function formatSlide(slide: {
     status: slide.status as SlideDto["status"],
     isContentLocked: slide.isContentLocked,
     isLayoutLocked: slide.isLayoutLocked,
+    presentationStyle: slide.presentationStyle
+      ? normalizePresentationStyleId(slide.presentationStyle)
+      : null,
     sourceFactIds: slide.slideSources?.map((source) => source.factId) ?? [],
     planJson,
     svgPreview: slide.svgPreview,
+    activeDesignVersionId: slide.activeDesignVersionId ?? null,
     searchJson: parseJsonObject<SlideSearchJson>(slide.searchJson ?? null),
     partTitle: slide.partTitle ?? null,
     generationStatus: slide.generationStatus as SlideGenerationStatus,

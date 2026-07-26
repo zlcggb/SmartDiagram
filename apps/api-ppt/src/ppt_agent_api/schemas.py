@@ -14,6 +14,13 @@ class PipelineRequest(BaseModel):
     theme: str | None = None
     accentId: str | None = None
     surfaceId: str | None = None
+    presentationStyle: Literal[
+        "apple-minimal",
+        "consulting",
+        "data-story",
+        "tech-architecture",
+        "editorial",
+    ] | None = None
     mode: Literal["draft", "standard", "visual"] = "standard"
     skipDesign: bool = False
     force: bool = False

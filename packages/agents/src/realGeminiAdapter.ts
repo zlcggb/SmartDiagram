@@ -764,7 +764,21 @@ export class RealGeminiAdapter implements GeminiAdapter {
 
 
   async generateSvgPreview(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void, options?: SvgGenerationOptions): Promise<string> {
-    const result = await this.generateText(buildSvgPreviewPrompt(slide, facts, theme, options?.surfaceId, options?.revisionNotes, options?.accentId), svgPreviewSystemPrompt, { stage: "svg" }, onToken);
+    const result = await this.generateText(
+      buildSvgPreviewPrompt(
+        slide,
+        facts,
+        theme,
+        options?.surfaceId,
+        options?.revisionNotes,
+        options?.accentId,
+        options?.previousSvg,
+        options?.presentationStyle
+      ),
+      svgPreviewSystemPrompt,
+      { stage: "svg" },
+      onToken
+    );
     return sanitizeSvgOutput(result);
   }
 

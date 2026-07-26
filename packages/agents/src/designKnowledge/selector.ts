@@ -1,4 +1,8 @@
-import type { SlideDto } from "@ppt-agent/shared";
+import type { PresentationStyleId, SlideDto } from "@ppt-agent/shared";
+import {
+  getPresentationStylePreset,
+  normalizePresentationStyleId
+} from "@ppt-agent/shared";
 import { DESIGN_RECIPES, getDesignRecipe } from "./templates.js";
 import type { DesignRecipe, DesignRecipeSelection, RecipeSelectionContext } from "./types.js";
 
@@ -23,11 +27,21 @@ function buildContext(slide: SlideDto): RecipeSelectionContext {
   };
 }
 
-function scoreRecipe(recipe: DesignRecipe, context: RecipeSelectionContext) {
+function scoreRecipe(
+  recipe: DesignRecipe,
+  context: RecipeSelectionContext,
+  presentationStyle: PresentationStyleId
+) {
   let score = 0;
   const signals: string[] = [];
   const normalizedLayout = context.layout.toLowerCase();
   const normalizedText = context.text.toLowerCase();
+  const style = getPresentationStylePreset(presentationStyle);
+
+  if (style.preferredRecipeIds.includes(recipe.id)) {
+    score += 22;
+    signals.push(`风格偏好 ${style.label}`);
+  }
 
   if (context.blockCount >= recipe.minBlocks && context.blockCount <= recipe.maxBlocks) {
     score += 18;
@@ -81,11 +95,34 @@ function scoreRecipe(recipe: DesignRecipe, context: RecipeSelectionContext) {
   return { score, signals };
 }
 
-export function selectDesignRecipe(slide: SlideDto): DesignRecipeSelection {
+export function selectDesignRecipe(
+  slide: SlideDto,
+  presentationStyle?: PresentationStyleId | string | null
+): DesignRecipeSelection {
   const context = buildContext(slide);
-  const ranked = DESIGN_RECIPES.map((recipe) => ({ recipe, ...scoreRecipe(recipe, context) })).sort(
-    (a, b) => b.score - a.score
-  );
+  const styleId = normalizePresentationStyleId(presentationStyle);
+  const normalizedLayout = context.layout.toLowerCase();
+  if (/^(?:risk[-_\s]?(?:table|register|cards)|风险表|风险清单)$/i.test(normalizedLayout)) {
+    const recipeId =
+      styleId === "data-story"
+        ? "risk-signal-story"
+        : styleId === "tech-architecture"
+          ? "radial-ecosystem"
+          : styleId === "apple-minimal" || styleId === "editorial"
+            ? "asymmetric-card-stack"
+            : "risk-register";
+    const style = getPresentationStylePreset(styleId);
+    return {
+      recipe: getDesignRecipe(recipeId),
+      score: 100,
+      signals: [`明确版式 ${context.layout}`, "风险登记语义", `风格构图 ${style.label}`],
+      reason: `明确版式 ${context.layout}；风险登记语义；按 ${style.label} 切换为 ${getDesignRecipe(recipeId).label}`
+    };
+  }
+  const ranked = DESIGN_RECIPES.map((recipe) => ({
+    recipe,
+    ...scoreRecipe(recipe, context, styleId)
+  })).sort((a, b) => b.score - a.score);
   const winner = ranked[0] ?? { recipe: getDesignRecipe("asymmetric-card-stack"), score: 0, signals: [] };
   return {
     recipe: winner.recipe,
@@ -94,4 +131,3 @@ export function selectDesignRecipe(slide: SlideDto): DesignRecipeSelection {
     reason: winner.signals.length > 0 ? winner.signals.join("；") : "使用通用不对称信息层级"
   };
 }
-

@@ -11,12 +11,14 @@ export {
   designRecipeMeta,
   selectDesignRecipe,
   validateSvgAgainstDesignRecipe,
+  validateSvgSpatialQuality,
   DESIGN_RECIPES,
   SHAPE_GRAMMAR,
   type DesignRecipe,
   type DesignRecipeId,
   type DesignRecipeSelection,
   type DesignZone,
+  type SvgSpatialQualityResult,
   type SvgVisualQualityResult
 } from "./designKnowledge/index.js";
 export {

@@ -15,6 +15,7 @@ import {
   inferRenderStrategy,
   getThemePack,
   missingStudioPrerequisite,
+  normalizePresentationStyleId,
   normalizePptExportTheme,
   reorderSlidesSchema,
   renderStrategies,
@@ -31,10 +32,12 @@ import type {
   ExportMode,
   FactDto,
   PageRenderResult,
+  PresentationStyleId,
   ProjectDetailDto,
   PptExportTheme,
   RenderStrategy,
   SlideDto,
+  SvgQualityFailureDto,
   ThemeSurfaceId
 } from "@ppt-agent/shared";
 import { createAiAdapter } from "../lib/ai.js";
@@ -71,6 +74,14 @@ import {
 } from "./materials.js";
 import { getPptPrincipal } from "../lib/pptAuthorization.js";
 import { projectOwnerData, projectOwnerWhere } from "../lib/pptAccess.js";
+import {
+  clearSlideDesignVersions,
+  persistSlideDesignVersion
+} from "../lib/slideDesignVersions.js";
+import {
+  resolveSvgGenerationFailure,
+  SvgQualityValidationError
+} from "../lib/svgGenerationError.js";
 
 const adapter = createAiAdapter();
 const orchestration = getOrchestrationBackend();
@@ -79,6 +90,25 @@ const knowledgeGateway = createKnowledgeGateway();
 type IdParams = { id: string };
 type FactParams = { id: string; factId: string };
 type SlideParams = { id: string; slideId: string };
+type DesignGenerationOptions = {
+  accentId?: string | null;
+  surfaceId?: ThemeSurfaceId | string | null;
+  presentationStyle?: PresentationStyleId | string | null;
+};
+
+async function resolveEffectivePresentationStyle(
+  projectId: string,
+  slideStyle?: PresentationStyleId | string | null,
+  requestedStyle?: PresentationStyleId | string | null
+) {
+  if (slideStyle) return normalizePresentationStyleId(slideStyle);
+  if (requestedStyle) return normalizePresentationStyleId(requestedStyle);
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { presentationStyle: true }
+  });
+  return normalizePresentationStyleId(project?.presentationStyle);
+}
 
 function asJsonPoints(points: string[]) {
   return JSON.stringify(points.filter((point) => point.trim().length > 0));
@@ -195,7 +225,12 @@ function collectSvgTexts(svgPreview: string) {
     .filter(Boolean);
 }
 
-function validateSvgPreview(svgPreview: string, slide: SlideDto, theme: PptExportTheme) {
+function validateSvgPreview(
+  svgPreview: string,
+  slide: SlideDto,
+  theme: PptExportTheme,
+  presentationStyle?: PresentationStyleId | string | null
+) {
   const issues: string[] = [];
   if (!/viewBox=["']0 0 1280 720["']/i.test(svgPreview)) {
     issues.push("SVG viewBox 必须是 0 0 1280 720");
@@ -208,10 +243,18 @@ function validateSvgPreview(svgPreview: string, slide: SlideDto, theme: PptExpor
 
   const textBoxIssues = getSvgTextBoxIssues(svgPreview);
   if (textBoxIssues.length > 0) {
-    issues.push(`文字框边界不合格：${textBoxIssues.slice(0, 3).join("，")}`);
+    issues.push(
+      ...textBoxIssues
+        .slice(0, 8)
+        .map((issue) => `文字框边界：${issue}`)
+    );
   }
 
-  const visualQuality = validateSvgAgainstDesignRecipe(svgPreview, slide);
+  const visualQuality = validateSvgAgainstDesignRecipe(
+    svgPreview,
+    slide,
+    presentationStyle
+  );
   issues.push(...visualQuality.issues.map((issue) => `视觉配方 ${visualQuality.recipeId}：${issue}`));
 
   const themeQuality = validateSvgThemeCompliance(svgPreview, theme);
@@ -283,24 +326,36 @@ async function generateValidatedSvgPreview(
   facts: FactDto[],
   theme: PptExportTheme,
   onToken?: (token: string) => void,
-  options?: { accentId?: string | null; surfaceId?: ThemeSurfaceId | string | null }
+  options?: DesignGenerationOptions
 ) {
+  const presentationStyle = normalizePresentationStyleId(
+    slide.presentationStyle ?? options?.presentationStyle
+  );
   let lastIssues: string[] = [];
+  let previousSvg: string | undefined;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const rawSvgPreview = await adapter.generateSvgPreview(slide, facts, theme, onToken, {
       revisionNotes: attempt > 0 ? lastIssues : undefined,
+      previousSvg: attempt > 0 ? previousSvg : undefined,
       accentId: options?.accentId,
-      surfaceId: options?.surfaceId
+      surfaceId: options?.surfaceId,
+      presentationStyle
     });
     const sanitizedSvgPreview = sanitizeSvgPreviewText(rawSvgPreview, slide, facts);
     const { svg: svgPreview } = fitSvgTextToBounds(sanitizedSvgPreview);
-    const issues = validateSvgPreview(svgPreview, slide, theme);
+    const issues = validateSvgPreview(
+      svgPreview,
+      slide,
+      theme,
+      presentationStyle
+    );
     if (issues.length === 0) {
       return svgPreview;
     }
     lastIssues = issues;
+    previousSvg = svgPreview;
   }
-  throw new Error(`SVG 质量校验失败：${lastIssues.join("；")}`);
+  throw new SvgQualityValidationError(lastIssues, previousSvg ?? "", 2);
 }
 
 async function generatePlanForSlide(slide: SlideDto, facts: FactDto[], theme?: string | null) {
@@ -387,13 +442,18 @@ async function generateEditableSvgDesign(
   slide: SlideDto,
   facts: FactDto[],
   theme: PptExportTheme,
-  options?: { accentId?: string | null; surfaceId?: ThemeSurfaceId | string | null }
+  options?: DesignGenerationOptions
 ) {
   if (slide.projectId !== projectId) {
     throw new Error("页面不属于当前项目，无法生成设计。");
   }
 
   const slideFacts = linkedFactsForSlide(slide, facts);
+  const presentationStyle = await resolveEffectivePresentationStyle(
+    projectId,
+    slide.presentationStyle,
+    options?.presentationStyle
+  );
   let slideForDesign = slide;
 
   const plan = await generatePlanForSlide(slideForDesign, slideFacts, theme);
@@ -420,7 +480,13 @@ async function generateEditableSvgDesign(
   let svgPreview: string;
   try {
     emitProgress(projectId, { stage: "design", status: "start", message: `正在设计「${slideForDesign.title}」…`, slideId: slideForDesign.id, slideTitle: slideForDesign.title, subStage: slideForDesign.title, clearDelta: true });
-    svgPreview = await generateValidatedSvgPreview(slideWithPlan, slideFacts, theme, designStreamHandler.onToken, options);
+    svgPreview = await generateValidatedSvgPreview(
+      slideWithPlan,
+      slideFacts,
+      theme,
+      designStreamHandler.onToken,
+      { ...options, presentationStyle }
+    );
     designStreamHandler.flush();
     emitProgress(projectId, { stage: "design", status: "done", message: `设计完成：${slideForDesign.title}`, slideId: slideForDesign.id, slideTitle: slideForDesign.title, subStage: slideForDesign.title });
   } catch (error) {
@@ -436,17 +502,22 @@ async function generateEditableSvgDesign(
     throw error;
   }
 
-  const updatedSlide = await prisma.slide.update({
-    where: { id: slideForDesign.id },
-    data: {
+  const updatedSlide = await persistSlideDesignVersion({
+    projectId,
+    slideId: slideForDesign.id,
+    svgPreview,
+    source: "ai",
+    theme,
+    accentId: options?.accentId,
+    surfaceId: options?.surfaceId,
+    presentationStyle,
+    slidePatch: {
       planJson: JSON.stringify(plan),
-      svgPreview,
       status: "planned",
       generationStatus: "svg-ready",
       renderStrategy: "svg",
       strategyLocked: false
-    },
-    include: { slideSources: true }
+    }
   });
 
   return formatSlide(updatedSlide);
@@ -625,6 +696,7 @@ export async function projectRoutes(app: FastifyInstance) {
           purpose: input.purpose,
           pageCount: input.pageCount,
           theme: input.theme,
+          presentationStyle: input.presentationStyle,
           mode: input.mode,
           topic: input.topic ?? (input.mode === "topic" ? input.name : null)
         }
@@ -1088,33 +1160,52 @@ export async function projectRoutes(app: FastifyInstance) {
       planJson: planPayload,
       searchJson: searchPayload,
       svgPreview: _ignoredSvgPreview,
+      designVersionMeta,
       ...restInput
     } = input;
-    const slide = await prisma.slide.update({
-      where: { id: request.params.slideId },
-      data: {
-        ...restInput,
-        contentPoints: input.contentPoints ? asJsonPoints(input.contentPoints) : undefined,
-        searchJson: searchEdited ? JSON.stringify(searchPayload) : undefined,
-        planJson: planEdited
-          ? JSON.stringify(planPayload)
+    const slidePatch = {
+      ...restInput,
+      contentPoints: input.contentPoints ? asJsonPoints(input.contentPoints) : undefined,
+      searchJson: searchEdited ? JSON.stringify(searchPayload) : undefined,
+      planJson: planEdited
+        ? JSON.stringify(planPayload)
+        : shouldInvalidatePlan
+          ? null
+          : undefined,
+      generationStatus: svgEdited
+        ? "svg-ready"
+        : planEdited
+          ? "draft-ready"
           : shouldInvalidatePlan
-            ? null
+            ? "draft"
             : undefined,
-        svgPreview: svgEdited ? editedSvg : shouldInvalidateDesign ? null : undefined,
-        generationStatus: svgEdited
-          ? "svg-ready"
-          : planEdited
-            ? "draft-ready"
-            : shouldInvalidatePlan
-              ? "draft"
-              : undefined,
-        status: planEdited ? "planned" : shouldInvalidatePlan ? "draft" : input.status,
-        renderStrategy: svgEdited ? "svg" : nextStrategy,
-        strategyLocked: svgEdited ? false : nextLocked
-      },
-      include: { slideSources: true }
-    });
+      status: planEdited ? "planned" : shouldInvalidatePlan ? "draft" : input.status,
+      renderStrategy: svgEdited ? "svg" : nextStrategy,
+      strategyLocked: svgEdited ? false : nextLocked
+    };
+    const slide = svgEdited
+      ? await persistSlideDesignVersion({
+          projectId: request.params.id,
+          slideId: request.params.slideId,
+          svgPreview: editedSvg!,
+          source: "manual",
+          theme: designVersionMeta?.theme,
+          accentId: designVersionMeta?.accentId,
+          surfaceId: designVersionMeta?.surfaceId,
+          presentationStyle: designVersionMeta?.presentationStyle,
+          slidePatch
+        })
+      : shouldInvalidateDesign
+        ? await clearSlideDesignVersions(
+            request.params.id,
+            request.params.slideId,
+            slidePatch
+          )
+        : await prisma.slide.update({
+            where: { id: request.params.slideId },
+            data: slidePatch,
+            include: { slideSources: true }
+          });
     return reply.send(ok(formatSlide(slide), "页面已更新"));
   });
 
@@ -1193,16 +1284,16 @@ export async function projectRoutes(app: FastifyInstance) {
       recommendedLayout: slide.recommendedLayout,
       planJson: plan
     });
-    const updatedSlide = await prisma.slide.update({
-      where: { id: slide.id },
-      data: {
+    const updatedSlide = await clearSlideDesignVersions(
+      request.params.id,
+      slide.id,
+      {
         planJson: JSON.stringify(plan),
         status: "planned",
         generationStatus: "draft-ready",
         renderStrategy
-      },
-      include: { slideSources: true }
-    });
+      }
+    );
 
     return reply.send(ok({ plan, slide: formatSlide(updatedSlide) }, "策划稿已生成"));
   });
@@ -1263,16 +1354,16 @@ export async function projectRoutes(app: FastifyInstance) {
             recommendedLayout: slide.recommendedLayout,
             planJson: plan
           });
-          await prisma.slide.update({
-            where: { id: slide.id },
-            data: {
+          await clearSlideDesignVersions(
+            request.params.id,
+            slide.id,
+            {
               planJson: JSON.stringify(plan),
-              svgPreview: null,
               status: "planned",
               generationStatus: "draft-ready",
               renderStrategy
             }
-          });
+          );
           return plan;
         },
         {
@@ -1340,17 +1431,33 @@ export async function projectRoutes(app: FastifyInstance) {
       const facts = await getProjectFacts(request.params.id);
       emitProgress(request.params.id, { stage: "design", status: "start", message: `正在生成「${slide.title}」的 SVG 预览…`, slideId: slide.id, slideTitle: slide.title, subStage: slide.title, clearDelta: true });
       const linkedFacts = linkedFactsForSlide(slide, facts);
-      const svgPreview = await generateValidatedSvgPreview(slide, linkedFacts, input.theme, designStreamHandler.onToken, input);
+      const presentationStyle = await resolveEffectivePresentationStyle(
+        request.params.id,
+        slide.presentationStyle,
+        input.presentationStyle
+      );
+      const svgPreview = await generateValidatedSvgPreview(
+        slide,
+        linkedFacts,
+        input.theme,
+        designStreamHandler.onToken,
+        { ...input, presentationStyle }
+      );
       designStreamHandler.flush();
-      const updatedSlide = await prisma.slide.update({
-        where: { id: slide.id },
-        data: {
-          svgPreview,
+      const updatedSlide = await persistSlideDesignVersion({
+        projectId: request.params.id,
+        slideId: slide.id,
+        svgPreview,
+        source: "ai",
+        theme: input.theme,
+        accentId: input.accentId,
+        surfaceId: input.surfaceId,
+        presentationStyle,
+        slidePatch: {
           generationStatus: "svg-ready",
           renderStrategy: "svg",
           strategyLocked: false
-        },
-        include: { slideSources: true }
+        }
       });
       emitProgress(request.params.id, { stage: "design", status: "done", message: `SVG 预览已生成：${slide.title}`, slideId: slide.id, slideTitle: slide.title, subStage: slide.title });
 
@@ -1366,7 +1473,15 @@ export async function projectRoutes(app: FastifyInstance) {
         subStage: slide.title
       });
       app.log.error(error, "Generate SVG preview failed");
-      return reply.status(502).send(fail(aiFailMessage(error)));
+      const qualityFailure = resolveSvgGenerationFailure(error);
+      return reply
+        .status(qualityFailure?.statusCode ?? 502)
+        .send(
+          fail(
+            qualityFailure?.message ?? aiFailMessage(error),
+            qualityFailure?.data ?? null
+          )
+        );
     }
   });
 
@@ -1432,7 +1547,15 @@ export async function projectRoutes(app: FastifyInstance) {
         data: { generationStatus: "error" }
       });
       app.log.error(error, "Generate slide SVG design failed");
-      return reply.status(502).send(fail(aiFailMessage(error)));
+      const qualityFailure = resolveSvgGenerationFailure(error);
+      return reply
+        .status(qualityFailure?.statusCode ?? 502)
+        .send(
+          fail(
+            qualityFailure?.message ?? aiFailMessage(error),
+            qualityFailure?.data ?? null
+          )
+        );
     }
   });
 
@@ -1447,7 +1570,12 @@ export async function projectRoutes(app: FastifyInstance) {
       return reply.status(400).send(fail("请先生成便利贴大纲，再生成 SVG 页面设计。"));
     }
 
-    const failures: Array<{ slideId: string; title: string; message: string }> = [];
+    const failures: Array<{
+      slideId: string;
+      title: string;
+      message: string;
+      qualityFailure?: SvgQualityFailureDto;
+    }> = [];
     let skippedSvgCount = 0;
     let generatedSvgCount = 0;
 
@@ -1486,8 +1614,16 @@ export async function projectRoutes(app: FastifyInstance) {
         await generateEditableSvgDesign(request.params.id, slide, detail.facts, input.theme, input);
         generatedSvgCount += 1;
       } catch (error) {
-        const message = error instanceof Error ? error.message : "未知错误";
-        failures.push({ slideId: slide.id, title: slide.title, message });
+        const qualityFailure = resolveSvgGenerationFailure(error);
+        const message =
+          qualityFailure?.message ??
+          (error instanceof Error ? error.message : "未知错误");
+        failures.push({
+          slideId: slide.id,
+          title: slide.title,
+          message,
+          qualityFailure: qualityFailure?.data
+        });
         await prisma.slide.updateMany({
           where: { id: slide.id, projectId: request.params.id },
           data: { generationStatus: "error" }

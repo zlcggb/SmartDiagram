@@ -4,6 +4,7 @@ export type DesignRecipeId =
   | "editorial-hero-split"
   | "dual-engine-bridge"
   | "radial-ecosystem"
+  | "risk-register"
   | "stepped-roadmap"
   | "evidence-dashboard"
   | "matrix-contrast"
@@ -31,6 +32,8 @@ export interface DesignRecipe {
   minBlocks: number;
   maxBlocks: number;
   zones: DesignZone[];
+  minGutter: number;
+  allowedOverlaps: ReadonlyArray<readonly [string, string]>;
   backgroundProgram: string[];
   titleProgram: string[];
   keyMessageProgram: string[];
@@ -56,4 +59,3 @@ export interface RecipeSelectionContext {
   layout: string;
   chartType: string;
 }
-

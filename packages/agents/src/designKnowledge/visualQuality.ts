@@ -1,5 +1,6 @@
-import type { SlideDto } from "@ppt-agent/shared";
+import type { PresentationStyleId, SlideDto } from "@ppt-agent/shared";
 import { selectDesignRecipe } from "./selector.js";
+import { validateSvgSpatialQuality } from "./svgSpatialQuality.js";
 
 export interface SvgVisualQualityResult {
   ok: boolean;
@@ -7,8 +8,12 @@ export interface SvgVisualQualityResult {
   issues: string[];
 }
 
-export function validateSvgAgainstDesignRecipe(svg: string, slide: SlideDto): SvgVisualQualityResult {
-  const recipe = selectDesignRecipe(slide).recipe;
+export function validateSvgAgainstDesignRecipe(
+  svg: string,
+  slide: SlideDto,
+  presentationStyle?: PresentationStyleId | string | null
+): SvgVisualQualityResult {
+  const recipe = selectDesignRecipe(slide, presentationStyle).recipe;
   const issues: string[] = [];
 
   for (const groupId of recipe.requiredGroupIds) {
@@ -28,6 +33,8 @@ export function validateSvgAgainstDesignRecipe(svg: string, slide: SlideDto): Sv
   const textCount = (svg.match(/<text\b/gi) ?? []).length;
   if (textCount >= 6 && centeredTexts / textCount > 0.75) issues.push("超过 75% 文字居中，缺少编辑式信息层级");
 
+  const spatialQuality = validateSvgSpatialQuality(svg, recipe);
+  issues.push(...spatialQuality.issues);
+
   return { ok: issues.length === 0, recipeId: recipe.id, issues };
 }
-

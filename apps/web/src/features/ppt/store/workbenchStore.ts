@@ -6,15 +6,31 @@ import type {
   ExportMode,
   FactDto,
   PptExportTheme,
+  PresentationStyleId,
   ProjectMaterialDto,
   ProjectDto,
   RenderStrategy,
+  SlideDesignVersionDto,
   SlideDto,
   SourceTextDto,
+  SvgQualityFailureDto,
   UpdateFactInput,
   UpdateSlideInput
 } from '@ppt-agent/shared';
-import { demoSourceText, getThemePack, getThemeSurfacePreset, inferRenderStrategy, normalizeAccentPresetId, normalizePptExportTheme, normalizeThemeSurfaceId, renderStrategies, type ThemeSurfaceId } from '@ppt-agent/shared';
+import {
+  demoSourceText,
+  getPresentationStylePreset,
+  getThemePack,
+  getThemeSurfacePreset,
+  inferRenderStrategy,
+  normalizeAccentPresetId,
+  normalizePptExportTheme,
+  normalizePresentationStyleId,
+  normalizeThemeSurfaceId,
+  renderStrategies,
+  resolvePresentationStyleId,
+  type ThemeSurfaceId
+} from '@ppt-agent/shared';
 import type { AiUsageSummary } from "../lib/api";
 import { api, collectExportPageGrades, collectExportWarnings, getApiBase, triggerBrowserDownload } from "../lib/api";
 import type { EditableGrade } from "../lib/exportMode";
@@ -24,6 +40,9 @@ import { classifyProjectLoadFailure, type ProjectLoadFailure } from "../lib/proj
 import { currentPptIdentityHeaders, isPptGuest } from "../lib/pptRequestContext";
 import { streamProjectProgress, type PptProgressEvent } from "../lib/progressStream";
 import { createLatestAsyncCommit } from "../lib/usageRefresh";
+import { normalizeSlideDesignHistory } from "../lib/designVersionState";
+import { createPendingMutationBarrier } from "../lib/pendingMutationBarrier";
+import { getSvgQualityFailure } from "../lib/pptApiError";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 type Direction = "up" | "down";
@@ -33,6 +52,11 @@ export type ExportPageGrade = {
   slideId: string;
   grade: EditableGrade;
   hint: string;
+};
+
+export type DesignQualityFailureState = SvgQualityFailureDto & {
+  slideId: string;
+  slideTitle: string;
 };
 
 export type AgentLogEntry = {
@@ -94,6 +118,10 @@ interface WorkbenchState {
   /** 导演页 TTS 配音模型（来自 /api/media/status），用于顶部 chip 展示 */
   ttsModel: string | null;
   selectedSlideId: string | null;
+  designVersions: SlideDesignVersionDto[];
+  designVersionsSlideId: string | null;
+  designVersionsLoading: boolean;
+  designQualityFailure: DesignQualityFailureState | null;
   exportTheme: PptExportTheme;
   /** 主题包内 accent 预设 id（会话级；换色预览/导出前应用到 SVG） */
   themeAccentId: string;
@@ -114,8 +142,10 @@ interface WorkbenchState {
   setSourceText: (text: string) => void;
   loadDemoSource: () => void;
   clearError: () => void;
+  clearDesignQualityFailure: () => void;
   clearExportWarnings: () => void;
   setExportTheme: (theme: PptExportTheme) => Promise<void>;
+  setProjectPresentationStyle: (style: PresentationStyleId | string) => Promise<void>;
   setThemeAccentId: (accentId: string) => void;
   setThemeSurfaceId: (surfaceId: ThemeSurfaceId | string) => void;
   setExportMode: (mode: ExportMode) => void;
@@ -146,9 +176,14 @@ interface WorkbenchState {
   generateSlidePlan: (slideId: string) => Promise<void>;
   generateAllPlans: () => Promise<void>;
   saveSlideSvg: (slideId: string, svgPreview: string) => Promise<void>;
+  loadSlideDesignVersions: (slideId: string) => Promise<void>;
+  activateSlideDesignVersion: (slideId: string, versionId: string) => Promise<void>;
   generateSlideIr: (slideId: string) => Promise<void>;
   generateAllIr: () => Promise<void>;
-  generateSlideDesign: (slideId: string) => Promise<void>;
+  generateSlideDesign: (
+    slideId: string,
+    options?: { presentationStyle: PresentationStyleId | null }
+  ) => Promise<boolean>;
   generateAllDesigns: () => Promise<void>;
   generateSvgPreview: (slideId: string) => Promise<void>;
   exportPptx: (
@@ -314,6 +349,10 @@ function disconnectProgressSSE() {
   progressReconnectTimer = null;
 }
 
+const pendingDesignInputMutations = createPendingMutationBarrier();
+const projectMutationKey = (projectId: string) => `project:${projectId}`;
+const slideMutationKey = (slideId: string) => `slide:${slideId}`;
+
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   currentStep: 1,
   project: null,
@@ -328,6 +367,10 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   aiUsageSummary: null,
   ttsModel: null,
   selectedSlideId: null,
+  designVersions: [],
+  designVersionsSlideId: null,
+  designVersionsLoading: false,
+  designQualityFailure: null,
   exportTheme: "white-blue",
   themeAccentId: "primary",
   themeSurfaceId: "flat",
@@ -352,6 +395,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   setSourceText: (sourceText) => set({ sourceText }),
   loadDemoSource: () => set({ sourceText: demoSourceText }),
   clearError: () => set({ error: null }),
+  clearDesignQualityFailure: () => set({ designQualityFailure: null }),
   clearExportWarnings: () => set({ exportWarnings: [], exportPageGrades: [] }),
   setThemeAccentId(accentId) {
     const theme = get().exportTheme;
@@ -389,6 +433,31 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       get().pushAgentLog(`主题已切换为「${getThemePack(exportTheme).label}」（即时换色）`);
     } catch (error) {
       set({ exportTheme: prev, themeAccentId: prevAccent, error: errorMessage(error) });
+    }
+  },
+  async setProjectPresentationStyle(style) {
+    const project = get().project;
+    if (!project) return;
+    const next = normalizePresentationStyleId(style);
+    if (project.presentationStyle === next) return;
+    const previous = project;
+    set({
+      project: { ...project, presentationStyle: next },
+      error: null
+    });
+    try {
+      const updated = await pendingDesignInputMutations.track(
+        projectMutationKey(project.id),
+        api.updateProject(project.id, {
+          presentationStyle: next
+        })
+      );
+      set({ project: updated });
+      get().pushAgentLog(
+        `整套默认风格已切换为「${getPresentationStylePreset(next).label}」（下次生成生效）`
+      );
+    } catch (error) {
+      set({ project: previous, error: errorMessage(error) });
     }
   },
   setExportMode: (exportMode) => set({ exportMode }),
@@ -434,6 +503,10 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         themeAccentId: normalizeAccentPresetId(project.theme, "primary"),
         exportMode: "standard",
         selectedSlideId: null,
+        designVersions: [],
+        designVersionsSlideId: null,
+        designVersionsLoading: false,
+        designQualityFailure: null,
         agentLogs: [
           makeLog(`已创建 AI 顾问项目：${project.name}`)
         ]
@@ -471,6 +544,10 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         exportTheme: normalizeExportTheme(detail.project.theme),
         themeAccentId: normalizeAccentPresetId(detail.project.theme, get().themeAccentId),
         selectedSlideId: keepSelected,
+        designVersions: [],
+        designVersionsSlideId: null,
+        designVersionsLoading: false,
+        designQualityFailure: null,
         currentStep: detail.slides.length > 0 ? 5 : detail.facts.length > 0 ? 4 : detail.latestSourceText ? 3 : 2
       });
       void get().refreshAiUsage();
@@ -482,6 +559,10 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         slides: [],
         facts: [],
         exports: [],
+        designVersions: [],
+        designVersionsSlideId: null,
+        designVersionsLoading: false,
+        designQualityFailure: null,
         currentStep: 1,
         projectLoadFailure: failure
       });
@@ -584,7 +665,13 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     set({ busy: "生成大纲中", error: null });
     try {
       const slides = await api.generateOutline(project.id);
-      set({ slides, selectedSlideId: firstSlideId(slides), currentStep: 4 });
+      set({
+        slides,
+        selectedSlideId: firstSlideId(slides),
+        currentStep: 4,
+        designVersions: [],
+        designVersionsSlideId: null
+      });
       get().pushAgentLog(`大纲架构完成：${slides.length} 页便利贴`);
     } catch (error) {
       set({ error: errorMessage(error) });
@@ -596,6 +683,15 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const project = get().project;
     if (!project) return;
     const previous = get().slides.find((slide) => slide.id === slideId);
+    const previousDesignVersions = get().designVersions;
+    const previousDesignVersionsSlideId = get().designVersionsSlideId;
+    const designInvalidated =
+      input.planJson !== undefined ||
+      input.title !== undefined ||
+      input.slideGoal !== undefined ||
+      input.keyMessage !== undefined ||
+      input.contentPoints !== undefined ||
+      input.recommendedLayout !== undefined;
     // 字段编辑走乐观更新、不占 busy，避免搜索/生成按钮被输入打断
     if (previous) {
       set({
@@ -611,36 +707,42 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           status: input.status ?? previous.status,
           isContentLocked: input.isContentLocked ?? previous.isContentLocked,
           isLayoutLocked: input.isLayoutLocked ?? previous.isLayoutLocked,
+          presentationStyle:
+            input.presentationStyle !== undefined
+              ? input.presentationStyle
+              : previous.presentationStyle,
           renderStrategy: input.renderStrategy ?? previous.renderStrategy,
           strategyLocked: input.strategyLocked ?? previous.strategyLocked,
           searchJson: input.searchJson !== undefined ? input.searchJson : previous.searchJson,
           planJson: input.planJson !== undefined ? input.planJson : previous.planJson,
           // 改初稿/页意图时本地先清设计预览，与 API 失效策略一致
-          irJson:
-            input.planJson !== undefined ||
-            input.title !== undefined ||
-            input.keyMessage !== undefined ||
-            input.contentPoints !== undefined
-              ? null
-              : previous.irJson,
-          svgPreview:
-            input.planJson !== undefined ||
-            input.title !== undefined ||
-            input.keyMessage !== undefined ||
-            input.contentPoints !== undefined
-              ? null
-              : previous.svgPreview
-        })
+          irJson: designInvalidated ? null : previous.irJson,
+          svgPreview: designInvalidated ? null : previous.svgPreview,
+          activeDesignVersionId: designInvalidated
+            ? null
+            : previous.activeDesignVersionId
+        }),
+        ...(designInvalidated && previousDesignVersionsSlideId === slideId
+          ? { designVersions: [] }
+          : {})
       });
     } else {
       set({ error: null });
     }
     try {
-      const slide = await api.updateSlide(project.id, slideId, input);
+      const slide = await pendingDesignInputMutations.track(
+        slideMutationKey(slideId),
+        api.updateSlide(project.id, slideId, input)
+      );
       set({ slides: replaceSlide(get().slides, slide) });
     } catch (error) {
       if (previous) {
-        set({ slides: replaceSlide(get().slides, previous), error: errorMessage(error) });
+        set({
+          slides: replaceSlide(get().slides, previous),
+          designVersions: previousDesignVersions,
+          designVersionsSlideId: previousDesignVersionsSlideId,
+          error: errorMessage(error)
+        });
       } else {
         set({ error: errorMessage(error) });
       }
@@ -781,7 +883,13 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     set({ busy: "生成初稿中", error: null });
     try {
       const result = await api.generateSlidePlan(project.id, slideId);
-      set({ slides: replaceSlide(get().slides, result.slide), selectedSlideId: slideId, studioPhase: "draft" });
+      set({
+        slides: replaceSlide(get().slides, result.slide),
+        selectedSlideId: slideId,
+        studioPhase: "draft",
+        designVersions: [],
+        designVersionsSlideId: slideId
+      });
       get().pushAgentLog(`初稿已生成：${result.slide.title}`);
     } catch (error) {
       set({ error: errorMessage(error) });
@@ -799,7 +907,13 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     set({ busy: "批量生成初稿中", error: null });
     try {
       const slides = await api.generateAllPlans(project.id);
-      set({ slides, selectedSlideId: get().selectedSlideId ?? firstSlideId(slides), studioPhase: "draft" });
+      set({
+        slides,
+        selectedSlideId: get().selectedSlideId ?? firstSlideId(slides),
+        studioPhase: "draft",
+        designVersions: [],
+        designVersionsSlideId: null
+      });
       get().pushAgentLog(`全部初稿完成：${slides.length} 页`);
     } catch (error) {
       set({ error: errorMessage(error) });
@@ -810,11 +924,72 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   async saveSlideSvg(slideId, svgPreview) {
     const project = get().project;
     if (!project) return;
+    const existingSlide = get().slides.find((item) => item.id === slideId);
     set({ busy: "保存 SVG 代码中", error: null });
     try {
-      const slide = await api.updateSlide(project.id, slideId, { svgPreview });
-      set({ slides: replaceSlide(get().slides, slide), selectedSlideId: slideId });
-      get().pushAgentLog(`SVG 代码已保存：${slide.title}`);
+      const updatedSlide = await api.updateSlide(project.id, slideId, {
+        svgPreview,
+        designVersionMeta: {
+          theme: get().exportTheme,
+          accentId: get().themeAccentId,
+          surfaceId: get().themeSurfaceId,
+          presentationStyle: resolvePresentationStyleId(
+            project.presentationStyle,
+            existingSlide?.presentationStyle
+          )
+        }
+      });
+      set({ slides: replaceSlide(get().slides, updatedSlide), selectedSlideId: slideId });
+      await get().loadSlideDesignVersions(slideId);
+      get().pushAgentLog(`SVG 代码已保存：${updatedSlide.title}`);
+    } catch (error) {
+      set({ error: errorMessage(error) });
+      throw error;
+    } finally {
+      set({ busy: null });
+    }
+  },
+  async loadSlideDesignVersions(slideId) {
+    const project = get().project;
+    if (!project) return;
+    set({
+      designVersionsLoading: true,
+      designVersionsSlideId: slideId
+    });
+    try {
+      const history = normalizeSlideDesignHistory(
+        await api.listSlideDesignVersions(project.id, slideId),
+        slideId
+      );
+      if (get().designVersionsSlideId !== slideId) return;
+      set({
+        designVersions: history.versions,
+        designVersionsLoading: false
+      });
+    } catch (error) {
+      if (get().designVersionsSlideId !== slideId) return;
+      set({
+        designVersions: [],
+        designVersionsLoading: false,
+        error: errorMessage(error)
+      });
+    }
+  },
+  async activateSlideDesignVersion(slideId, versionId) {
+    const project = get().project;
+    if (!project) return;
+    set({ busy: "切换设计版本中", error: null });
+    try {
+      const slide = await api.activateSlideDesignVersion(
+        project.id,
+        slideId,
+        versionId
+      );
+      set({
+        slides: replaceSlide(get().slides, slide),
+        selectedSlideId: slideId
+      });
+      get().pushAgentLog(`已切换设计版本：${slide.title}`);
     } catch (error) {
       set({ error: errorMessage(error) });
       throw error;
@@ -852,45 +1027,134 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       set({ busy: null });
     }
   },
-  async generateSlideDesign(slideId) {
-    const project = get().project;
-    if (!project) return;
-    set({ busy: "生成本页设计稿中", error: null });
+  async generateSlideDesign(slideId, options) {
+    const projectId = get().project?.id;
+    if (!projectId) return false;
+    let previousConfiguredStyle: PresentationStyleId | null = null;
+    let styleOverridePersisted = false;
+    set({ busy: "生成本页设计稿中", error: null, designQualityFailure: null });
     try {
+      await Promise.all([
+        pendingDesignInputMutations.wait(projectMutationKey(projectId)),
+        pendingDesignInputMutations.wait(slideMutationKey(slideId))
+      ]);
+      const project = get().project;
+      if (!project) return false;
+      let slide = get().slides.find((item) => item.id === slideId);
+      previousConfiguredStyle = slide?.presentationStyle ?? null;
+      if (
+        options &&
+        options.presentationStyle !== previousConfiguredStyle
+      ) {
+        const configuredSlide = await pendingDesignInputMutations.track(
+          slideMutationKey(slideId),
+          api.updateSlide(project.id, slideId, {
+            presentationStyle: options.presentationStyle
+          })
+        );
+        styleOverridePersisted = true;
+        slide = configuredSlide;
+        set({ slides: replaceSlide(get().slides, configuredSlide) });
+      }
       // 设计出图固定生成 SVG；IR 仅作为后端内部的结构化降级数据。
       const result = await api.generateSlideDesign(project.id, slideId, get().exportTheme, "standard", {
         accentId: get().themeAccentId,
-        surfaceId: get().themeSurfaceId
+        surfaceId: get().themeSurfaceId,
+        presentationStyle: resolvePresentationStyleId(
+          project.presentationStyle,
+          slide?.presentationStyle
+        )
       });
-      set({ slides: replaceSlide(get().slides, result.slide), selectedSlideId: slideId, studioPhase: "design" });
+      set({
+        slides: replaceSlide(get().slides, result.slide),
+        selectedSlideId: slideId,
+        studioPhase: "design",
+        designQualityFailure: null
+      });
+      await get().loadSlideDesignVersions(slideId);
       get().pushAgentLog(`设计稿已生成：${result.slide.title}`);
+      return true;
     } catch (error) {
-      set({ error: errorMessage(error) });
+      const qualityFailure = getSvgQualityFailure(error);
+      const slide = get().slides.find((item) => item.id === slideId);
+      let rollbackWarning = "";
+      if (styleOverridePersisted) {
+        try {
+          const restoredSlide = await pendingDesignInputMutations.track(
+            slideMutationKey(slideId),
+            api.updateSlide(projectId, slideId, {
+              presentationStyle: previousConfiguredStyle
+            })
+          );
+          set({ slides: replaceSlide(get().slides, restoredSlide) });
+        } catch {
+          rollbackWarning = "；页级风格配置回退失败，请刷新后再试";
+        }
+      }
+      set({
+        error: qualityFailure
+          ? `新设计稿有 ${qualityFailure.issues.length} 处需要调整，上一版本已保留；失败稿与源码已显示在画布内${rollbackWarning}。`
+          : `${errorMessage(error)}${rollbackWarning}`,
+        designQualityFailure: qualityFailure
+          ? {
+              ...qualityFailure,
+              slideId,
+              slideTitle: slide?.title ?? "当前页"
+            }
+          : null
+      });
+      return false;
     } finally {
       set({ busy: null });
     }
   },
   async generateAllDesigns() {
-    const project = get().project;
-    if (!project) return;
+    const projectId = get().project?.id;
+    if (!projectId) return;
     if (get().slides.length === 0) {
       set({ error: "请先生成便利贴大纲，再生成 SVG 页面设计。" });
       return;
     }
-    set({ busy: "全部设计稿生成中", error: null });
+    set({ busy: "全部设计稿生成中", error: null, designQualityFailure: null });
     try {
+      await Promise.all([
+        pendingDesignInputMutations.wait(projectMutationKey(projectId)),
+        ...get().slides.map((slide) =>
+          pendingDesignInputMutations.wait(slideMutationKey(slide.id))
+        )
+      ]);
+      const project = get().project;
+      if (!project) return;
       // 设计出图固定生成 SVG，不再按历史 renderStrategy 分流。
       const result = await api.generateAllDesigns(project.id, get().exportTheme, "standard", {
         accentId: get().themeAccentId,
-        surfaceId: get().themeSurfaceId
+        surfaceId: get().themeSurfaceId,
+        presentationStyle: normalizePresentationStyleId(
+          project.presentationStyle
+        )
       });
       const firstFailure = result.failures[0];
+      const qualityFailure = firstFailure?.qualityFailure;
       set({
         slides: result.slides,
         selectedSlideId: get().selectedSlideId ?? firstSlideId(result.slides),
         studioPhase: "design",
-        error: firstFailure ? `部分页面设计失败：${firstFailure.title} - ${firstFailure.message}` : null
+        error: firstFailure
+          ? qualityFailure
+            ? `「${firstFailure.title}」的新稿有 ${qualityFailure.issues.length} 处需要调整；失败稿与源码已显示在对应页面。`
+            : `部分页面设计失败：${firstFailure.title} - ${firstFailure.message}`
+          : null,
+        designQualityFailure:
+          firstFailure && qualityFailure
+            ? {
+                ...qualityFailure,
+                slideId: firstFailure.slideId,
+                slideTitle: firstFailure.title
+              }
+            : null
       });
+      const selectedSlideId = get().selectedSlideId;
+      if (selectedSlideId) await get().loadSlideDesignVersions(selectedSlideId);
       get().pushAgentLog(
         `全部设计稿生成完成（SVG ${result.generatedSvgCount ?? 0} 页 / 失败 ${result.failures.length} 页）`
       );
@@ -901,17 +1165,47 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     }
   },
   async generateSvgPreview(slideId) {
-    const project = get().project;
-    if (!project) return;
-    set({ busy: "生成 SVG 预览中", error: null });
+    const projectId = get().project?.id;
+    if (!projectId) return;
+    set({ busy: "生成 SVG 预览中", error: null, designQualityFailure: null });
     try {
+      await Promise.all([
+        pendingDesignInputMutations.wait(projectMutationKey(projectId)),
+        pendingDesignInputMutations.wait(slideMutationKey(slideId))
+      ]);
+      const project = get().project;
+      if (!project) return;
+      const slide = get().slides.find((item) => item.id === slideId);
       const result = await api.generateSvgPreview(project.id, slideId, get().exportTheme, {
         accentId: get().themeAccentId,
-        surfaceId: get().themeSurfaceId
+        surfaceId: get().themeSurfaceId,
+        presentationStyle: resolvePresentationStyleId(
+          project.presentationStyle,
+          slide?.presentationStyle
+        )
       });
-      set({ slides: replaceSlide(get().slides, result.slide), selectedSlideId: slideId, studioPhase: "design" });
+      set({
+        slides: replaceSlide(get().slides, result.slide),
+        selectedSlideId: slideId,
+        studioPhase: "design",
+        designQualityFailure: null
+      });
+      await get().loadSlideDesignVersions(slideId);
     } catch (error) {
-      set({ error: errorMessage(error) });
+      const qualityFailure = getSvgQualityFailure(error);
+      const slide = get().slides.find((item) => item.id === slideId);
+      set({
+        error: qualityFailure
+          ? `新设计稿有 ${qualityFailure.issues.length} 处需要调整，上一版本已保留；失败稿与源码已显示在画布内。`
+          : errorMessage(error),
+        designQualityFailure: qualityFailure
+          ? {
+              ...qualityFailure,
+              slideId,
+              slideTitle: slide?.title ?? "当前页"
+            }
+          : null
+      });
     } finally {
       set({ busy: null });
     }
@@ -1059,6 +1353,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         theme: get().exportTheme,
         accentId: get().themeAccentId,
         surfaceId: get().themeSurfaceId,
+        presentationStyle: normalizePresentationStyleId(
+          project.presentationStyle
+        ),
         mode: "standard",
         skipDesign: opts?.skipDesign
       });
