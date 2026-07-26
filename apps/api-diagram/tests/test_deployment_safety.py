@@ -519,3 +519,17 @@ def test_worker_liveness_checks_do_not_require_procps() -> None:
     assert "pgrep" not in verify_script
     assert "/proc/1/cmdline" in worker_block
     assert "/proc/1/cmdline" in verify_script
+
+
+def test_web_uses_current_backend_service_and_deploy_verifies_the_spa() -> None:
+    nginx = (REPO_ROOT / "apps" / "web" / "nginx.conf").read_text(encoding="utf-8")
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    deploy = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
+    web_block = compose[compose.index("  web:") : compose.index("\n  # ================= PPT Agent")]
+    gateway_block = compose[compose.index("  gateway:") : compose.index("\n  # 仅由 deploy.sh")]
+
+    assert "proxy_pass http://api-diagram:8000;" in nginx
+    assert "http://backend:8000" not in nginx
+    assert "healthcheck:" in web_block
+    assert "web:\n        condition: service_healthy" in gateway_block
+    assert 'wait_for_url "统一前端" "http://127.0.0.1:${gateway_port}/"' in deploy

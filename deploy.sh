@@ -560,6 +560,7 @@ verify_deployment() {
 
     wait_for_url "SmartDiagram API" "http://127.0.0.1:${api_diagram_port}/api/health"
     wait_for_url "统一网关" "http://127.0.0.1:${gateway_port}/nginx-health"
+    wait_for_url "统一前端" "http://127.0.0.1:${gateway_port}/"
     wait_for_url "PPT Agent API" "http://127.0.0.1:${gateway_port}/ppt-api/api/health"
     verify_worker_deployment
 }

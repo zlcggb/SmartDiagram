@@ -158,6 +158,12 @@ services:
     depends_on:
       - api-diagram
       - drawio
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     # 只供统一 gateway 通过 Docker 内网访问，不直接占用宿主机 9237。
     expose:
       - "80"
@@ -272,10 +278,14 @@ services:
     container_name: smartdiagram-gateway
     restart: always
     depends_on:
-      - web
-      - api-diagram
-      - drawio
-      - ppt-python-api
+      web:
+        condition: service_healthy
+      api-diagram:
+        condition: service_started
+      drawio:
+        condition: service_started
+      ppt-python-api:
+        condition: service_started
     ports:
       # 宝塔反向代理的唯一入口；统一分流 SPA、主 API、PPT API 和 Draw.io。
       - "${GATEWAY_PORT:-9237}:80"
