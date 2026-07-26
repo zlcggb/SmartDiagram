@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.routes_auth import _authenticated_db_user
 from app.core.config import settings
 from app.core.db import get_session
+from app.models.tenant import User
 from app.services.auth_service import serialize_user, user_to_permission_context
 from app.services.budget_service import get_budget_metrics_snapshot
 from app.services.model_usage_service import (
@@ -29,6 +30,36 @@ def _require_ppt_internal_secret(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Invalid PPT usage reporter secret")
 
 
+async def _model_usage_reporter_identity(
+    request: Request,
+    session: AsyncSession,
+) -> tuple[str, str]:
+    """Resolve identity already authenticated by the trusted PPT service.
+
+    Browser authorization remains a compatibility fallback, but project usage
+    persistence must not depend on a bearer token surviving a long model call.
+    """
+
+    trusted_user_id = request.headers.get("x-user-id", "").strip()
+    trusted_tenant_id = request.headers.get("x-tenant-id", "").strip()
+    if trusted_user_id or trusted_tenant_id:
+        if not trusted_user_id or not trusted_tenant_id:
+            raise HTTPException(status_code=401, detail="Incomplete PPT reporter identity")
+        db_user = await session.get(User, trusted_user_id)
+        if not db_user or db_user.status != "active":
+            raise HTTPException(status_code=401, detail="PPT reporter user is unavailable")
+        if db_user.tenant_id != trusted_tenant_id:
+            raise HTTPException(status_code=403, detail="PPT reporter tenant mismatch")
+        return trusted_tenant_id, trusted_user_id
+
+    token_user, _db_user = await _authenticated_db_user(request, session)
+    tenant_id = str(token_user.get("tenant_id") or "")
+    user_id = str(token_user.get("id") or token_user.get("user_id") or "")
+    if not tenant_id or not user_id:
+        raise HTTPException(status_code=401, detail="Invalid authenticated identity")
+    return tenant_id, user_id
+
+
 @router.post("/billing/model-usage-events")
 async def ingest_model_usage_event(
     request: Request,
@@ -36,11 +67,7 @@ async def ingest_model_usage_event(
     session: AsyncSession = Depends(get_session),
 ):
     _require_ppt_internal_secret(request)
-    token_user, _db_user = await _authenticated_db_user(request, session)
-    tenant_id = str(token_user.get("tenant_id") or "")
-    user_id = str(token_user.get("id") or token_user.get("user_id") or "")
-    if not tenant_id or not user_id:
-        raise HTTPException(status_code=401, detail="Invalid authenticated identity")
+    tenant_id, user_id = await _model_usage_reporter_identity(request, session)
     safe_body = dict(body)
     safe_body.pop("tenant_id", None)
     safe_body.pop("user_id", None)
@@ -121,4 +148,3 @@ async def current_effective_pricing(
         "rates": rates,
         "builtin_models": sorted(BUILTIN_MODEL_PRICING.keys()),
     }
-

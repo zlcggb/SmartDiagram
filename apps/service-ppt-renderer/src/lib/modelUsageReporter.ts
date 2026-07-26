@@ -39,6 +39,7 @@ export function createModelUsageReporter(options: {
   fetcher?: Fetcher;
   attempts?: number;
   timeoutMs?: number;
+  onError?: (error: Error) => void;
 } = {}): ModelUsageReporter {
   const fetcher = options.fetcher ?? fetch;
   const attempts = Math.max(1, Math.min(3, options.attempts ?? 3));
@@ -54,17 +55,20 @@ export function createModelUsageReporter(options: {
         ?? "http://127.0.0.1:8000"
     );
     const internalSecret = options.internalSecret ?? process.env.PPT_INTERNAL_API_SECRET ?? "";
-    if (!context?.authorization || !context.userId || !context.tenantId || !internalSecret) return;
+    if (!context?.userId || !context.tenantId || !internalSecret) return;
     let lastError: unknown;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
+        const headers = new Headers({
+          "Content-Type": "application/json",
+          "X-PPT-Internal-Secret": internalSecret,
+          "X-User-Id": context.userId,
+          "X-Tenant-Id": context.tenantId
+        });
+        if (context.authorization) headers.set("Authorization", context.authorization);
         const response = await fetcher(`${baseUrl}/api/billing/model-usage-events`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: context.authorization,
-            "X-PPT-Internal-Secret": internalSecret
-          },
+          headers,
           body: JSON.stringify(eventBody(event, context)),
           signal: AbortSignal.timeout(timeoutMs)
         });
@@ -76,6 +80,12 @@ export function createModelUsageReporter(options: {
         lastError = error;
       }
     }
-    throw lastError instanceof Error ? lastError : new Error("usage ledger unavailable");
+    const finalError = lastError instanceof Error ? lastError : new Error("usage ledger unavailable");
+    if (options.onError) {
+      options.onError(finalError);
+    } else {
+      console.error(`[model-usage] ${finalError.message}`);
+    }
+    throw finalError;
   };
 }

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseModelUsageDashboard } from "./modelUsage.ts";
+import {
+  describeModelUsageHttpError,
+  parseModelUsageDashboard,
+  projectUsageIndicator,
+} from "./modelUsage.ts";
 
 test("parses project totals and preserves each model call", () => {
   const result = parseModelUsageDashboard({
@@ -125,4 +129,28 @@ test("caps quota percentages when monthly usage exceeds the limit", () => {
     usedPercent: 100,
     remainingPercent: 0,
   });
+});
+
+test("distinguishes unavailable usage statistics from a real zero", () => {
+  assert.deepEqual(projectUsageIndicator(null), {
+    label: "项目 --",
+    hasError: false,
+  });
+  assert.deepEqual(projectUsageIndicator({
+    projectRunCount: 0,
+    usageError: "用量服务路由不可用（HTTP 404）",
+  }), {
+    label: "统计异常",
+    hasError: true,
+  });
+  assert.deepEqual(projectUsageIndicator({ projectRunCount: 0 }), {
+    label: "项目 0 次",
+    hasError: false,
+  });
+});
+
+test("turns model usage HTTP failures into actionable messages", () => {
+  assert.equal(describeModelUsageHttpError(401), "登录状态已失效，请重新登录");
+  assert.equal(describeModelUsageHttpError(404), "用量服务路由不可用（HTTP 404）");
+  assert.equal(describeModelUsageHttpError(503), "项目用量服务暂时不可用（HTTP 503）");
 });

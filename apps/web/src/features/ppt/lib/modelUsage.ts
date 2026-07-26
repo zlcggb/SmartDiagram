@@ -52,6 +52,28 @@ export interface TokenQuotaUsage {
   remainingPercent: number;
 }
 
+export interface ProjectUsageIndicatorInput {
+  projectRunCount?: number;
+  usageError?: string;
+}
+
+export function projectUsageIndicator(
+  summary: ProjectUsageIndicatorInput | null | undefined,
+): { label: string; hasError: boolean } {
+  if (!summary) return { label: "项目 --", hasError: false };
+  if (summary.usageError) return { label: "统计异常", hasError: true };
+  const count = Number.isFinite(summary.projectRunCount)
+    ? Math.max(0, Math.round(summary.projectRunCount ?? 0))
+    : 0;
+  return { label: `项目 ${count} 次`, hasError: false };
+}
+
+export function describeModelUsageHttpError(status: number): string {
+  if (status === 401 || status === 403) return "登录状态已失效，请重新登录";
+  if (status === 404) return "用量服务路由不可用（HTTP 404）";
+  return `项目用量服务暂时不可用（HTTP ${status}）`;
+}
+
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }

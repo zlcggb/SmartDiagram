@@ -46,6 +46,8 @@ test("reports authenticated PPT usage with project and slide attribution", async
   assert.equal(requests[0]?.url, "http://billing.local/api/billing/model-usage-events");
   assert.equal(new Headers(requests[0]?.init.headers).get("authorization"), "Bearer user-token");
   assert.equal(new Headers(requests[0]?.init.headers).get("x-ppt-internal-secret"), "shared-secret");
+  assert.equal(new Headers(requests[0]?.init.headers).get("x-user-id"), "user-1");
+  assert.equal(new Headers(requests[0]?.init.headers).get("x-tenant-id"), "tenant-1");
   const body = JSON.parse(String(requests[0]?.init.body));
   assert.equal(body.project_id, "ppt-1");
   assert.equal(body.slide_id, "slide-1");
@@ -69,6 +71,53 @@ test("does not report guest or context-free calls to a personal ledger", async (
   await runWithModelUsageContext({ projectId: "guest-project" }, () => reporter(event));
 
   assert.equal(calls, 0);
+});
+
+test("reports with trusted service identity when the browser authorization is unavailable", async () => {
+  const requests: Array<{ url: string; init: RequestInit }> = [];
+  const reporter = createModelUsageReporter({
+    baseUrl: "http://billing.local",
+    internalSecret: "shared-secret",
+    fetcher: async (url, init) => {
+      requests.push({ url: String(url), init: init ?? {} });
+      return new Response(JSON.stringify({ created: true }), { status: 200 }) as never;
+    }
+  });
+
+  await runWithModelUsageContext({
+    tenantId: "tenant-1",
+    userId: "user-1",
+    projectId: "ppt-1"
+  }, () => reporter(event));
+
+  assert.equal(requests.length, 1);
+  const headers = new Headers(requests[0]?.init.headers);
+  assert.equal(headers.get("authorization"), null);
+  assert.equal(headers.get("x-user-id"), "user-1");
+  assert.equal(headers.get("x-tenant-id"), "tenant-1");
+});
+
+test("surfaces the final ledger error to the service logger", async () => {
+  const errors: Error[] = [];
+  const reporter = createModelUsageReporter({
+    baseUrl: "http://billing.local",
+    internalSecret: "shared-secret",
+    attempts: 1,
+    onError: (error) => errors.push(error),
+    fetcher: async () => new Response("rejected", { status: 403 }) as never
+  });
+
+  await assert.rejects(
+    runWithModelUsageContext({
+      tenantId: "tenant-1",
+      userId: "user-1",
+      projectId: "ppt-1"
+    }, () => reporter(event)),
+    /usage ledger rejected event \(403\)/
+  );
+
+  assert.equal(errors.length, 1);
+  assert.match(errors[0]?.message ?? "", /403/);
 });
 
 test("parallel contexts never exchange project attribution", async () => {
@@ -96,4 +145,3 @@ test("parallel contexts never exchange project attribution", async () => {
 
   assert.deepEqual(projectIds.sort(), ["ppt-a", "ppt-b"]);
 });
-

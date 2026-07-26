@@ -1,13 +1,14 @@
 import { Link, useLocation, useParams } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { LoaderCircle, Sparkles, Activity, Cpu } from "lucide-react";
+import { AlertCircle, LoaderCircle, Sparkles, Activity, Cpu } from "lucide-react";
 import { AppLogoMark } from "../AppLogo";
 import { useWorkbenchStore } from '@/features/ppt/store/workbenchStore';
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { WorkspaceNav } from "./WorkspaceNav";
 import { TokenDashboardModal } from "../studio/TokenDashboardModal";
 import { startAiUsageAutoRefresh } from "../../lib/usageRefresh";
+import { projectUsageIndicator } from "../../lib/modelUsage";
 
 export function ProjectShell({ children }: { children: ReactNode }) {
   const { projectId } = useParams();
@@ -63,6 +64,7 @@ export function ProjectShell({ children }: { children: ReactNode }) {
   const displayModel = isDesignContext
     ? (isDirectorRoute ? (ttsModel ?? aiUsageSummary?.designModel ?? aiUsageSummary?.model) : (aiUsageSummary?.designModel || aiUsageSummary?.model))
     : aiUsageSummary?.model || aiUsageSummary?.designModel;
+  const usageIndicator = projectUsageIndicator(aiUsageSummary);
 
   return (
     <div
@@ -88,7 +90,7 @@ export function ProjectShell({ children }: { children: ReactNode }) {
               type="button"
               className="workspace-usage-pill"
               onClick={() => setDashboardOpen(true)}
-              title="查看当前项目的模型调用、Token 与费用明细"
+              title={aiUsageSummary?.usageError ?? "查看当前项目的模型调用、Token 与费用明细"}
               style={{
                 cursor: "pointer",
                 display: "inline-flex",
@@ -122,9 +124,16 @@ export function ProjectShell({ children }: { children: ReactNode }) {
                 {displayModel || "AI Model"}
               </span>
               <span style={{ color: "#d1d5db" }}>|</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "#4b5563" }}>
-                <Activity className="h-3.5 w-3.5" style={{ color: "#10b981" }} />
-                <span>项目 <strong>{aiUsageSummary?.projectRunCount ?? 0}</strong> 次</span>
+              <span style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                color: usageIndicator.hasError ? "#b45309" : "#4b5563",
+              }}>
+                {usageIndicator.hasError
+                  ? <AlertCircle className="h-3.5 w-3.5" style={{ color: "#f59e0b" }} />
+                  : <Activity className="h-3.5 w-3.5" style={{ color: "#10b981" }} />}
+                <span>{usageIndicator.label}</span>
               </span>
             </button>
             <button

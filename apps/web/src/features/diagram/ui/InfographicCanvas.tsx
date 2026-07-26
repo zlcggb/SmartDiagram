@@ -13,6 +13,7 @@ import { useChatStore } from '@/features/diagram/model/chatStore';
 import * as AntVInfographic from '@antv/infographic';
 import { AlertCircle } from 'lucide-react';
 import { useT } from '@/app/i18n';
+import { iconifyResourceUrl } from '../model/infographicResources';
 
 const Infographic: any = (AntVInfographic as any).Infographic;
 
@@ -37,11 +38,12 @@ if ((AntVInfographic as any).registerResourceLoader) {
           try {
             let url;
             if (scene === 'icon') {
-              url = `https://api.iconify.design/${data}.svg`;
+              url = iconifyResourceUrl(data);
             } else if (scene === 'illus') {
               url = `https://raw.githubusercontent.com/balazser/undraw-svg-collection/refs/heads/main/svgs/${data}.svg`;
             } else return null;
 
+            if (!url) return null;
             const response = await fetch(url, { referrerPolicy: 'no-referrer' });
             if (!response.ok) return null;
             const text = await response.text();

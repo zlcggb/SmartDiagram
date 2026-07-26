@@ -7,6 +7,15 @@ from app.api import routes_billing
 
 
 class _FakeSession:
+    async def get(self, _model, user_id):
+        if user_id != "user-1":
+            return None
+        return type(
+            "UserRecord",
+            (),
+            {"id": "user-1", "tenant_id": "tenant-1", "status": "active"},
+        )()
+
     async def commit(self):
         return None
 
@@ -103,6 +112,54 @@ def test_ingest_derives_identity_and_is_idempotent(monkeypatch):
     assert captured[0][2].get("tenant_id") is None
     assert captured[0][2].get("user_id") is None
     assert captured[0][3]["model-a"]["currency"] == "CNY"
+
+
+def test_ingest_accepts_trusted_service_identity_without_browser_bearer(monkeypatch):
+    client, _ = _client(monkeypatch)
+    captured = []
+
+    async def pricing(_session, _env_raw):
+        return {}
+
+    async def persist(_session, *, tenant_id, user_id, payload, pricing):
+        captured.append((tenant_id, user_id, payload, pricing))
+        return {"id": "row-1", "external_event_id": payload["external_event_id"]}, True
+
+    monkeypatch.setattr(routes_billing, "resolve_model_pricing", pricing)
+    monkeypatch.setattr(routes_billing, "persist_model_usage_event", persist)
+
+    response = client.post(
+        "/api/billing/model-usage-events",
+        headers={
+            "X-PPT-Internal-Secret": "shared-secret",
+            "X-User-Id": "user-1",
+            "X-Tenant-Id": "tenant-1",
+        },
+        json=_event_body(),
+    )
+
+    assert response.status_code == 200
+    assert captured[0][0:2] == ("tenant-1", "user-1")
+    assert captured[0][2]["project_id"] == "ppt-1"
+
+
+def test_ingest_rejects_incomplete_or_mismatched_trusted_identity(monkeypatch):
+    client, _ = _client(monkeypatch)
+    base_headers = {"X-PPT-Internal-Secret": "shared-secret", "X-User-Id": "user-1"}
+
+    incomplete = client.post(
+        "/api/billing/model-usage-events",
+        headers=base_headers,
+        json=_event_body(),
+    )
+    mismatched = client.post(
+        "/api/billing/model-usage-events",
+        headers={**base_headers, "X-Tenant-Id": "tenant-other"},
+        json=_event_body(),
+    )
+
+    assert incomplete.status_code == 401
+    assert mismatched.status_code == 403
 
 
 def test_query_returns_month_project_summary_and_events(monkeypatch):

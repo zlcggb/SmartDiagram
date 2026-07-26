@@ -40,9 +40,14 @@ import { collectPageGrades } from "./exportMode";
 import { guestProjectRepository } from "./guestProjectStore";
 import { isPptApiError, PptApiError, shouldUseGuestProjectFallback } from "./pptApiError";
 import { createPptRequestHeaders, isPptGuest } from "./pptRequestContext";
+import { readAuthSession } from "@/shared/lib/config/auth";
 
 export { isPptApiError, PptApiError };
-import { parseModelUsageDashboard, type ModelUsageEventDto } from "./modelUsage";
+import {
+  describeModelUsageHttpError,
+  parseModelUsageDashboard,
+  type ModelUsageEventDto,
+} from "./modelUsage";
 
 /** 与业务请求、SSE 进度共用；勿再写第二套 VITE_API_BASE */
 export function getApiBase() {
@@ -450,8 +455,7 @@ export const api = {
     let dashboard = parseModelUsageDashboard({ project_summary: {}, events: [] });
     let usageError: string | undefined;
     try {
-      const raw = window.localStorage.getItem("smartdiagram.auth.session");
-      const token = raw ? (JSON.parse(raw) as { access_token?: string }).access_token : undefined;
+      const token = readAuthSession()?.access_token;
       if (!token) {
         usageError = "登录后才会持久化并显示项目调用明细";
       } else {
@@ -462,11 +466,13 @@ export const api = {
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) throw new Error(describeModelUsageHttpError(response.status));
         dashboard = parseModelUsageDashboard(await response.json());
       }
-    } catch {
-      usageError = "项目用量明细暂时无法读取，请稍后刷新";
+    } catch (error) {
+      usageError = error instanceof Error && error.message
+        ? error.message
+        : "项目用量明细暂时无法读取，请稍后刷新";
     }
 
     const project = dashboard.project;
