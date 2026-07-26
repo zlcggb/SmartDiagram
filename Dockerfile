@@ -97,6 +97,7 @@ COPY --from=uv-bin /uv /uvx /bin/
 ENV PYTHONUNBUFFERED=1
 ENV UV_PROJECT_ENVIRONMENT=/app/apps/api-ppt/.venv
 ENV PATH=/app/apps/api-ppt/.venv/bin:${PATH}
+ENV PYTHONPATH=/app/apps/api-ppt/src
 
 WORKDIR /app
 
@@ -109,17 +110,28 @@ COPY --chown=app:app apps/api-ppt/pyproject.toml apps/api-ppt/uv.lock ./apps/api
 
 RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
     if [ "$CN_MIRROR" = "true" ]; then \
-        export UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple; \
+        uv export --frozen --no-dev --no-emit-project \
+            --project apps/api-ppt \
+            --format requirements.txt \
+            --output-file /tmp/api-ppt-requirements.txt; \
+        uv venv "$UV_PROJECT_ENVIRONMENT"; \
+        uv pip sync \
+            --python "$UV_PROJECT_ENVIRONMENT/bin/python" \
+            --require-hashes \
+            --default-index https://mirrors.aliyun.com/pypi/simple \
+            /tmp/api-ppt-requirements.txt; \
+    else \
+        uv sync --frozen --no-dev --no-install-project --project apps/api-ppt; \
     fi; \
-    uv sync --frozen --no-dev --no-install-project --project apps/api-ppt
+    rm -f /tmp/api-ppt-requirements.txt
 
 COPY --chown=app:app apps/api-ppt ./apps/api-ppt
 
 RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-    if [ "$CN_MIRROR" = "true" ]; then \
-        export UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple; \
+    if [ "$CN_MIRROR" != "true" ]; then \
+        uv sync --frozen --no-dev --project apps/api-ppt; \
     fi; \
-    uv sync --frozen --no-dev --project apps/api-ppt
+    python -c "import ppt_agent_api"
 
 USER app
 

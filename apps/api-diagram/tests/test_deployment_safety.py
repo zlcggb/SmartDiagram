@@ -230,7 +230,11 @@ def test_ppt_python_build_uses_detected_cn_pypi_mirror() -> None:
     ]
 
     assert "ARG CN_MIRROR" in dockerfile
-    assert "UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple" in dockerfile
+    assert "uv export --frozen --no-dev --no-emit-project" in dockerfile
+    assert "uv pip sync" in dockerfile
+    assert "--require-hashes" in dockerfile
+    assert "--default-index https://mirrors.aliyun.com/pypi/simple" in dockerfile
+    assert "ENV PYTHONPATH=/app/apps/api-ppt/src" in dockerfile
     assert "CN_MIRROR: ${CN_MIRROR:-false}" in ppt_python_block
 
 
