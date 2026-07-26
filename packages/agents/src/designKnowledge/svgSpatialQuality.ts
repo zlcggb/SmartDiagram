@@ -375,6 +375,15 @@ function intersection(left: Bounds, rightBox: Bounds): Bounds | null {
   return { x, y, w: maxX - x, h: maxY - y };
 }
 
+function containsBounds(container: Bounds, content: Bounds, tolerance = 0) {
+  return (
+    content.x >= container.x - tolerance &&
+    content.y >= container.y - tolerance &&
+    right(content) <= right(container) + tolerance &&
+    bottom(content) <= bottom(container) + tolerance
+  );
+}
+
 function pointInside(point: Point, box: Bounds) {
   return point.x >= box.x && point.x <= right(box) && point.y >= box.y && point.y <= bottom(box);
 }
@@ -415,6 +424,20 @@ function allowedOverlap(recipe: DesignRecipe, leftId: string, rightId: string) {
 
 function rangeText(box: Bounds) {
   return `x=${Math.round(box.x)}..${Math.round(right(box))}、y=${Math.round(box.y)}..${Math.round(bottom(box))}`;
+}
+
+function isCompactNodeBadgeText(text: SpatialElement, groups: SpatialGroup[]) {
+  const group = groups.find((candidate) => candidate.id === text.groupId);
+  return Boolean(
+    group?.elements.some(
+      (element) =>
+        element.kind === "solid" &&
+        ["circle", "ellipse"].includes(element.tag) &&
+        element.bounds.w <= 96 &&
+        element.bounds.h <= 96 &&
+        containsBounds(element.bounds, text.bounds, 2)
+    )
+  );
 }
 
 function validateSafeBounds(groups: SpatialGroup[], issues: Set<string>) {
@@ -490,7 +513,8 @@ function validateConnectorTextCrossing(groups: SpatialGroup[], issues: Set<strin
   if (!connector) return;
   const texts = groups
     .filter((group) => !["background-layer", "connector-layer", "visual-anchor"].includes(group.id))
-    .flatMap((group) => group.elements.filter((element) => element.kind === "text"));
+    .flatMap((group) => group.elements.filter((element) => element.kind === "text"))
+    .filter((text) => !isCompactNodeBadgeText(text, groups));
 
   for (const connectorElement of connector.elements) {
     for (const text of texts) {

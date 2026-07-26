@@ -77,6 +77,25 @@ test("接受先绘制的连接线从后绘制视觉锚点文字下方通过", ()
   );
 });
 
+test("接受阶梯路线在后绘制的圆形节点编号下方接入", () => {
+  const roadmap = getDesignRecipe("stepped-roadmap");
+  const svg = svgWith(`
+    <g id="connector-layer">
+      <polyline points="148,500 317,410 486,320 655,230" fill="none"/>
+    </g>
+    <g id="content-zone-1">
+      <circle cx="148" cy="500" r="14" fill="#005AA6"/>
+      <text x="148" y="504" text-anchor="middle" data-w="28" data-h="16" font-size="12">01</text>
+    </g>
+  `);
+
+  const result = validateSvgSpatialQuality(svg, roadmap);
+  assert.ok(
+    !result.issues.some((issue) => issue.includes("connector-layer") && issue.includes("content-zone-1")),
+    result.issues.join("\n")
+  );
+});
+
 test("拒绝业务元素越过画布安全区", () => {
   const svg = svgWith(`
     <g id="content-zone-1"><rect x="12" y="226" width="440" height="388"/></g>
