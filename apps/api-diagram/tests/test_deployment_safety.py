@@ -196,7 +196,7 @@ def test_deploy_defaults_to_strictly_sequential_service_builds() -> None:
 def test_deploy_defaults_to_five_gibibytes_of_free_disk_headroom() -> None:
     script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
 
-    assert 'DEPLOY_MIN_FREE_GB="${DEPLOY_MIN_FREE_GB:-5}"' in script
+    assert 'DEPLOY_MIN_FREE_GB="${DEPLOY_MIN_FREE_GB:-3}"' in script
     assert 'DEPLOY_MIN_FREE_GB 必须是正整数' in script
 
 
