@@ -11,6 +11,7 @@ import type {
   RenderStrategy,
   SlideDto,
   SlideGenerationStatus,
+  SlideIrDto,
   SlidePlanDto,
   SlideSearchJson,
   SourceTextDto
@@ -18,7 +19,8 @@ import type {
 import {
   inferRenderStrategy,
   normalizePresentationStyleId,
-  renderStrategies
+  renderStrategies,
+  SlideIrSchema
 } from "@ppt-agent/shared";
 import { exportDownloadUrl } from "./paths.js";
 
@@ -43,6 +45,16 @@ function parseSlidePlan(value: string | null): SlidePlanDto | null {
   }
   try {
     return JSON.parse(value) as SlidePlanDto;
+  } catch {
+    return null;
+  }
+}
+
+function parseSlideIr(value: string | null | undefined): SlideIrDto | null {
+  if (!value) return null;
+  try {
+    const parsed = SlideIrSchema.safeParse(JSON.parse(value));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
@@ -160,6 +172,7 @@ export function formatSlide(slide: {
   isLayoutLocked: boolean;
   presentationStyle?: string | null;
   planJson: string | null;
+  irJson?: string | null;
   svgPreview: string | null;
   activeDesignVersionId?: string | null;
   searchJson?: string | null;
@@ -187,6 +200,7 @@ export function formatSlide(slide: {
       : null,
     sourceFactIds: slide.slideSources?.map((source) => source.factId) ?? [],
     planJson,
+    irJson: parseSlideIr(slide.irJson),
     svgPreview: slide.svgPreview,
     activeDesignVersionId: slide.activeDesignVersionId ?? null,
     searchJson: parseJsonObject<SlideSearchJson>(slide.searchJson ?? null),

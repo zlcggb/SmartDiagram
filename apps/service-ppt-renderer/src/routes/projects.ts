@@ -2,6 +2,12 @@ import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { renderProjectPptx } from "@ppt-agent/ppt-renderer";
 import {
+  renderSlideIrToSvg,
+  stringifySmartSlide,
+  validateSlideIr,
+  type SlideIrDocument
+} from "@ppt-agent/slide-ir";
+import {
   briefAnswerSchema,
   createBlankSlideSchema,
   createFactSchema,
@@ -55,6 +61,7 @@ import {
   getResearchAdapter,
   resolveConcurrency,
   resolveSearchConcurrency,
+  validateSlideIrVisualQuality,
   validateSvgAgainstDesignRecipe
 } from "@ppt-agent/agents";
 import { getOrchestrationBackend } from "../lib/orchestration.js";
@@ -358,6 +365,66 @@ async function generateValidatedSvgPreview(
   throw new SvgQualityValidationError(lastIssues, previousSvg ?? "", 2);
 }
 
+class SlideIrQualityValidationError extends Error {
+  readonly issues: string[];
+  readonly source: string;
+
+  constructor(issues: string[], source = "") {
+    super(`SmartSlide 质量校验失败：${issues.join("；")}`);
+    this.name = "SlideIrQualityValidationError";
+    this.issues = issues;
+    this.source = source;
+  }
+}
+
+async function generateValidatedSlideIr(
+  slide: SlideDto,
+  facts: FactDto[],
+  theme: PptExportTheme,
+  onToken?: (token: string) => void,
+  options?: DesignGenerationOptions
+) {
+  const presentationStyle = normalizePresentationStyleId(
+    slide.presentationStyle ?? options?.presentationStyle
+  );
+  let lastIssues: string[] = [];
+  let lastDocument: SlideIrDocument | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const document = await adapter.generateSlideIr(slide, facts, theme, onToken, {
+      accentId: options?.accentId,
+      surfaceId: options?.surfaceId,
+      presentationStyle,
+      revisionNotes: attempt > 0 ? lastIssues : undefined,
+      previousSlideIr:
+        attempt > 0 && lastDocument ? stringifySmartSlide(lastDocument) : undefined
+    });
+    const result = validateSlideIr(document);
+    const schemaErrors = result.issues
+      .filter((entry) => entry.severity === "error")
+      .map((entry) => `${entry.elementId ? `${entry.elementId}：` : ""}${entry.message}`);
+    const visualResult = validateSlideIrVisualQuality(
+      document,
+      slide,
+      presentationStyle
+    );
+    const errors = [...schemaErrors, ...visualResult.issues];
+    if (errors.length === 0) {
+      return {
+        document,
+        warnings: result.issues
+          .filter((entry) => entry.severity === "warning")
+          .map((entry) => entry.message)
+      };
+    }
+    lastIssues = errors;
+    lastDocument = document;
+  }
+  throw new SlideIrQualityValidationError(
+    lastIssues,
+    lastDocument ? stringifySmartSlide(lastDocument) : ""
+  );
+}
+
 async function generatePlanForSlide(slide: SlideDto, facts: FactDto[], theme?: string | null) {
   return slide.planJson ?? (await adapter.generateSlidePlan(slide, facts, normalizePptExportTheme(theme)));
 }
@@ -422,7 +489,11 @@ async function ensureSlidePlan(
       data: {
         planJson: JSON.stringify(plan),
         status: "planned",
-        generationStatus: slide.svgPreview ? "svg-ready" : "draft-ready",
+        generationStatus: slide.irJson
+          ? "ir-ready"
+          : slide.svgPreview
+            ? "svg-ready"
+            : "draft-ready",
         renderStrategy: nextStrategy
       },
       include: { slideSources: true }
@@ -511,11 +582,119 @@ async function generateEditableSvgDesign(
     accentId: options?.accentId,
     surfaceId: options?.surfaceId,
     presentationStyle,
+    irJson: null,
+    renderStrategy: "svg",
     slidePatch: {
+      irJson: null,
       planJson: JSON.stringify(plan),
       status: "planned",
       generationStatus: "svg-ready",
       renderStrategy: "svg",
+      strategyLocked: false
+    }
+  });
+
+  return formatSlide(updatedSlide);
+}
+
+async function generateEditableSlideIrDesign(
+  projectId: string,
+  slide: SlideDto,
+  facts: FactDto[],
+  theme: PptExportTheme,
+  options?: DesignGenerationOptions
+) {
+  if (slide.projectId !== projectId) {
+    throw new Error("页面不属于当前项目，无法生成设计。");
+  }
+
+  const slideFacts = linkedFactsForSlide(slide, facts);
+  const presentationStyle = await resolveEffectivePresentationStyle(
+    projectId,
+    slide.presentationStyle,
+    options?.presentationStyle
+  );
+  let slideForDesign = slide;
+  const plan = await generatePlanForSlide(slideForDesign, slideFacts, theme);
+  if (!slideForDesign.planJson) {
+    const plannedSlide = await prisma.slide.update({
+      where: { id: slideForDesign.id },
+      data: {
+        planJson: JSON.stringify(plan),
+        status: "planned",
+        generationStatus: "draft-ready"
+      },
+      include: { slideSources: true }
+    });
+    slideForDesign = formatSlide(plannedSlide);
+  }
+
+  const slideWithPlan = { ...slideForDesign, planJson: plan };
+  const designStreamHandler = createStreamingTokenHandler(projectId, "design", 200, {
+    slideId: slideForDesign.id,
+    slideTitle: slideForDesign.title,
+    subStage: slideForDesign.title
+  });
+  let ir: SlideIrDocument;
+  try {
+    emitProgress(projectId, {
+      stage: "design",
+      status: "start",
+      message: `正在生成 SmartSlide「${slideForDesign.title}」…`,
+      slideId: slideForDesign.id,
+      slideTitle: slideForDesign.title,
+      subStage: slideForDesign.title,
+      clearDelta: true
+    });
+    const generated = await generateValidatedSlideIr(
+      slideWithPlan,
+      slideFacts,
+      theme,
+      designStreamHandler.onToken,
+      { ...options, presentationStyle }
+    );
+    ir = generated.document;
+    designStreamHandler.flush();
+    emitProgress(projectId, {
+      stage: "design",
+      status: "done",
+      message: `SmartSlide 设计完成：${slideForDesign.title}`,
+      slideId: slideForDesign.id,
+      slideTitle: slideForDesign.title,
+      subStage: slideForDesign.title
+    });
+  } catch (error) {
+    designStreamHandler.flush();
+    emitProgress(projectId, {
+      stage: "design",
+      status: "error",
+      message: aiFailMessage(error),
+      slideId: slideForDesign.id,
+      slideTitle: slideForDesign.title,
+      subStage: slideForDesign.title
+    });
+    throw error;
+  }
+
+  const svgPreview = renderSlideIrToSvg(ir);
+  const irJson = JSON.stringify(ir);
+  const updatedSlide = await persistSlideDesignVersion({
+    projectId,
+    slideId: slideForDesign.id,
+    svgPreview,
+    irJson,
+    renderStrategy: "ir",
+    source: "ai",
+    theme,
+    accentId: options?.accentId,
+    surfaceId: options?.surfaceId,
+    presentationStyle,
+    slidePatch: {
+      irJson,
+      planJson: JSON.stringify(plan),
+      status: "planned",
+      generationStatus: "ir-ready",
+      renderStrategy: "ir",
       strategyLocked: false
     }
   });
@@ -554,10 +733,8 @@ async function prepareSlidesForExport(
     // 显式导出：不自动生成缺失稿，避免「点导出却跑完全部策划/出图」
     if (!fillMissing) {
       prepared.push({ ...slide, renderStrategy: baseStrategy });
-      if (!slide.svgPreview) {
+      if (!slide.svgPreview && !slide.irJson) {
         notes.push(`${pageLabel} 尚未生成设计稿，将走主题模板（未自动补齐）`);
-      } else if (!slide.svgPreview && mode === "standard") {
-        notes.push(`${pageLabel} 无 SVG，标准导出将走已有 IR/主题模板`);
       }
       continue;
     }
@@ -1180,6 +1357,7 @@ export async function projectRoutes(app: FastifyInstance) {
             ? "draft"
             : undefined,
       status: planEdited ? "planned" : shouldInvalidatePlan ? "draft" : input.status,
+      irJson: svgEdited ? null : undefined,
       renderStrategy: svgEdited ? "svg" : nextStrategy,
       strategyLocked: svgEdited ? false : nextLocked
     };
@@ -1193,6 +1371,8 @@ export async function projectRoutes(app: FastifyInstance) {
           accentId: designVersionMeta?.accentId,
           surfaceId: designVersionMeta?.surfaceId,
           presentationStyle: designVersionMeta?.presentationStyle,
+          irJson: null,
+          renderStrategy: "svg",
           slidePatch
         })
       : shouldInvalidateDesign
@@ -1453,7 +1633,10 @@ export async function projectRoutes(app: FastifyInstance) {
         accentId: input.accentId,
         surfaceId: input.surfaceId,
         presentationStyle,
+        irJson: null,
+        renderStrategy: "svg",
         slidePatch: {
+          irJson: null,
           generationStatus: "svg-ready",
           renderStrategy: "svg",
           strategyLocked: false
@@ -1507,7 +1690,7 @@ export async function projectRoutes(app: FastifyInstance) {
       const facts = await getProjectFacts(request.params.id);
       const mode = input.mode;
 
-      // 只有显式草稿导出跳过 SVG；设计工作区始终生成 SVG。
+      // 显式草稿只准备策划；其余按 designMode 进入 SVG 或 SmartSlide 引擎。
       if (mode === "draft") {
         let current = slide;
         if (!current.planJson) {
@@ -1539,14 +1722,28 @@ export async function projectRoutes(app: FastifyInstance) {
         );
       }
 
-      const updatedSlide = await generateEditableSvgDesign(request.params.id, slide, facts, input.theme, input);
-      return reply.send(ok({ svgPreview: updatedSlide.svgPreview ?? "", slide: updatedSlide }, "SVG 页面设计已生成"));
+      const updatedSlide =
+        input.designMode === "slide-ir"
+          ? await generateEditableSlideIrDesign(request.params.id, slide, facts, input.theme, input)
+          : await generateEditableSvgDesign(request.params.id, slide, facts, input.theme, input);
+      return reply.send(
+        ok(
+          {
+            svgPreview: updatedSlide.svgPreview ?? "",
+            ir: updatedSlide.irJson,
+            slide: updatedSlide
+          },
+          input.designMode === "slide-ir"
+            ? "SmartSlide 页面设计已生成"
+            : "SVG 页面设计已生成"
+        )
+      );
     } catch (error) {
       await prisma.slide.updateMany({
         where: { id: request.params.slideId, projectId: request.params.id },
         data: { generationStatus: "error" }
       });
-      app.log.error(error, "Generate slide SVG design failed");
+      app.log.error(error, "Generate slide design failed");
       const qualityFailure = resolveSvgGenerationFailure(error);
       return reply
         .status(qualityFailure?.statusCode ?? 502)
@@ -1578,6 +1775,7 @@ export async function projectRoutes(app: FastifyInstance) {
     }> = [];
     let skippedSvgCount = 0;
     let generatedSvgCount = 0;
+    let generatedIrCount = 0;
 
     for (const slide of detail.slides) {
       // 只有显式草稿导出跳过 SVG；设计工作区始终生成 SVG。
@@ -1594,9 +1792,14 @@ export async function projectRoutes(app: FastifyInstance) {
       }
 
       const bannedExisting = slide.svgPreview ? getBannedSvgFeatures(slide.svgPreview) : [];
-      const needsSvg =
-        force || !slide.svgPreview || (input.mode === "visual" && bannedExisting.length > 0);
-      if (!needsSvg) {
+      const needsDesign =
+        force ||
+        (input.designMode === "slide-ir"
+          ? !slide.irJson || slide.renderStrategy !== "ir"
+          : !slide.svgPreview ||
+            slide.renderStrategy !== "svg" ||
+            (input.mode === "visual" && bannedExisting.length > 0));
+      if (!needsDesign) {
         continue;
       }
 
@@ -1611,8 +1814,13 @@ export async function projectRoutes(app: FastifyInstance) {
       }
 
       try {
-        await generateEditableSvgDesign(request.params.id, slide, detail.facts, input.theme, input);
-        generatedSvgCount += 1;
+        if (input.designMode === "slide-ir") {
+          await generateEditableSlideIrDesign(request.params.id, slide, detail.facts, input.theme, input);
+          generatedIrCount += 1;
+        } else {
+          await generateEditableSvgDesign(request.params.id, slide, detail.facts, input.theme, input);
+          generatedSvgCount += 1;
+        }
       } catch (error) {
         const qualityFailure = resolveSvgGenerationFailure(error);
         const message =
@@ -1628,12 +1836,15 @@ export async function projectRoutes(app: FastifyInstance) {
           where: { id: slide.id, projectId: request.params.id },
           data: { generationStatus: "error" }
         });
-        app.log.error(error, `Generate SVG design failed for slide ${slide.id}`);
+        app.log.error(error, `Generate design failed for slide ${slide.id}`);
       }
     }
 
     const slides = await getProjectSlides(request.params.id);
-    let message = "全部 SVG 页面设计已生成";
+    let message =
+      input.designMode === "slide-ir"
+        ? "全部 SmartSlide 页面设计已生成"
+        : "全部 SVG 页面设计已生成";
     if (input.mode === "draft") {
       message =
         skippedSvgCount > 0
@@ -1641,11 +1852,16 @@ export async function projectRoutes(app: FastifyInstance) {
           : "草稿模式无需生成 SVG";
     } else if (failures.length > 0) {
       message = `部分页面设计失败：${failures.length} 页，请查看失败原因后重试。`;
-    } else if (generatedSvgCount === 0) {
+    } else if (generatedSvgCount === 0 && generatedIrCount === 0) {
       message = "页面设计已是最新";
     }
 
-    return reply.send(ok({ slides, failures, skippedSvgCount, generatedSvgCount }, message));
+    return reply.send(
+      ok(
+        { slides, failures, skippedSvgCount, generatedSvgCount, generatedIrCount },
+        message
+      )
+    );
   });
 
   app.post<{ Params: IdParams }>("/api/projects/:id/export-pptx", async (request, reply) => {

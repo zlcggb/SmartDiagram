@@ -11,6 +11,7 @@
 | 项目结构、改哪个文件 | [smartdiagram_architecture.md](../smartdiagram_architecture.md)（§8 定位表） |
 | 本地启动 / 部署 | [README.md](../README.md)、[DEPLOYMENT.md](./DEPLOYMENT.md) |
 | 访客认证与配额 | [GUEST_AUTH.md](./GUEST_AUTH.md) |
+| SmartSlide 的设计、生成、校验与版本链路 | [SMARTSLIDE_DESIGN_PIPELINE.md](./SMARTSLIDE_DESIGN_PIPELINE.md) |
 | **平台用户中心 / 权限 / 用量配额（执行记录）** | [plans/2026-07-26-platform-quota-management-execution.md](./plans/2026-07-26-platform-quota-management-execution.md) |
 | Agent 工具约定 | [AGENTS.md](../AGENTS.md) |
 

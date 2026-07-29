@@ -12,6 +12,7 @@ SmartDiagram 在一个桌面式 SPA 中集成 **图表 AI** 与 **PPT Agent**：
 |--------|------|
 | **本地开发** | `cp .env.example .env` → 填 LLM 密钥 → `npm run dev` |
 | **检查环境变量** | `npm run env:validate` |
+| **检查 PPT 设计知识库** | `npm run design:knowledge -- --list` |
 | **服务器首次部署** | 见下方 [首次部署](#-服务器首次部署) |
 | **服务器一键更新** | `./deploy.sh --update --with-worker` |
 | **合并旧版 env 文件** | `npm run env:merge-legacy` |
@@ -85,6 +86,7 @@ npm run dev
 npm run dev:gateway   # 接近生产的网关模式 :8080
 npm run db:up         # 只起 db / redis / drawio
 npm run db:prepare    # 双库 migrate
+npm run design:knowledge -- --topic "AI 销售培训" --page-type cover --theme white-blue --style apple-minimal --format json
 ```
 
 ---

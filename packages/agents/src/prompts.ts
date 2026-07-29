@@ -30,7 +30,11 @@ import {
   speechWritingStylePresets,
   themeFamily
 } from "@ppt-agent/shared";
-import { buildDesignRecipeInstruction, designRecipeMeta } from "./designKnowledge/index.js";
+import {
+  buildDesignRecipeInstruction,
+  buildKimiDesignKnowledgeInstruction,
+  designRecipeMeta
+} from "./designKnowledge/index.js";
 import { normalizeSlideDesignGuide, selectedSearchMaterials } from "./studioHelpers.js";
 
 export const extractFactsSystemPrompt = [
@@ -616,6 +620,12 @@ export function buildSvgPreviewPrompt(
   presentationStyle?: PresentationStyleId | string | null
 ) {
   const surfaceLine = surfaceInstruction(surfaceId);
+  const kimiDesignKnowledge = buildKimiDesignKnowledgeInstruction(
+    slide,
+    theme,
+    presentationStyle,
+    "svg"
+  );
   const repairInstruction =
     revisionNotes.length > 0
       ? [
@@ -630,6 +640,7 @@ export function buildSvgPreviewPrompt(
     "请严格按照下面契约生成专业企业演示 SVG 页面。",
     themeInstruction(theme, accentId),
     presentationStyleInstruction(presentationStyle),
+    kimiDesignKnowledge,
     layoutBlueprintInstruction(slide, theme, { lockGeometry: false }),
     buildDesignRecipeInstruction(slide, presentationStyle),
     visualHintInstruction(slide),

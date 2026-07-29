@@ -13,6 +13,7 @@ import type {
 import { factCategories, getThemePack, normalizePptExportTheme, themeFamily } from "@ppt-agent/shared";
 import { selectDesignRecipe } from "./designKnowledge/index.js";
 import { buildMockPlanFromSearch } from "./studioHelpers.js";
+import { createMockSlideIr } from "./slideIrGeneration.js";
 import type { GeminiAdapter, SvgGenerationOptions } from "./types.js";
 
 const categories = {
@@ -237,6 +238,10 @@ export class MockGeminiAdapter implements GeminiAdapter {
       .join("");
 
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">${orderedGroups}</svg>`;
+  }
+
+  async generateSlideIr(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", _onToken?: (token: string) => void, options?: SvgGenerationOptions) {
+    return createMockSlideIr(slide, facts, theme, options);
   }
 
   async startBrief(topic: string) {

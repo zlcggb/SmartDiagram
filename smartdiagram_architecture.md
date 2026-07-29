@@ -270,13 +270,28 @@ Agent 文件目录：`app/agents/*_agent.py`；企业向服务在 `app/services/
 | service-ppt-renderer | `DATABASE_URL` → `ppt_agent` | Prisma |
 | api-ppt | 主要调 Node + 文件卷 | — |
 
-共享包：`packages/shared`、`packages/agents`、`packages/ppt-renderer`。其中
+共享包：`packages/shared`、`packages/agents`、`packages/slide-ir`、`packages/ppt-renderer`。其中
 `packages/agents/src/designKnowledge/` 统一维护 PPT 的视觉配方、Apple 编辑式 SVG
 提示契约，以及生成后的空间碰撞、DOM 层级和视觉反模式质量门禁。
+其下 `kimiSlides/` 是只读设计知识适配层：从外置 `kimi-slides` Markdown 资料中
+按页选择一个场景规范，并按演示风格与主题为整套固定一个设计系统；适配层提取两份
+资料正文中的关键章节，编译为 `SCENARIO_CONTRACT`、`DESIGN_SYSTEM_CONTRACT`
+及页面级 `DESIGN_BLUEPRINT`（构图原型、坐标区、字阶、内容预算、必需图元与禁止项）。
+模型接收这些短契约，不注入整篇 Skill Markdown，也不只接收资料标题。
+SmartSlide 第二轮修复同时携带上一候选源码和精确问题，
+生成结果还需通过字号、文字溢出、可见截断、空文本框、等分文字栏及关系图元门禁。
+外置资料缺失时使用内置蓝图编译器回退；`PPT_KIMI_KNOWLEDGE_MODE=off` 时关闭外置资料检索，
+但不改变 SVG / SmartSlide 输出协议。
+`packages/slide-ir/` 是隔离的 SmartSlide 页面语言模块：负责 `.slide` YAML/JSON
+解析、Schema 与版面校验、派生 SVG 预览，以及直接映射为 PowerPoint 原生对象。
+Studio 可在传统 SVG 与 SmartSlide 两种生成模式间切换，未完成灰度验证前仍默认 SVG。
+SmartSlide 从设计知识选择、提示词组装、双轮质量门禁到版本导出的详细过程见
+[`docs/SMARTSLIDE_DESIGN_PIPELINE.md`](./docs/SMARTSLIDE_DESIGN_PIPELINE.md)。
 
-PPT 设计历史由 Prisma `SlideDesignVersion` 按页持久化，AI 生成与手动 SVG 保存都通过
+PPT 设计历史由 Prisma `SlideDesignVersion` 按页持久化，AI 生成、SmartSlide 生成与手动 SVG 保存都通过
 `apps/service-ppt-renderer/src/lib/slideDesignVersions.ts` 的事务入口写入并裁剪至最近 5 条。
-`Slide.activeDesignVersionId` 标识活跃版本，`Slide.svgPreview` 保留为活跃 SVG 的物化副本，
+`Slide.activeDesignVersionId` 标识活跃版本，`Slide.svgPreview` 保留为统一预览副本，
+`Slide.irJson` 保存活跃 SmartSlide 源码；激活历史版本时两者一并恢复，
 使现有 PPTX、PNG、视频和媒体渲染链路无需感知版本表。
 
 ---
@@ -308,6 +323,8 @@ PPT 设计历史由 Prisma `SlideDesignVersion` 按页持久化，AI 生成与�
 | **平台用量配额 / 超限拦截** | `user_quota_service.py` + `guest_quota_settings_service.py` + `routes.py` chat/stream；文档 [`docs/plans/2026-07-26-platform-quota-management-execution.md`](docs/plans/2026-07-26-platform-quota-management-execution.md) |
 | 改 PPT 工作流 | `api-ppt/src/` + `features/ppt/pages/` |
 | 改 PPT 单页设计版本历史 | `prisma/schema.prisma` + `service-ppt-renderer/src/lib/slideDesignVersions.ts` + `routes/slideDesignVersions.ts` + `features/ppt/components/studio/DesignVersionNavigator.tsx` |
+| 改 SmartSlide 页面语言 / 双生成模式 | `packages/slide-ir/` + `packages/agents/src/slideIrGeneration.ts` + `service-ppt-renderer/src/routes/projects.ts` + `features/ppt/pages/StudioSpace.tsx` |
+| 改 Kimi 设计知识检索 / Prompt 注入 | `packages/agents/src/designKnowledge/kimiSlides/` + `packages/agents/src/prompts.ts` + `packages/agents/src/slideIrGeneration.ts` |
 | 改 PPTX 渲染 | `packages/ppt-renderer/` + `service-ppt-renderer/` |
 | 改生产路由 | `gateway/nginx.conf` |
 | 改本地 proxy | `apps/web/vite.config.ts` |
@@ -325,6 +342,7 @@ PPT 设计历史由 Prisma `SlideDesignVersion` 按页持久化，AI 生成与�
 | 本地 gateway 模式 | `npm run dev:gateway`（`start-all.sh`） |
 | 仅图表 API | `npm run dev:backend` |
 | DB 迁移 | `npm run db:prepare` |
+| 检查 Kimi 设计知识 | `npm run design:knowledge -- --list` |
 | 生产首次/更新 | `./deploy.sh --with-worker` / `./deploy.sh --update --with-worker` |
 | env 检查 | `npm run env:validate` |
 

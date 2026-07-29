@@ -1,7 +1,10 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   isPresentationStyleId,
+  renderStrategies,
+  SlideIrSchema,
   slideDesignVersionSourceSchema,
+  type RenderStrategy,
   type SlideDesignHistoryDto,
   type SlideDesignVersionDto,
   type SlideDesignVersionSource
@@ -28,12 +31,18 @@ function formatDesignVersion(version: {
   accentId: string | null;
   surfaceId: string | null;
   presentationStyle: string | null;
+  irJson: string | null;
+  renderStrategy: string;
   createdAt: Date;
 }): SlideDesignVersionDto {
   return {
     id: version.id,
     slideId: version.slideId,
     svgPreview: version.svgPreview,
+    irJson: version.irJson ? SlideIrSchema.parse(JSON.parse(version.irJson)) : null,
+    renderStrategy: (renderStrategies as readonly string[]).includes(version.renderStrategy)
+      ? (version.renderStrategy as RenderStrategy)
+      : "svg",
     source: slideDesignVersionSourceSchema.parse(version.source),
     theme: version.theme,
     accentId: version.accentId,
@@ -55,6 +64,8 @@ export async function persistSlideDesignVersion(
     accentId?: string | null;
     surfaceId?: string | null;
     presentationStyle?: string | null;
+    irJson?: string | null;
+    renderStrategy?: RenderStrategy;
     slidePatch?: Prisma.SlideUncheckedUpdateInput;
   },
   client: PrismaClient = prisma
@@ -68,13 +79,17 @@ export async function persistSlideDesignVersion(
 
     if (
       existing.activeDesignVersionId &&
-      existing.svgPreview === input.svgPreview
+      existing.svgPreview === input.svgPreview &&
+      existing.irJson === (input.irJson ?? null) &&
+      existing.renderStrategy === (input.renderStrategy ?? "svg")
     ) {
       return tx.slide.update({
         where: { id: existing.id },
         data: {
           ...input.slidePatch,
-          svgPreview: input.svgPreview
+          svgPreview: input.svgPreview,
+          irJson: input.irJson ?? null,
+          renderStrategy: input.renderStrategy ?? "svg"
         },
         include: { slideSources: true }
       });
@@ -88,7 +103,9 @@ export async function persistSlideDesignVersion(
         theme: input.theme ?? null,
         accentId: input.accentId ?? null,
         surfaceId: input.surfaceId ?? null,
-        presentationStyle: input.presentationStyle ?? null
+        presentationStyle: input.presentationStyle ?? null,
+        irJson: input.irJson ?? null,
+        renderStrategy: input.renderStrategy ?? "svg"
       }
     });
 
@@ -97,6 +114,8 @@ export async function persistSlideDesignVersion(
       data: {
         ...input.slidePatch,
         svgPreview: input.svgPreview,
+        irJson: input.irJson ?? null,
+        renderStrategy: input.renderStrategy ?? "svg",
         activeDesignVersionId: version.id
       },
       include: { slideSources: true }
@@ -159,14 +178,16 @@ export async function activateSlideDesignVersion(
       where: { id: versionId, slideId }
     });
     if (!version) throw new SlideDesignVersionNotFoundError("version");
+    const renderStrategy = version.renderStrategy === "ir" ? "ir" : "svg";
 
     return tx.slide.update({
       where: { id: slideId },
       data: {
         activeDesignVersionId: version.id,
         svgPreview: version.svgPreview,
-        generationStatus: "svg-ready",
-        renderStrategy: "svg",
+        irJson: renderStrategy === "ir" ? version.irJson : null,
+        generationStatus: renderStrategy === "ir" ? "ir-ready" : "svg-ready",
+        renderStrategy,
         strategyLocked: false
       },
       include: { slideSources: true }
@@ -192,6 +213,7 @@ export async function clearSlideDesignVersions(
       data: {
         ...slidePatch,
         svgPreview: null,
+        irJson: null,
         activeDesignVersionId: null
       },
       include: { slideSources: true }

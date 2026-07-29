@@ -33,6 +33,12 @@ import {
   sanitizeSvgOutput,
   slidePlanSchema
 } from "./realGeminiAdapter.js";
+import {
+  buildSlideIrPrompt,
+  normalizeSlideIr,
+  slideIrJsonSchema,
+  slideIrSystemPrompt
+} from "./slideIrGeneration.js";
 import type { GeminiAdapter, ModelUsageEvent, ModelUsageReporter, SvgGenerationOptions } from "./types.js";
 
 type JsonObject = Record<string, unknown>;
@@ -93,7 +99,7 @@ function resolveTemperature() {
 
 type EffortLevel = "low" | "high" | "max" | "none";
 
-type EffortStage = "facts" | "brief" | "research" | "outline" | "search" | "plan" | "svg" | "main";
+type EffortStage = "facts" | "brief" | "research" | "outline" | "search" | "plan" | "svg" | "ir" | "main";
 
 function normalizeEffortLevel(raw: string | undefined): EffortLevel | undefined {
   if (!raw) return undefined;
@@ -115,12 +121,12 @@ function resolveEffortForStage(stage: EffortStage | "main"): EffortLevel {
     if (stageSpecific) return stageSpecific;
   }
 
-  if (stage === "svg") {
+  if (stage === "svg" || stage === "ir") {
     const designEffort = normalizeEffortLevel(process.env.OPENAI_COMPATIBLE_DESIGN_EFFORT);
     if (designEffort) return designEffort;
   }
 
-  if (stage !== "svg") {
+  if (stage !== "svg" && stage !== "ir") {
     const mainEffort = normalizeEffortLevel(process.env.OPENAI_COMPATIBLE_MAIN_EFFORT);
     if (mainEffort) return mainEffort;
   }
@@ -636,6 +642,17 @@ export class OpenAiCompatibleAdapter implements GeminiAdapter {
       onToken
     );
     return sanitizeSvgOutput(result);
+  }
+
+  async generateSlideIr(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void, options?: SvgGenerationOptions) {
+    const result = await this.generateJson<unknown>(
+      buildSlideIrPrompt(slide, facts, theme, options),
+      slideIrJsonSchema,
+      slideIrSystemPrompt,
+      { stage: "ir", model: this.designModel },
+      onToken
+    );
+    return normalizeSlideIr(result, theme);
   }
 
   async generateSpeechScript(

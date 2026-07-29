@@ -12,6 +12,7 @@ type FakeSlide = {
   id: string;
   projectId: string;
   svgPreview: string | null;
+  irJson: string | null;
   activeDesignVersionId: string | null;
   generationStatus: string;
   renderStrategy: string | null;
@@ -27,6 +28,9 @@ type FakeVersion = {
   theme: string | null;
   accentId: string | null;
   surfaceId: string | null;
+  presentationStyle: string | null;
+  irJson: string | null;
+  renderStrategy: string;
   createdAt: Date;
 };
 
@@ -36,6 +40,7 @@ function createFakePrisma() {
       id: "slide-1",
       projectId: "project-1",
       svgPreview: null,
+      irJson: null,
       activeDesignVersionId: null,
       generationStatus: "draft-ready",
       renderStrategy: null,
@@ -46,6 +51,7 @@ function createFakePrisma() {
       id: "slide-2",
       projectId: "project-2",
       svgPreview: null,
+      irJson: null,
       activeDesignVersionId: null,
       generationStatus: "draft-ready",
       renderStrategy: null,
@@ -130,6 +136,26 @@ function createFakePrisma() {
 }
 
 const svg = (label: string) => `<svg viewBox="0 0 1280 720"><text>${label}</text></svg>`;
+const ir = JSON.stringify({
+  schema: "smartslide/1",
+  pageType: "content",
+  canvas: { width: 1280, height: 720 },
+  theme: { tokens: { bg: "#FFFFFF", text: "#111111" } },
+  background: { color: "$bg" },
+  elements: [
+    {
+      id: "title",
+      type: "text",
+      bounds: [72, 72, 800, 80],
+      paragraphs: [
+        {
+          runs: [{ text: "SmartSlide", fontSize: 36, color: "$text", fontWeight: 700 }]
+        }
+      ],
+      autoFit: "shrink"
+    }
+  ]
+});
 
 test("新版本成为活跃版本并同步当前 SVG", async () => {
   const fake = createFakePrisma();
@@ -219,6 +245,50 @@ test("激活旧版本会同步 Slide.svgPreview", async () => {
 
   assert.equal(slide.activeDesignVersionId, "version-1");
   assert.equal(slide.svgPreview, svg("old"));
+});
+
+test("SmartSlide 版本会保存 IR，并在激活时恢复生成模式", async () => {
+  const fake = createFakePrisma();
+  await persistSlideDesignVersion(
+    {
+      projectId: "project-1",
+      slideId: "slide-1",
+      svgPreview: svg("ir-preview"),
+      irJson: ir,
+      renderStrategy: "ir",
+      source: "ai"
+    },
+    fake.client
+  );
+  await persistSlideDesignVersion(
+    {
+      projectId: "project-1",
+      slideId: "slide-1",
+      svgPreview: svg("svg-new"),
+      irJson: null,
+      renderStrategy: "svg",
+      source: "ai"
+    },
+    fake.client
+  );
+
+  const slide = await activateSlideDesignVersion(
+    "project-1",
+    "slide-1",
+    "version-1",
+    fake.client
+  );
+  const history = await listSlideDesignVersions(
+    "project-1",
+    "slide-1",
+    fake.client
+  );
+
+  assert.equal(slide.renderStrategy, "ir");
+  assert.equal(slide.generationStatus, "ir-ready");
+  assert.equal(slide.irJson, ir);
+  assert.equal(history.versions[0]?.renderStrategy, "ir");
+  assert.equal(history.versions[0]?.irJson?.schema, "smartslide/1");
 });
 
 test("不能激活其他项目页面的版本", async () => {

@@ -1,4 +1,13 @@
 export type { GeminiAdapter, ModelUsageEvent, ModelUsageReporter, ModelUsageStage } from "./types.js";
+export {
+  buildSlideIrPrompt,
+  createMockSlideIr,
+  normalizeSlideIr,
+  slideIrJsonSchema,
+  slideIrSystemPrompt,
+  validateSlideIrVisualQuality
+} from "./slideIrGeneration.js";
+export type { SlideIrVisualQualityResult } from "./slideIrGeneration.js";
 export { MockGeminiAdapter } from "./mockGeminiAdapter.js";
 export { RealGeminiAdapter } from "./realGeminiAdapter.js";
 export { OpenAiCompatibleAdapter } from "./openaiCompatibleAdapter.js";
@@ -8,7 +17,14 @@ export { getResearchAdapter, setResearchAdapter } from "./researchAdapter.js";
 export { TavilyResearchAdapter, type TavilyResearchAdapterOptions } from "./tavilyResearchAdapter.js";
 export {
   buildDesignRecipeInstruction,
+  buildKimiDesignKnowledgeInstruction,
+  assembleKimiDesignKnowledge,
+  clearKimiDesignKnowledgeCache,
+  compileKimiDesignBrief,
+  compileKimiDesignBriefForSlide,
   designRecipeMeta,
+  formatKimiDesignBrief,
+  inspectKimiDesignKnowledgeCatalog,
   selectDesignRecipe,
   validateSvgAgainstDesignRecipe,
   validateSvgSpatialQuality,
@@ -18,6 +34,13 @@ export {
   type DesignRecipeId,
   type DesignRecipeSelection,
   type DesignZone,
+  type KimiCatalogSummary,
+  type KimiCompiledDesignBrief,
+  type KimiDesignKnowledgeBundle,
+  type KimiDesignKnowledgeConstraints,
+  type KimiDesignKnowledgeRequest,
+  type KimiLayoutArchetype,
+  type KimiKnowledgeOutputDialect,
   type SvgSpatialQualityResult,
   type SvgVisualQualityResult
 } from "./designKnowledge/index.js";

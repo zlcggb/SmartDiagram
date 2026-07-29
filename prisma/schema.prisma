@@ -102,6 +102,7 @@ model Slide {
   isLayoutLocked    Boolean         @default(false)
   presentationStyle String?
   planJson          String?
+  irJson            String?
   svgPreview        String?
   activeDesignVersionId String?
   searchJson        String?
@@ -135,6 +136,8 @@ model SlideDesignVersion {
   accentId   String?
   surfaceId  String?
   presentationStyle String?
+  irJson     String?
+  renderStrategy String   @default("svg")
   createdAt  DateTime @default(now())
   slide      Slide    @relation("SlideDesignHistory", fields: [slideId], references: [id], onDelete: Cascade)
   activeFor  Slide[]  @relation("ActiveSlideDesignVersion")

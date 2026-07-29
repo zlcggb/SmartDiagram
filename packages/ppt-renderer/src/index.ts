@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import PptxGenJSDefault from "pptxgenjs";
 import { Resvg } from "@resvg/resvg-js";
+import { compileSlideIrToPptx } from "@ppt-agent/slide-ir";
 import type {
   ExportMode,
   FactDto,
@@ -66,10 +67,17 @@ type PptxSlide = {
     text: string | Array<{ text: string; options?: Record<string, unknown> }>,
     options: Record<string, unknown>
   ) => void;
+  addTable?: (rows: unknown[][], options: Record<string, unknown>) => void;
+  addChart?: (
+    chartType: string,
+    series: Array<{ name: string; labels: string[]; values: number[] }>,
+    options: Record<string, unknown>
+  ) => void;
 };
 
 type PptxInstance = {
   ShapeType: Record<"rect" | "roundRect" | "line" | "ellipse", string>;
+  ChartType?: Partial<Record<"bar" | "line" | "pie" | "doughnut", string>>;
   layout: string;
   author: string;
   company: string;
@@ -1695,6 +1703,27 @@ export async function renderProjectPptx(input: RenderProjectPptxInput, outputPat
     if (svgExportMode === "fidelity" && tryRenderSvgImageSlide(slide, themedSvg)) {
       pageResults.push({ slideId: outline.id, strategy, path: "svg-image" });
       return;
+    }
+    // SmartSlide 是原生对象模型：可编辑导出时优先直接映射到 PPTX，
+    // 不经过 SVG 解析，因此文字、形状、表格和图表保持对象级可编辑。
+    if (svgExportMode === "editable" && outline.irJson) {
+      const compiledIr = compileSlideIrToPptx(pptx, slide, outline.irJson);
+      if (compiledIr.ok) {
+        const warning =
+          compiledIr.warnings.length > 0
+            ? `${pageLabel} SmartSlide 已导出，但有提示：${compiledIr.warnings.join("；")}`
+            : undefined;
+        if (warning) warnings.push(warning);
+        pageResults.push({
+          slideId: outline.id,
+          strategy,
+          path: "ir",
+          warning
+        });
+        return;
+      }
+      const reason = compiledIr.issues.map((issue) => issue.message).join("；") || "未知错误";
+      warnings.push(`${pageLabel} SmartSlide 编译失败（${reason}），尝试 SVG/主题降级`);
     }
     // 可编辑版：SVG 拆成 PPT 原生文本/形状。
     if (tryRenderSvgSlide(pptx, slide, themedSvg)) {

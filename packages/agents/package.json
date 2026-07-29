@@ -18,9 +18,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:design-knowledge": "node --import tsx --test src/designKnowledge/*.test.ts"
+    "test": "node --import tsx --test src/*.test.ts src/designKnowledge/*.test.ts src/designKnowledge/kimiSlides/*.test.ts",
+    "test:design-knowledge": "node --import tsx --test src/designKnowledge/*.test.ts src/designKnowledge/kimiSlides/*.test.ts",
+    "knowledge:kimi": "node --import tsx src/designKnowledge/kimiSlides/cli.ts"
   },
   "dependencies": {
+    "@ppt-agent/slide-ir": "workspace:*",
     "@ppt-agent/shared": "workspace:*",
     "undici": "^8.7.0"
   },

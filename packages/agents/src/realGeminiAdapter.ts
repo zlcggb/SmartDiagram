@@ -34,6 +34,12 @@ import {
   svgPreviewSystemPrompt
 } from "./prompts.js";
 import { normalizeSlideDesignGuide } from "./studioHelpers.js";
+import {
+  buildSlideIrPrompt,
+  normalizeSlideIr,
+  slideIrJsonSchema,
+  slideIrSystemPrompt
+} from "./slideIrGeneration.js";
 import type { GeminiAdapter, ModelUsageEvent, ModelUsageReporter, ModelUsageStage, SvgGenerationOptions } from "./types.js";
 
 const GEMINI_INTERACTIONS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions";
@@ -780,6 +786,17 @@ export class RealGeminiAdapter implements GeminiAdapter {
       onToken
     );
     return sanitizeSvgOutput(result);
+  }
+
+  async generateSlideIr(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void, options?: SvgGenerationOptions) {
+    const result = await this.generateJson<unknown>(
+      buildSlideIrPrompt(slide, facts, theme, options),
+      slideIrJsonSchema,
+      slideIrSystemPrompt,
+      { stage: "ir", model: this.designModel, temperature: 0.45, thinkingLevel: "low" },
+      onToken
+    );
+    return normalizeSlideIr(result, theme);
   }
 
   async generateSpeechScript(

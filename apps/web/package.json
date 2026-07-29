@@ -16,6 +16,7 @@
     "@excalidraw/excalidraw": "^0.18.0",
     "@maxgraph/core": "^0.22.0",
     "@ppt-agent/ppt-renderer": "workspace:*",
+    "@ppt-agent/slide-ir": "workspace:*",
     "@ppt-agent/shared": "workspace:*",
     "@zumer/snapdom": "^2.12.0",
     "clsx": "^2.1.1",

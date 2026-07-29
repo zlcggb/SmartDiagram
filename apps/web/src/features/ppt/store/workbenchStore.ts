@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   CreateBlankSlideInput,
   CreateProjectInput,
+  DesignGenerationMode,
   ExportDto,
   ExportMode,
   FactDto,
@@ -123,6 +124,8 @@ interface WorkbenchState {
   designVersionsLoading: boolean;
   designQualityFailure: DesignQualityFailureState | null;
   exportTheme: PptExportTheme;
+  /** 设计生成引擎；只影响下一次生成，不改写已有版本。 */
+  designGenerationMode: DesignGenerationMode;
   /** 主题包内 accent 预设 id（会话级；换色预览/导出前应用到 SVG） */
   themeAccentId: string;
   /** 质感预设（会话级；预览 CSS 滤镜 + 重生提示） */
@@ -145,6 +148,7 @@ interface WorkbenchState {
   clearDesignQualityFailure: () => void;
   clearExportWarnings: () => void;
   setExportTheme: (theme: PptExportTheme) => Promise<void>;
+  setDesignGenerationMode: (mode: DesignGenerationMode) => void;
   setProjectPresentationStyle: (style: PresentationStyleId | string) => Promise<void>;
   setThemeAccentId: (accentId: string) => void;
   setThemeSurfaceId: (surfaceId: ThemeSurfaceId | string) => void;
@@ -372,6 +376,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   designVersionsLoading: false,
   designQualityFailure: null,
   exportTheme: "white-blue",
+  designGenerationMode: "svg",
   themeAccentId: "primary",
   themeSurfaceId: "flat",
   exportMode: "standard",
@@ -397,6 +402,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   clearError: () => set({ error: null }),
   clearDesignQualityFailure: () => set({ designQualityFailure: null }),
   clearExportWarnings: () => set({ exportWarnings: [], exportPageGrades: [] }),
+  setDesignGenerationMode: (designGenerationMode) => {
+    set({ designGenerationMode });
+    get().pushAgentLog(
+      designGenerationMode === "slide-ir"
+        ? "生成引擎已切换为 SmartSlide（原生可编辑）"
+        : "生成引擎已切换为 SVG（自由视觉）"
+    );
+  },
   setThemeAccentId(accentId) {
     const theme = get().exportTheme;
     const next = normalizeAccentPresetId(theme, accentId);
@@ -1056,14 +1069,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         slide = configuredSlide;
         set({ slides: replaceSlide(get().slides, configuredSlide) });
       }
-      // 设计出图固定生成 SVG；IR 仅作为后端内部的结构化降级数据。
       const result = await api.generateSlideDesign(project.id, slideId, get().exportTheme, "standard", {
         accentId: get().themeAccentId,
         surfaceId: get().themeSurfaceId,
         presentationStyle: resolvePresentationStyleId(
           project.presentationStyle,
           slide?.presentationStyle
-        )
+        ),
+        designMode: get().designGenerationMode
       });
       set({
         slides: replaceSlide(get().slides, result.slide),
@@ -1125,13 +1138,13 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       ]);
       const project = get().project;
       if (!project) return;
-      // 设计出图固定生成 SVG，不再按历史 renderStrategy 分流。
       const result = await api.generateAllDesigns(project.id, get().exportTheme, "standard", {
         accentId: get().themeAccentId,
         surfaceId: get().themeSurfaceId,
         presentationStyle: normalizePresentationStyleId(
           project.presentationStyle
-        )
+        ),
+        designMode: get().designGenerationMode
       });
       const firstFailure = result.failures[0];
       const qualityFailure = firstFailure?.qualityFailure;
@@ -1156,7 +1169,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       const selectedSlideId = get().selectedSlideId;
       if (selectedSlideId) await get().loadSlideDesignVersions(selectedSlideId);
       get().pushAgentLog(
-        `全部设计稿生成完成（SVG ${result.generatedSvgCount ?? 0} 页 / 失败 ${result.failures.length} 页）`
+        `全部设计稿生成完成（SVG ${result.generatedSvgCount ?? 0} 页 / SmartSlide ${result.generatedIrCount ?? 0} 页 / 失败 ${result.failures.length} 页）`
       );
     } catch (error) {
       set({ error: errorMessage(error) });

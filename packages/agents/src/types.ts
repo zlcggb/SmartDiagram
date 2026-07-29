@@ -15,10 +15,12 @@ import type {
   SpeechWritingStyleId,
   ThemeSurfaceId
 } from "@ppt-agent/shared";
+import type { SlideIrDocument } from "@ppt-agent/slide-ir";
 
 export interface SvgGenerationOptions {
   revisionNotes?: string[];
   previousSvg?: string;
+  previousSlideIr?: string;
   accentId?: string | null;
   surfaceId?: ThemeSurfaceId | string | null;
   presentationStyle?: PresentationStyleId | string | null;
@@ -29,7 +31,7 @@ export interface BriefQuestionResult {
   source: BriefQuestionSource;
 }
 
-export type ModelUsageStage = "facts" | "brief" | "research" | "outline" | "search" | "plan" | "svg" | "main";
+export type ModelUsageStage = "facts" | "brief" | "research" | "outline" | "search" | "plan" | "svg" | "ir" | "main";
 
 export interface ModelUsageEvent {
   externalEventId: string;
@@ -69,6 +71,13 @@ export interface GeminiAdapter {
     onToken?: (token: string) => void,
     options?: SvgGenerationOptions
   ): Promise<string>;
+  generateSlideIr(
+    slide: SlideDto,
+    facts: FactDto[],
+    theme?: PptExportTheme,
+    onToken?: (token: string) => void,
+    options?: SvgGenerationOptions
+  ): Promise<SlideIrDocument>;
   startBrief(topic: string): Promise<BriefQuestionResult>;
   finalizeBrief(topic: string, answers: Record<string, string>, onToken?: (token: string) => void): Promise<BriefJson>;
   generateResearch(topic: string, briefSummary: string, onToken?: (token: string) => void): Promise<ResearchJson>;

@@ -6,7 +6,8 @@ const counts: AiUsageCounts = {
   extractFacts: 0,
   outline: 0,
   plan: 0,
-  svg: 0
+  svg: 0,
+  ir: 0
 };
 
 let lastExportSummary: AiExportUsageSummary | null = null;
@@ -96,6 +97,13 @@ export function wrapAdapterWithUsage(adapter: GeminiAdapter): GeminiAdapter {
       return runWithModelUsageResource(
         { slideId: slide.id, outputSummary: `生成设计稿：${slide.title}` },
         () => adapter.generateSvgPreview(slide, facts, theme, onToken, options)
+      );
+    },
+    async generateSlideIr(slide, facts, theme, onToken, options) {
+      recordAiCall("ir");
+      return runWithModelUsageResource(
+        { slideId: slide.id, outputSummary: `生成 SmartSlide 设计稿：${slide.title}` },
+        () => adapter.generateSlideIr(slide, facts, theme, onToken, options)
       );
     },
     async startBrief(topic) {

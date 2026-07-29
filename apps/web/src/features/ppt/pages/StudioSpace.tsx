@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Download, Search, WandSparkles } from "lucide-react";
+import { stringifySmartSlide } from "@ppt-agent/slide-ir";
 import type { PptExportTheme, PresentationStyleId, SlidePlanDto } from '@ppt-agent/shared';
 import {
   fitSvgTextToBounds,
@@ -316,6 +317,8 @@ export function StudioSpace() {
   const saveSlideSvg = useWorkbenchStore((s) => s.saveSlideSvg);
   const updateSlide = useWorkbenchStore((s) => s.updateSlide);
   const exportTheme = useWorkbenchStore((s) => s.exportTheme);
+  const designGenerationMode = useWorkbenchStore((s) => s.designGenerationMode);
+  const setDesignGenerationMode = useWorkbenchStore((s) => s.setDesignGenerationMode);
   const themeAccentId = useWorkbenchStore((s) => s.themeAccentId);
   const themeSurfaceId = useWorkbenchStore((s) => s.themeSurfaceId);
   const setThemeAccentId = useWorkbenchStore((s) => s.setThemeAccentId);
@@ -619,6 +622,13 @@ export function StudioSpace() {
   const svgEditorSource =
     svgEditorBaseline === (selected?.svgPreview ?? "") ? svgEditorValue : selected?.svgPreview ?? "";
   const svgEditorDirty = Boolean(selected?.svgPreview) && svgEditorValue !== svgEditorBaseline;
+  const selectedUsesSlideIr = Boolean(
+    selected?.renderStrategy === "ir" && selected.irJson
+  );
+  const storedDesignSource =
+    selectedUsesSlideIr && selected?.irJson
+      ? stringifySmartSlide(selected.irJson)
+      : svgEditorSource;
 
   /** 即时色板换色：预览也会反映尚未保存的源码编辑。 */
   const themedSvgPreview = useMemo(() => {
@@ -653,20 +663,40 @@ export function StudioSpace() {
       designStreamMatchesSelected &&
       (designGenerationBusy || designStage?.status === "running")
   );
-  const streamedSvgCode = designStage?.status === "running" ? designStage.delta ?? "" : "";
+  const streamedDesignCode = designStage?.status === "running" ? designStage.delta ?? "" : "";
   const streamWaitingCopy = designStage?.message
-    ? `<!-- ${designStage.message} -->\n<!-- 已连接进度流，等待模型返回 SVG 源码… -->`
-    : [
-        "<!-- 正在准备 SVG 设计上下文… -->",
-        "<!-- 模型开始返回后，SVG 源码会在这里逐块显示 -->",
-        "<!-- 画布约束：1280 × 720 · 内容安全边距：32px -->"
-      ].join("\n");
+    ? designGenerationMode === "slide-ir"
+      ? `# ${designStage.message}\n# 已连接进度流，等待模型返回 SmartSlide JSON…`
+      : `<!-- ${designStage.message} -->\n<!-- 已连接进度流，等待模型返回 SVG 源码… -->`
+    : designGenerationMode === "slide-ir"
+      ? [
+          "# 正在准备 SmartSlide 设计上下文…",
+          "# 模型开始返回后，结构化设计源码会在这里显示",
+          "# 画布约束：1280 × 720"
+        ].join("\n")
+      : [
+          "<!-- 正在准备 SVG 设计上下文… -->",
+          "<!-- 模型开始返回后，SVG 源码会在这里逐块显示 -->",
+          "<!-- 画布约束：1280 × 720 · 内容安全边距：32px -->"
+        ].join("\n");
   const effectiveDesignViewMode: DesignViewMode = showDesignCodeStream ? "code" : designViewMode;
-  const displayedSvgCode = showDesignCodeStream
-    ? streamedSvgCode
-    : svgEditorSource;
-  const editorRenderedCode = displayedSvgCode || (showDesignCodeStream ? streamWaitingCopy : "<!-- 尚未生成 SVG 设计稿 -->");
-  const highlightedSvgCode = useMemo(() => highlightSvgCode(editorRenderedCode), [editorRenderedCode]);
+  const displayedDesignCode = showDesignCodeStream
+    ? streamedDesignCode
+    : storedDesignSource;
+  const editorRenderedCode =
+    displayedDesignCode ||
+    (showDesignCodeStream
+      ? streamWaitingCopy
+      : designGenerationMode === "slide-ir"
+        ? "# 尚未生成 SmartSlide 设计稿"
+        : "<!-- 尚未生成 SVG 设计稿 -->");
+  const highlightedDesignCode = useMemo(
+    () =>
+      selectedUsesSlideIr && !showDesignCodeStream
+        ? [editorRenderedCode]
+        : highlightSvgCode(editorRenderedCode),
+    [editorRenderedCode, selectedUsesSlideIr, showDesignCodeStream]
+  );
 
   useEffect(() => {
     const source = selected?.svgPreview ?? "";
@@ -717,7 +747,7 @@ export function StudioSpace() {
       highlight.scrollTop = viewport.scrollTop;
       highlight.scrollLeft = viewport.scrollLeft;
     }
-  }, [displayedSvgCode, showDesignCodeStream]);
+  }, [displayedDesignCode, showDesignCodeStream]);
 
   const saveEditedSvg = async () => {
     if (!selected || !svgEditorDirty || svgEditorSaving || showDesignCodeStream) return;
@@ -869,6 +899,37 @@ export function StudioSpace() {
           ) : null}
           {currentPhase === "design" ? (
             <>
+              <div
+                className="inline-flex rounded-[10px] border border-[rgba(0,0,0,0.13)] bg-[rgba(0,0,0,0.035)] p-1"
+                role="group"
+                aria-label="设计生成引擎"
+              >
+                {(
+                  [
+                    ["svg", "SVG"],
+                    ["slide-ir", "SmartSlide"]
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    disabled={Boolean(busy)}
+                    className={`rounded-[7px] px-2.5 py-1.5 text-xs font-medium transition ${
+                      designGenerationMode === mode
+                        ? "bg-white text-[rgba(0,0,0,0.9)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+                        : "text-[rgba(0,0,0,0.48)] hover:text-[rgba(0,0,0,0.85)]"
+                    }`}
+                    title={
+                      mode === "slide-ir"
+                        ? "结构化对象模型，优先导出为原生可编辑 PPT 元素"
+                        : "自由 SVG 画布，视觉表达更灵活"
+                    }
+                    onClick={() => setDesignGenerationMode(mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 className="secondary-button rounded-[10px]"
@@ -884,7 +945,7 @@ export function StudioSpace() {
                 title={
                   pendingPageStyleChange
                     ? "按已选择的新风格重新生成本页"
-                    : "生成本页 SVG 设计稿（未检索/初稿会自动补齐）"
+                    : `使用${designGenerationMode === "slide-ir" ? " SmartSlide" : " SVG"}生成本页设计稿（未检索/初稿会自动补齐）`
                 }
               >
                 <WandSparkles className="h-4 w-4" />
@@ -895,7 +956,7 @@ export function StudioSpace() {
                 className="primary-button rounded-[10px]"
                 disabled={Boolean(busy) || isWizardRunning}
                 onClick={() => void generateAllDesigns()}
-                title="为全部页面生成 SVG 设计稿"
+                title={`为全部页面生成${designGenerationMode === "slide-ir" ? " SmartSlide" : " SVG"}设计稿`}
               >
                 全部生成设计稿
               </button>
@@ -1093,7 +1154,7 @@ export function StudioSpace() {
                   <div>
                     <h2 className="text-xl font-medium text-[rgba(0,0,0,0.9)]">设计出图</h2>
                     <p className="text-sm text-[rgba(0,0,0,0.45)]">
-                      主题 {exportThemeLabel(exportTheme)} · SVG
+                      主题 {exportThemeLabel(exportTheme)} · {selectedUsesSlideIr ? "SmartSlide" : "SVG"}
                     </p>
                   </div>
                 </div>
@@ -1145,9 +1206,11 @@ export function StudioSpace() {
                           title={
                             mode === "preview"
                               ? showDesignCodeStream
-                                ? "SVG 生成完成后自动返回预览"
+                                ? "设计稿生成完成后自动返回预览"
                                 : "查看设计稿预览"
-                              : "查看当前 SVG 源码"
+                              : selectedUsesSlideIr
+                                ? "查看当前 SmartSlide 源码"
+                                : "查看当前 SVG 源码"
                           }
                           className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
                             active ? "bg-[rgba(0,0,0,0.9)] text-white" : "text-[rgba(0,0,0,0.9)] hover:bg-[rgba(0,0,0,0.06)]"
@@ -1189,11 +1252,13 @@ export function StudioSpace() {
                         }`}
                       />
                       <span className="truncate font-mono text-[11px] font-medium tracking-[0.08em]">
-                        {showDesignCodeStream ? "SVG · LIVE" : "SVG · SOURCE"}
+                        {showDesignCodeStream
+                          ? `${designGenerationMode === "slide-ir" ? "SMARTSLIDE" : "SVG"} · LIVE`
+                          : `${selectedUsesSlideIr ? "SMARTSLIDE" : "SVG"} · SOURCE`}
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
-                      {svgEditorDirty && !showDesignCodeStream ? (
+                      {svgEditorDirty && !showDesignCodeStream && !selectedUsesSlideIr ? (
                         <button
                           type="button"
                           className="svg-code-save-button rounded-md px-2.5 py-1 text-[11px] font-medium"
@@ -1204,7 +1269,7 @@ export function StudioSpace() {
                         </button>
                       ) : null}
                       <span className="font-mono text-[10px] tabular-nums">
-                        {displayedSvgCode.length.toLocaleString()} chars
+                        {displayedDesignCode.length.toLocaleString()} chars
                       </span>
                     </div>
                   </div>
@@ -1214,18 +1279,26 @@ export function StudioSpace() {
                       aria-hidden="true"
                       className="svg-code-highlight pointer-events-none absolute inset-0 overflow-auto whitespace-pre px-4 py-3 font-mono text-[11px] leading-[1.65]"
                     >
-                      {highlightedSvgCode}
+                      {highlightedDesignCode}
                       {showDesignCodeStream ? <span className="svg-stream-caret" /> : null}
                     </pre>
                     <textarea
                       ref={designCodeViewportRef}
-                      aria-label={showDesignCodeStream ? "SVG 生成代码流" : "可编辑 SVG 源码"}
+                      aria-label={
+                        showDesignCodeStream
+                          ? "设计生成代码流"
+                          : selectedUsesSlideIr
+                            ? "SmartSlide 源码"
+                            : "可编辑 SVG 源码"
+                      }
                       className="svg-code-input absolute inset-0 h-full w-full resize-none overflow-auto whitespace-pre px-4 py-3 font-mono text-[11px] leading-[1.65] outline-none"
                       value={editorRenderedCode}
-                      readOnly={showDesignCodeStream || !selected?.svgPreview}
+                      readOnly={showDesignCodeStream || selectedUsesSlideIr || !selected?.svgPreview}
                       spellCheck={false}
                       wrap="off"
-                      onChange={(event) => setSvgEditorValue(event.target.value)}
+                      onChange={(event) => {
+                        if (!selectedUsesSlideIr) setSvgEditorValue(event.target.value);
+                      }}
                       onScroll={(event) => {
                         const highlight = designCodeHighlightRef.current;
                         if (!highlight) return;

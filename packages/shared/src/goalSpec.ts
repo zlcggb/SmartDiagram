@@ -23,7 +23,7 @@ const RenderStrategySchema = z.enum(renderStrategies);
 
 const slideGenerationStatuses = [
   "draft", "planned", "search-ready", "draft-ready",
-  "svg-ready", "error"
+  "svg-ready", "ir-ready", "error"
 ] as const;
 const SlideGenerationStatusSchema = z.enum(slideGenerationStatuses);
 
@@ -65,6 +65,8 @@ export const GoalSlideSchema = z.object({
   planJson: z.any().optional(),
   /** SVG 预览 */
   svgPreview: z.string().optional(),
+  /** SmartSlide IR */
+  irJson: z.record(z.unknown()).optional(),
   /** 检索资料卡 */
   searchJson: z.any().optional()
 });
@@ -144,6 +146,7 @@ export function projectToGoalSpec(
         generationStatus: slide.generationStatus,
         planJson: slide.planJson,
         svgPreview: slide.svgPreview ?? undefined,
+        irJson: slide.irJson ?? undefined,
         searchJson: slide.searchJson
       }))
   };

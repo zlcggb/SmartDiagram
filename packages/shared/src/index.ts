@@ -1,6 +1,12 @@
 import { z } from "zod";
+import {
+  SlideIrSchema,
+  type SlideIrDocument
+} from "@ppt-agent/slide-ir";
 
 export * from "./studioPipeline.js";
+export { SlideIrSchema };
+export type { SlideIrDocument };
 import { pptExportThemes } from "./themePacks.js";
 import { recommendedLayouts } from "./layoutRoles.js";
 import { themeSurfaceIds } from "./themeSurfacePresets.js";
@@ -45,6 +51,7 @@ export const slideGenerationStatuses = [
   "search-ready",
   "draft-ready",
   "svg-ready",
+  "ir-ready",
   "error"
 ] as const;
 export const slideDesignVersionSourceSchema = z.enum(["ai", "manual", "legacy"]);
@@ -149,6 +156,7 @@ export type {
 } from "./presentationStyles.js";
 /** svg/theme 为主路径；ir/hybrid 为前端工作室与兼容策略（可编辑 IR / 混合） */
 export const renderStrategies = ["svg", "theme", "ir", "hybrid"] as const;
+export const designGenerationModes = ["svg", "slide-ir"] as const;
 export const exportModes = ["draft", "standard", "visual"] as const;
 export const svgPptExportModes = ["fidelity", "editable"] as const;
 /** A 全文可改/SVG 成功；B 主体可改/部分降级；C 装饰降级或纯 IR 模板 */
@@ -166,6 +174,7 @@ export const ThemeSurfaceIdSchema = z.enum(themeSurfaceIds);
 export const PresentationStyleIdSchema = z.enum(presentationStyleIds);
 export const RecommendedLayoutSchema = z.enum(recommendedLayouts);
 export const RenderStrategySchema = z.enum(renderStrategies);
+export const DesignGenerationModeSchema = z.enum(designGenerationModes);
 export const ExportModeSchema = z.enum(exportModes);
 export const SvgPptExportModeSchema = z.enum(svgPptExportModes);
 export const EditableGradeSchema = z.enum(editableGrades);
@@ -352,6 +361,7 @@ export type SlideGenerationStatus = z.infer<typeof SlideGenerationStatusSchema>;
 export type ProjectMode = z.infer<typeof ProjectModeSchema>;
 export type BriefQuestionSource = z.infer<typeof BriefQuestionSourceSchema>;
 export type RenderStrategy = z.infer<typeof RenderStrategySchema>;
+export type DesignGenerationMode = z.infer<typeof DesignGenerationModeSchema>;
 export type ExportMode = z.infer<typeof ExportModeSchema>;
 export type SvgPptExportMode = z.infer<typeof SvgPptExportModeSchema>;
 export type EditableGrade = z.infer<typeof EditableGradeSchema>;
@@ -497,6 +507,8 @@ export const exportPptxSchema = z
     surfaceId: ThemeSurfaceIdSchema.optional(),
     /** 演示风格；设计生成时约束构图、排版和配方选择 */
     presentationStyle: PresentationStyleIdSchema.optional(),
+    /** 设计生成引擎；不传时保持现有 SVG 行为 */
+    designMode: DesignGenerationModeSchema.optional().default("svg"),
     /** @deprecated 使用 mode；draft:true 等价 mode=draft */
     draft: z.boolean().optional(),
     mode: ExportModeSchema.optional(),
@@ -517,6 +529,7 @@ export const exportPptxSchema = z
       accentId: value.accentId,
       surfaceId: value.surfaceId,
       presentationStyle: value.presentationStyle,
+      designMode: value.designMode,
       mode,
       svgExportMode: value.svgExportMode,
       draft: mode === "draft",
@@ -756,8 +769,8 @@ export interface ProjectMaterialDto {
   updatedAt?: string;
 }
 
-/** 页面 IR 设计稿（结构化可编辑中间表示）；字段随生成器演进，前端按透传处理 */
-export type SlideIrDto = Record<string, unknown>;
+/** 页面 IR 设计稿（SmartSlide 结构化可编辑中间表示） */
+export type SlideIrDto = SlideIrDocument;
 
 export type SlideDesignVersionSource = z.infer<typeof slideDesignVersionSourceSchema>;
 
@@ -770,6 +783,8 @@ export interface SlideDesignVersionDto {
   accentId: string | null;
   surfaceId: string | null;
   presentationStyle: PresentationStyleId | null;
+  irJson: SlideIrDto | null;
+  renderStrategy: RenderStrategy;
   createdAt: string;
 }
 
@@ -846,8 +861,8 @@ export interface SlidePlanDto {
 export interface PageRenderResult {
   slideId: string;
   strategy: RenderStrategy;
-  /** svg-image=整页保真 SVG；svg=拆分为原生文本/形状；theme=降级为纯文本+版式 */
-  path: "svg-image" | "svg" | "theme";
+  /** ir=SmartSlide 原生对象；svg-image=整页保真 SVG；svg=拆分为原生文本/形状；theme=降级 */
+  path: "ir" | "svg-image" | "svg" | "theme";
   warning?: string;
   /** 导出后标注；可由 inferEditableGrade 填充 */
   editableGrade?: EditableGrade;
@@ -859,6 +874,7 @@ export interface AiUsageCounts {
   outline: number;
   plan: number;
   svg: number;
+  ir: number;
 }
 
 export interface AiExportUsageSummary {
@@ -1020,7 +1036,7 @@ export function shouldGenerateSvgForMode(
 
 export type InferEditableGradeInput = {
   strategy: RenderStrategy;
-  path: "svg-image" | "svg" | "theme";
+  path: "ir" | "svg-image" | "svg" | "theme";
   warning?: string | null;
 };
 
@@ -1031,6 +1047,12 @@ export type InferEditableGradeInput = {
  * - C：整页保真 SVG 图像，或主题模板 / 装饰降级
  */
 export function inferEditableGrade(input: InferEditableGradeInput): EditableGrade {
+  if (input.path === "ir" && !input.warning) {
+    return "A";
+  }
+  if (input.path === "ir" && input.warning) {
+    return "B";
+  }
   if (input.path === "svg-image") {
     return "C";
   }

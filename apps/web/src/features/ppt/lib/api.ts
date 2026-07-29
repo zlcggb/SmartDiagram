@@ -5,6 +5,7 @@ import type {
   CreateBlankSlideInput,
   CreateFactInput,
   CreateProjectInput,
+  DesignGenerationMode,
   ExportDto,
   ExportMode,
   FactDto,
@@ -67,6 +68,8 @@ export interface GenerateDesignsResult {
   }>;
   /** 本轮实际生成 SVG 的页数（按策略） */
   generatedSvgCount?: number;
+  /** 本轮实际生成 SmartSlide IR 的页数 */
+  generatedIrCount?: number;
   /** 本轮跳过 SVG、走 IR ensure 的页数 */
   skippedSvgCount?: number;
 }
@@ -400,21 +403,28 @@ export const api = {
     return request<SlideDto[]>(`/api/projects/${projectId}/generate-all-plans`, json("POST", {}));
   },
   generateSlideIr(projectId: string, slideId: string, theme: PptExportTheme) {
-    return request<{ ir: SlideIrDto; slide: SlideDto }>(`/api/projects/${projectId}/slides/${slideId}/generate-ir`, json("POST", { theme }));
+    return request<{ ir: SlideIrDto; slide: SlideDto }>(
+      `/api/projects/${projectId}/slides/${slideId}/generate-design`,
+      json("POST", { theme, designMode: "slide-ir" })
+    );
   },
-  generateAllIr(projectId: string, theme: PptExportTheme) {
-    return request<SlideDto[]>(`/api/projects/${projectId}/generate-all-ir`, json("POST", { theme }));
+  async generateAllIr(projectId: string, theme: PptExportTheme) {
+    const result = await request<GenerateDesignsResult>(
+      `/api/projects/${projectId}/generate-all-designs`,
+      json("POST", { theme, designMode: "slide-ir", force: true })
+    );
+    return result.slides;
   },
   generateSvgPreview(projectId: string, slideId: string, theme: PptExportTheme, options?: { accentId?: string; surfaceId?: string; presentationStyle?: PresentationStyleId }) {
     return request<{ svgPreview: string; slide: SlideDto }>(`/api/projects/${projectId}/slides/${slideId}/generate-svg-preview`, json("POST", { theme, ...options }));
   },
-  generateSlideDesign(projectId: string, slideId: string, theme: PptExportTheme, mode: ExportMode = "standard", options?: { accentId?: string; surfaceId?: string; presentationStyle?: PresentationStyleId }) {
-    return request<{ svgPreview: string; slide: SlideDto }>(
+  generateSlideDesign(projectId: string, slideId: string, theme: PptExportTheme, mode: ExportMode = "standard", options?: { accentId?: string; surfaceId?: string; presentationStyle?: PresentationStyleId; designMode?: DesignGenerationMode }) {
+    return request<{ svgPreview: string; ir?: SlideIrDto | null; slide: SlideDto }>(
       `/api/projects/${projectId}/slides/${slideId}/generate-design`,
       json("POST", { theme, mode, ...options })
     );
   },
-  generateAllDesigns(projectId: string, theme: PptExportTheme, mode: ExportMode = "standard", options?: { accentId?: string; surfaceId?: string; presentationStyle?: PresentationStyleId }) {
+  generateAllDesigns(projectId: string, theme: PptExportTheme, mode: ExportMode = "standard", options?: { accentId?: string; surfaceId?: string; presentationStyle?: PresentationStyleId; designMode?: DesignGenerationMode }) {
     return request<GenerateDesignsResult>(
       `/api/projects/${projectId}/generate-all-designs`,
       json("POST", { theme, force: true, mode, ...options })
