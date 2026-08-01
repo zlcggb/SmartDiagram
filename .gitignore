@@ -26,12 +26,46 @@ prisma/dev.db
 # IDE
 .vscode/
 .idea/
-.claude/
 *.swp
 *.swo
 
-# Local agent / browser automation artifacts
+# ── AI 平台文件（全部由 `trellis init` 生成，不入 git） ──
+# Claude Code — 全部忽略（CLAUDE.md / settings.json 已跟踪，不受影响）
+.claude/skills/
+.claude/agents/
+.claude/hooks/
+.claude/commands/
+.claude/settings.local.json
+.claude/launch.json
+
+# Cursor — 保留 .cursor/rules/ 和 mcp.json（手写），其余生成的忽略
+.cursor/skills/
+.cursor/agents/
+.cursor/hooks/
+.cursor/hooks.json
+.cursor/commands/
+
+# Gemini — 保留 settings.json（已跟踪），其余生成的忽略
+.gemini/agents/
+.gemini/hooks/
+.gemini/commands/
+
+# Antigravity / 通用 agent
 .agent/
+.agents/
+
+# ── Trellis（只跟踪 spec + config + workflow，其余可重建） ──
+# 保留：.trellis/spec/ · config.yaml · workflow.md · .version · .gitignore
+# 忽略：scripts/ tasks/ workspace/ agents/ 和运行时文件
+.trellis/scripts/
+.trellis/tasks/
+.trellis/workspace/
+.trellis/agents/
+.trellis/.developer
+.trellis/.runtime/
+.trellis/.template-hashes.json
+
+# 其他 AI 工具
 .codex/
 .codegraph/
 /kimi-slides.skill
@@ -42,7 +76,7 @@ prisma/dev.db
 playwright-report/
 test-results/
 .pytest_cache/
-
+/.tmp-skill-extract
 # OS
 .DS_Store
 Thumbs.db

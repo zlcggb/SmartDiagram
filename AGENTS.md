@@ -11,6 +11,7 @@
 | ① | 本文 | 工具与流程 |
 | ② | [`smartdiagram_architecture.md`](./smartdiagram_architecture.md) | 架构真相源：目录地图、链路、§8 改动定位表 |
 | ③ | [`README.md`](./README.md) | 启动、部署、npm 命令 |
+| ④ | [`.trellis/workflow.md`](./.trellis/workflow.md) | Trellis 工程工作流（Plan → Execute → Finish） |
 | 按需 | [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) · [`.env.example`](./.env.example) · [`docs/README.md`](./docs/README.md)（文档中心） | 部署 / 环境变量 / 执行记录索引 |
 
 ---
@@ -21,6 +22,8 @@
 |------|------|
 | 项目结构、模块边界、改哪个文件 | 架构 doc（尤其 **§8**） |
 | 怎么跑、怎么部署 | `README.md` |
+| 编码规范、质量基线 | `.trellis/spec/<package>/<layer>/index.md` |
+| 任务管理、跨会话记忆 | `.trellis/tasks/` · `.trellis/workspace/` |
 | CodeGraph 官方安装说明 | <https://colbymchenry.github.io/codegraph/getting-started/installation/> |
 
 ---
@@ -86,6 +89,49 @@ Cursor 里通过 `CallMcpTool` 调用 CodeGraph 时，`server` / `toolName` 与 
 2. 结构 / 路径 / 模块变更 → **只更新** `smartdiagram_architecture.md`；操作步骤 → `README.md`。
 3. 勿泄露根 `.env` 密钥；勿未经要求 `git commit` / `push`。
 4. Shell 勿用 `&&` 链命令（macOS 用户规则）。
+
+---
+
+## 5. Trellis 工程工作流
+
+本项目使用 [Trellis](https://github.com/mindfold-ai/Trellis) 管理 AI 编码会话的规范、任务和记忆。
+
+### 5.1 核心结构
+
+| 目录 | 用途 |
+|------|------|
+| `.trellis/spec/` | 按包分层的编码规范（前端/后端/质量） |
+| `.trellis/tasks/` | 任务目录：PRD、设计、实施计划、研究 |
+| `.trellis/workspace/` | 开发者个人日志，跨会话记忆 |
+| `.trellis/workflow.md` | 完整工作流定义（Plan → Execute → Finish） |
+
+### 5.2 任务生命周期
+
+```bash
+# 创建任务
+python3 ./.trellis/scripts/task.py create "<title>" --slug <name>
+# 激活任务
+python3 ./.trellis/scripts/task.py start <name>
+# 查看当前任务
+python3 ./.trellis/scripts/task.py current --source
+# 归档任务
+python3 ./.trellis/scripts/task.py archive <name>
+```
+
+### 5.3 Spec 规范查询
+
+```bash
+# 列出所有包和规范层
+python3 ./.trellis/scripts/get_context.py --mode packages
+# 查看特定工作流步骤指引
+python3 ./.trellis/scripts/get_context.py --mode phase --step 1.1
+```
+
+### 5.4 与现有文档的关系
+
+- **Trellis spec ≠ 架构文档**：`.trellis/spec/` 存放的是编码规范（命名、错误处理、状态管理等）；架构决策仍在 `smartdiagram_architecture.md`。
+- **任务 ≠ Git Issue**：Trellis 任务是 AI 会话粒度的工作单元，比 Issue 更细。
+- **工作流是可选的**：简单对话和快速修复不需要走 Trellis 流程。
 
 ---
 
