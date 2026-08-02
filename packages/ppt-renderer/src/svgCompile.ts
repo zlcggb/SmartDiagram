@@ -62,7 +62,13 @@ const PPT_SAFE_FONTS = new Set([
   "Calibri",
   "Segoe UI",
   "Helvetica",
-  "Times New Roman"
+  "Times New Roman",
+  "Georgia",
+  "Cambria",
+  "Tahoma",
+  "Verdana",
+  "Consolas",
+  "Courier New"
 ]);
 
 const FONT_FALLBACK_TO_YAHEI = new Set([
@@ -70,12 +76,15 @@ const FONT_FALLBACK_TO_YAHEI = new Set([
   "PingFangSC",
   "Noto Sans CJK SC",
   "Noto Sans SC",
+  "Noto Serif CJK SC",
   "Source Han Sans SC",
   "Hiragino Sans GB",
   "WenQuanYi Micro Hei",
   "STHeiti",
   "Heiti SC",
+  "Songti SC",
   "sans-serif",
+  "serif",
   "system-ui"
 ]);
 

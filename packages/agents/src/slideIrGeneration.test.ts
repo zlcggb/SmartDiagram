@@ -69,13 +69,15 @@ test("normalization repairs invalid model-generated theme token colors from the 
   assert.equal(normalized.theme.tokens.accent, "#0066CC");
 });
 
-test("normalization preserves valid custom colors and keeps unrelated schema failures strict", () => {
+test("normalization force-overrides all tokens with the selected theme pack values", () => {
   const document = createMockSlideIr(slide, [], "white-blue", {
     presentationStyle: "apple-minimal"
   });
   const custom = structuredClone(document);
   custom.theme.tokens.body = "#123456";
-  assert.equal(normalizeSlideIr(custom, "white-blue").theme.tokens.body, "#123456");
+  // 新行为：即使模型输出了合法的 hex 色，也强制用主题 tokens 覆盖，
+  // 确保切换主题时颜色始终正确。
+  assert.equal(normalizeSlideIr(custom, "white-blue").theme.tokens.body, "#25313C");
 
   const structurallyInvalid = structuredClone(document) as unknown as {
     canvas: { width: number; height: number };

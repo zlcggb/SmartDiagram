@@ -7,6 +7,7 @@ import type {
   KimiDesignKnowledgeRequest,
   KimiKnowledgeSelection
 } from "./types.js";
+import { selectColorPalettesForScene, type SceneColorPalette } from "./colorPalettes.js";
 
 export type KimiLayoutArchetype =
   | "hero-statement"
@@ -50,6 +51,7 @@ export interface KimiCompiledDesignBrief {
     theme: string;
     style: string;
     instruction: string;
+    colorHints?: Array<{ label: string; base: string; structural: string; accent: string; rationale: string }>;
   };
   forbidden: string[];
 }
@@ -180,6 +182,14 @@ export function compileKimiDesignBrief(
   const { archetype, rationale } = selectArchetype(request);
   const bodyMin = style.density === "high" ? 16 : style.density === "medium" ? 17 : 18;
   const maxMainGroups = archetype === "hero-statement" ? 1 : style.density === "low" ? 2 : 3;
+  const categoryId = category?.entry.id.split(":").pop() ?? null;
+  const colorGroup = selectColorPalettesForScene(categoryId);
+  const colorHints: KimiCompiledDesignBrief["visualLanguage"]["colorHints"] =
+    colorGroup
+      ? colorGroup.palettes.slice(0, 4).map(({ label, base, structural, accent, rationale }) => ({
+          label, base, structural, accent, rationale
+        }))
+      : undefined;
   return {
     version: "design-brief/1",
     archetype,
@@ -204,7 +214,8 @@ export function compileKimiDesignBrief(
     visualLanguage: {
       theme: theme.label,
       style: style.label,
-      instruction: `${style.composition} 使用主题 token 决定颜色；设计系统只提供构图语法，不复制其品牌与样例内容`
+      instruction: `${style.composition} 使用主题 token 决定颜色；设计系统只提供构图语法，不复制其品牌与样例内容。配色应"出人意料但合理"，拒绝最常见的公式化配色。`,
+      ...(colorHints ? { colorHints } : {})
     },
     forbidden: [
       "three equal text columns unless the archetype explicitly requires comparison",
@@ -214,6 +225,8 @@ export function compileKimiDesignBrief(
       "card wall generated directly from contentBlocks",
       "full-height accent rails",
       "decorative pills, glows or icons without semantic purpose",
+      "blue-purple gradients, cyan-purple neon, rainbow flares, glassmorphism cards, or glowing borders",
+      "pure white #FFFFFF backgrounds; use textured off-whites like #F7F3E8 or #F4F6F8",
       ...style.forbiddenPatterns
     ]
   };

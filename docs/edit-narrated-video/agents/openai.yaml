@@ -1,0 +1,4 @@
+interface:
+  display_name: "Narrated Video Editor"
+  short_description: "Keep narration voice, captions, and visual focus synchronized"
+  default_prompt: "Use $edit-narrated-video to create a voice-consistent narrated video, size TTS and render batches safely, derive focus boxes from source geometry, align captions to approved audio, and verify synchronization."

@@ -116,10 +116,19 @@ export function clearKimiDesignKnowledgeCache() {
 }
 
 export { compileKimiDesignBrief, formatKimiDesignBrief };
+export {
+  selectColorPalettesForScene,
+  formatColorPaletteRecommendation,
+  SCENE_COLOR_GROUPS
+} from "./colorPalettes.js";
 export type {
   KimiCompiledDesignBrief,
   KimiLayoutArchetype
 } from "./designBrief.js";
+export type {
+  SceneColorPalette,
+  SceneColorGroup
+} from "./colorPalettes.js";
 export type {
   KimiCatalogSummary,
   KimiDesignKnowledgeBundle,

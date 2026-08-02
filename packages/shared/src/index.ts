@@ -68,9 +68,17 @@ export {
   pickDefaultThemePack,
   normalizeAccentPresetId,
   getAccentPresetHex,
-  formatThemePackCatalog
+  formatThemePackCatalog,
+  getThemePackFonts
 } from "./themePacks.js";
 export type { PptExportTheme, ThemePackTokens, ThemePackMeta, ThemeAccentPreset } from "./themePacks.js";
+export {
+  fontPairings,
+  fontPairingList,
+  defaultFontPairingId,
+  getFontPairing
+} from "./fontPairings.js";
+export type { FontPairing } from "./fontPairings.js";
 export { validateSvgThemeCompliance } from "./svgThemeCompliance.js";
 export type { SvgThemeComplianceResult } from "./svgThemeCompliance.js";
 export {

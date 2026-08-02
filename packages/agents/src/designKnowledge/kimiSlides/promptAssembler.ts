@@ -16,9 +16,9 @@ import {
   formatKimiDesignBrief
 } from "./designBrief.js";
 
-const DEFAULT_PROMPT_CHARS = 7_000;
-const MIN_PROMPT_CHARS = 1_800;
-const MAX_PROMPT_CHARS = 8_000;
+const DEFAULT_PROMPT_CHARS = 10_000;
+const MIN_PROMPT_CHARS = 2_400;
+const MAX_PROMPT_CHARS = 12_000;
 
 type MarkdownHeading = {
   index: number;
@@ -170,35 +170,40 @@ export function assembleKimiPromptBundle(
   const brief = compileKimiDesignBrief(request, category, designSystem);
   const categoryLabel = clipAtBoundary(category.entry.title, 120);
   const designSystemLabel = clipAtBoundary(designSystem.entry.title, 160);
-  const referenceBudget = Math.max(500, Math.min(3_600, maxChars - 3_000));
+  const referenceBudget = Math.max(800, Math.min(6_000, maxChars - 3_600));
   const categoryContract = compactReferenceContract(
     category.entry.content,
     [
       "Core Character",
       "General Prohibitions",
+      "Prohibitions",
+      "Visual References",
+      "Color Palette Reference",
       "Page Rhythm and Information Density",
       "Architecture Diagrams and Flowcharts",
       "Pre-Delivery Checklist"
     ],
-    Math.max(160, Math.floor(referenceBudget * 0.32))
+    Math.max(280, Math.floor(referenceBudget * 0.38))
   );
   const designSystemContract = compactReferenceContract(
     designSystem.entry.content,
     [
-      "Style Positioning",
-      "Page Skeleton",
+      "Color Palette",
       "Layout Skeleton",
+      "Typography",
+      "Chart Language",
+      "Signature Components",
+      "Prohibited",
+      "Slide Types and Layouts",
+      "Density Baseline",
+      "Style Positioning",
       "Content Organization",
       "Content Page Layout System",
-      "Slide Types and Layouts",
-      "Typography",
       "Fonts and Text Hierarchy",
-      "Signature Components",
       "Components and Graphic Elements",
-      "Prohibited",
       "Generation Checklist"
     ],
-    Math.max(340, Math.floor(referenceBudget * 0.68))
+    Math.max(520, Math.floor(referenceBudget * 0.62))
   );
 
   const prompt = [

@@ -10,6 +10,22 @@ import {
 } from "./schema.js";
 import { resolveColor } from "./tokens.js";
 
+/** CJK 安全的字体回退栈 */
+const CJK_SANS_FALLBACK = "'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif";
+const CJK_SERIF_FALLBACK = "'Songti SC', 'SimSun', 'Noto Serif CJK SC', serif";
+
+const SERIF_FONTS = new Set(["Georgia", "Cambria", "Times New Roman", "Garamond", "Palatino"]);
+
+/**
+ * 将单个字体名扩展为 SVG font-family stack（含 CJK 回退）。
+ * 衬线字体回退到衬线族；无衬线字体回退到无衬线族。
+ */
+function fontStack(fontName: string): string {
+  if (fontName.includes(",")) return fontName; // 已经是 stack
+  const fallback = SERIF_FONTS.has(fontName) ? CJK_SERIF_FALLBACK : CJK_SANS_FALLBACK;
+  return `${fontName}, ${fallback}`;
+}
+
 function escapeXml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -90,10 +106,11 @@ function renderText(document: SlideIrDocument, element: TextElement) {
       lineRows.push({
         text: line,
         fontSize,
-        fontFamily:
+        fontFamily: fontStack(
           first.fontFamily ??
           document.theme.fonts?.body ??
-          "Arial",
+          "Arial"
+        ),
         fontWeight: first.fontWeight ?? 400,
         color: resolveColor(first.color, document),
         italic: first.italic ?? false,
@@ -206,7 +223,7 @@ function renderTable(document: SlideIrDocument, element: TableElement) {
             : x + 12;
       fragments.push(
         `<rect x="${x}" y="${y}" width="${width}" height="${rowHeight}" fill="${fill}" fill-opacity="${transparency(cell.fill?.transparency)}" stroke="${borderColor}" stroke-width="${borderWidth}"/>`,
-        `<text x="${contentX}" y="${y + rowHeight / 2 + fontSize * 0.35}" data-w="${Math.max(0, width - 24)}" data-h="${rowHeight}" text-anchor="${anchor}" font-family="${escapeXml(document.theme.fonts?.body ?? "Arial")}" font-size="${fontSize}" font-weight="${cell.fontWeight ?? 400}" fill="${color}">${escapeXml(cell.text)}</text>`
+        `<text x="${contentX}" y="${y + rowHeight / 2 + fontSize * 0.35}" data-w="${Math.max(0, width - 24)}" data-h="${rowHeight}" text-anchor="${anchor}" font-family="${escapeXml(fontStack(document.theme.fonts?.body ?? "Arial"))}" font-size="${fontSize}" font-weight="${cell.fontWeight ?? 400}" fill="${color}">${escapeXml(cell.text)}</text>`
       );
       x += widths[columnIndex] ?? 0;
     }
@@ -241,7 +258,7 @@ function renderChart(document: SlideIrDocument, element: ChartElement) {
   const fragments: string[] = [];
   if (element.title) {
     fragments.push(
-      `<text x="${x}" y="${y + 24}" data-w="${w}" data-h="30" font-family="${escapeXml(document.theme.fonts?.heading ?? "Arial")}" font-size="20" font-weight="700" fill="${resolveColor("$text", document)}">${escapeXml(element.title)}</text>`
+      `<text x="${x}" y="${y + 24}" data-w="${w}" data-h="30" font-family="${escapeXml(fontStack(document.theme.fonts?.heading ?? "Arial"))}" font-size="20" font-weight="700" fill="${resolveColor("$text", document)}">${escapeXml(element.title)}</text>`
     );
   }
 
@@ -374,7 +391,7 @@ function renderElement(document: SlideIrDocument, element: SlideIrElement) {
           : "xMidYMid meet";
     return `<image ${elementAttrs(element)} x="${x}" y="${y}" width="${w}" height="${h}" href="${escapeXml(element.source.value)}" preserveAspectRatio="${preserveAspectRatio}"/>`;
   }
-  return `<g ${elementAttrs(element)}><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="${resolveColor("$surfaceAlt", document)}" stroke="${resolveColor("$border", document)}"/><text x="${x + w / 2}" y="${y + h / 2}" text-anchor="middle" font-family="${escapeXml(document.theme.fonts?.body ?? "Arial")}" font-size="16" fill="${resolveColor("$muted", document)}">${escapeXml(element.alt ?? "图片素材")}</text></g>`;
+  return `<g ${elementAttrs(element)}><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="${resolveColor("$surfaceAlt", document)}" stroke="${resolveColor("$border", document)}"/><text x="${x + w / 2}" y="${y + h / 2}" text-anchor="middle" font-family="${escapeXml(fontStack(document.theme.fonts?.body ?? "Arial"))}" font-size="16" fill="${resolveColor("$muted", document)}">${escapeXml(element.alt ?? "图片素材")}</text></g>`;
 }
 
 export function renderSlideIrToSvg(input: SlideIrDocument): string {

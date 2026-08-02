@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Download, Search, WandSparkles } from "lucide-react";
-import { stringifySmartSlide } from "@ppt-agent/slide-ir";
+import { renderSlideIrToSvg, stringifySmartSlide } from "@ppt-agent/slide-ir";
+import type { SlideIrDocument } from "@ppt-agent/slide-ir";
 import type { PptExportTheme, PresentationStyleId, SlidePlanDto } from '@ppt-agent/shared';
 import {
   fitSvgTextToBounds,
@@ -37,6 +38,9 @@ import {
   resolveAppliedPageStyle,
   styleSelectionNeedsRegeneration
 } from "../lib/pageStyleState";
+import { SlideThumbnail } from "../components/studio/SlideThumbnail";
+import { SlideIrCanvas } from "../components/studio/SlideIrCanvas";
+import { SlideSvgCanvas } from "../components/studio/SlideSvgCanvas";
 
 const phases: Array<{ id: StudioPhase; label: string; step: number }> = [
   { id: "search", label: "检索素材", step: 1 },
@@ -749,7 +753,7 @@ export function StudioSpace() {
     }
   }, [displayedDesignCode, showDesignCodeStream]);
 
-  const saveEditedSvg = async () => {
+   const saveEditedSvg = async () => {
     if (!selected || !svgEditorDirty || svgEditorSaving || showDesignCodeStream) return;
     setSvgEditorSaving(true);
     try {
@@ -760,6 +764,42 @@ export function StudioSpace() {
       setSvgEditorSaving(false);
     }
   };
+
+  /** 画布内文本编辑后，重新渲染 SVG 并保存 */
+  const handleIrChange = useCallback(
+    (updatedIr: SlideIrDocument) => {
+      if (!selected) return;
+      try {
+        const newSvg = renderSlideIrToSvg(updatedIr);
+        // 乐观更新：先更新本地 slides 的 irJson 和 svgPreview
+        const updatedSlides = useWorkbenchStore.getState().slides.map((s) =>
+          s.id === selected.id
+            ? { ...s, irJson: updatedIr, svgPreview: newSvg }
+            : s
+        );
+        useWorkbenchStore.setState({ slides: updatedSlides });
+        // 异步保存到后端
+        void saveSlideSvg(selected.id, newSvg);
+      } catch {
+        // 渲染失败时静默，不中断编辑体验
+      }
+    },
+    [selected, saveSlideSvg]
+  );
+
+  /** 纯 SVG 画布文字编辑后保存 */
+  const handleSvgChange = useCallback(
+    (newSvg: string) => {
+      if (!selected) return;
+      // 乐观更新
+      const updatedSlides = useWorkbenchStore.getState().slides.map((s) =>
+        s.id === selected.id ? { ...s, svgPreview: newSvg } : s
+      );
+      useWorkbenchStore.setState({ slides: updatedSlides });
+      void saveSlideSvg(selected.id, newSvg);
+    },
+    [selected, saveSlideSvg]
+  );
 
   const activateDesignVersion = async (versionId: string) => {
     if (!selected || versionId === selected.activeDesignVersionId) return;
@@ -1002,19 +1042,36 @@ export function StudioSpace() {
               onClick={() => {
                 void flushMetaSave();
                 setSlideInUrl(slide.id);
-                // 同步更新 URL，确保 selected 计算取到最新选中项
                 setSearchParams((prev) => {
                   const next = new URLSearchParams(prev);
                   next.set("slide", slide.id);
                   return next;
                 }, { replace: true });
               }}
-              className={`w-full rounded-xl border px-3 py-3 text-left transition ${
-                selected?.id === slide.id ? "border-[rgba(0,0,0,0.9)] bg-[rgba(0,0,0,0.03)]" : "border-[rgba(0,0,0,0.13)] bg-[rgba(0,0,0,0.03)] hover:border-[rgba(0,0,0,0.35)]"
+              className={`group w-full rounded-xl border p-1.5 text-left transition ${
+                selected?.id === slide.id
+                  ? "border-[rgba(0,0,0,0.9)] bg-[rgba(0,0,0,0.03)] ring-2 ring-[rgba(0,0,0,0.12)]"
+                  : "border-[rgba(0,0,0,0.10)] bg-[rgba(0,0,0,0.02)] hover:border-[rgba(0,0,0,0.35)]"
               }`}
             >
-              <span className="block text-[10px] font-medium uppercase text-[rgba(0,0,0,0.45)]">P{slide.sortOrder}</span>
-              <span className="mt-1 block text-sm font-medium text-[rgba(0,0,0,0.9)] line-clamp-2">{slide.title}</span>
+              <SlideThumbnail
+                svgPreview={slide.svgPreview}
+                exportTheme={exportTheme}
+                themeAccentId={themeAccentId}
+                themeSurfaceId={themeSurfaceId}
+              />
+              <div className="mt-1 flex items-center gap-1.5 px-1 pb-0.5">
+                <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-bold ${
+                  selected?.id === slide.id
+                    ? "bg-[rgba(0,0,0,0.9)] text-white"
+                    : "bg-[rgba(0,0,0,0.06)] text-[rgba(0,0,0,0.5)]"
+                }`}>
+                  {slide.sortOrder}
+                </span>
+                <span className="min-w-0 truncate text-[11px] font-medium text-[rgba(0,0,0,0.7)]">
+                  {slide.title}
+                </span>
+              </div>
             </button>
           ))}
         </aside>
@@ -1308,18 +1365,32 @@ export function StudioSpace() {
                     />
                   </div>
                 </div>
-              ) : themedSvgPreview ? (
+              ) : selectedUsesSlideIr && selected.irJson ? (
                 <div
                   className="svg-preview-ready overflow-hidden rounded-xl border border-[rgba(0,0,0,0.13)]"
                   style={{ background: exportThemePreviewBg(exportTheme) }}
                 >
-                  <iframe
+                  <SlideIrCanvas
+                    irDoc={selected.irJson as SlideIrDocument}
+                    readOnly={Boolean(busy) || showDesignCodeStream}
+                    onIrChange={handleIrChange}
+                    className="h-[420px] w-full"
+                  />
+                </div>
+              ) : selected?.svgPreview ? (
+                <div
+                  className="svg-preview-ready overflow-hidden rounded-xl border border-[rgba(0,0,0,0.13)]"
+                  style={{ background: exportThemePreviewBg(exportTheme) }}
+                >
+                  <SlideSvgCanvas
                     key={`${selected.id}-${exportTheme}-${themeAccentId}-${themeSurfaceId}`}
-                    title="svg-preview"
-                    className="h-[420px] w-full bg-transparent"
-                    srcDoc={`<!DOCTYPE html><html><head><style>html,body{margin:0;height:100%;display:flex;align-items:center;justify-content:center;background:${exportThemePreviewBg(
-                      exportTheme
-                    )};overflow:hidden}svg{display:block;width:100%;height:100%;overflow:hidden;filter:${surfacePreviewFilter};transition:filter .2s ease}</style></head><body>${themedSvgPreview}</body></html>`}
+                    svgPreview={selected.svgPreview}
+                    exportTheme={exportTheme}
+                    themeAccentId={themeAccentId}
+                    themeSurfaceId={themeSurfaceId}
+                    onSvgChange={handleSvgChange}
+                    readOnly={Boolean(busy) || showDesignCodeStream}
+                    className="h-[420px] w-full"
                   />
                 </div>
               ) : (

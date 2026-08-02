@@ -9,6 +9,7 @@ import {
   getAccentPresetHex,
   getPresentationStylePreset,
   getThemePack,
+  getThemePackFonts,
   type FactDto,
   type PresentationStyleId,
   type PptExportTheme,
@@ -593,6 +594,7 @@ export function createMockSlideIr(
     });
   }
 
+  const fontPairing = getThemePackFonts(theme);
   return SlideIrSchema.parse({
     schema: "smartslide/1",
     pageType: slide.recommendedLayout === "cover" ? "cover" : "content",
@@ -600,9 +602,9 @@ export function createMockSlideIr(
     theme: {
       tokens,
       fonts: {
-        heading: "Arial",
-        body: "Arial",
-        mono: "Menlo"
+        heading: fontPairing.heading,
+        body: fontPairing.body,
+        mono: fontPairing.mono
       }
     },
     background: { color: "$bg" },
@@ -800,7 +802,23 @@ export const slideIrSystemPrompt = `你是专业的演示文稿版式引擎。�
 5. theme.tokens 的值必须全部是六位十六进制字面量（例如 #25313C），禁止 rgb()/rgba()/hsl()、八位 HEX 或 $token 引用；只有元素颜色可以使用已声明的 $token。
 6. 不输出 SVG、CSS、HTML、Markdown，也不输出解释。
 7. 同一页最多 3 个主要内容组，连接线不得穿过任何文字框。
-8. 每个元素 id 唯一，使用英文字母、数字、下划线或连字符。`;
+8. 每个元素 id 唯一，使用英文字母、数字、下划线或连字符。
+
+字体规则：
+theme.fonts 已根据主题风格预设字体配对。生成元素时：
+- 标题、章节标题、关键数字用 heading 字体
+- 正文段落、表格内容、图表标签、脚注用 body 字体
+- 代码或数据标签用 mono 字体
+不要在 run.fontFamily 中自行写入其他字体名。标题与正文使用不同字体时，字体差异本身就能建立层级，不需要额外装饰。
+
+设计哲学（所有输出必须遵守）：
+9. 禁止卡片堆砌：不使用圆角矩形或矩形卡片来构建层级和对齐。用线条、留白和字号差异替代。强调色面板和状态指示器不算卡片。
+10. 禁止等分构图：不默认三等分、四等分或 2×2 矩阵。必须由内容语义驱动不对称版面（如 36/64、40/60 分割）。
+11. 配色去 AI 默认：禁止蓝紫渐变、青紫霓虹、彩虹光晕、玻璃拟态、发光边框。配色应"出人意料但合理"，每页不超过 3–4 种色调。
+12. 背景色直接复用参考骨架中 tokens.bg 的值。不要自行替换背景色——系统已根据用户选择的主题预设了正确的背景色。
+13. 图表去默认化：所有图表系列色来自 theme.tokens 的主色阶梯 + 灰色，不保留 Office 默认色。去掉默认网格和图例框；数据标签只标关键点。
+14. 字号层级张力：display 字号与 body 字号至少 2:1 对比。标题需要张力而非平淡。
+15. 信息位置纪律：结论→顶部标题；证据→中部图表/结构图；解读→侧栏或表格旁注；来源→底部小字。`;
 
 export function buildSlideIrPrompt(
   slide: SlideDto,
@@ -845,9 +863,14 @@ export function buildSlideIrPrompt(
     `主题：${theme}`,
     kimiDesignKnowledge,
     repairInstruction,
+    "",
+    "配色约束：",
+    "- theme.tokens 必须原样复用参考骨架中已有的 tokens 值。不要自行发明新的 token 色值。系统会根据用户选择的主题自动覆盖。",
+    "- 元素颜色只使用 $token 引用（如 $bg, $title, $body, $primary, $accent 等），不要写硬编码的 hex 值。",
+    "- 每页不超过 3-4 种色调；强调色占比不超过 15%。",
     `内容块：${JSON.stringify(slide.planJson?.contentBlocks ?? [])}`,
     `事实：${JSON.stringify(relevantFacts)}`,
-    "下面是与 DESIGN_BLUEPRINT 匹配的 SmartSlide 参考骨架。保留它的非对称比例、主视觉关系和字号层级，只替换或压缩内容；不得重新退化为默认等分栏：",
+    "下面是与 DESIGN_BLUEPRINT 匹配的 SmartSlide 参考骨架。保留它的 theme.tokens、非对称比例、主视觉关系和字号层级，只替换或压缩内容；不得修改 tokens 值，不得重新退化为默认等分栏：",
     JSON.stringify(reference)
   ]
     .filter(Boolean)
@@ -869,27 +892,24 @@ export function normalizeSlideIr(
     return SlideIrSchema.parse(input);
   }
   const themeRecord = candidateTheme as Record<string, unknown>;
-  const candidateTokens = themeRecord.tokens;
-  if (!candidateTokens || typeof candidateTokens !== "object" || Array.isArray(candidateTokens)) {
-    return SlideIrSchema.parse(input);
-  }
 
-  const repairedTokens: Record<string, unknown> = {
-    ...(candidateTokens as Record<string, unknown>)
-  };
-  const { series: _series, ...fallbackTokens } = getThemePack(theme).tokens;
-  for (const [name, fallback] of Object.entries(fallbackTokens)) {
-    const value = repairedTokens[name];
-    if (typeof value !== "string" || !literalHexColor.test(value)) {
-      repairedTokens[name] = fallback;
-    }
-  }
+  // 强制用主题 tokens 覆盖模型输出，确保颜色永远与用户选择的主题一致。
+  // 模型可能输出任意 hex 色值（如深色主题的值），但用户选的是浅色主题，
+  // 所以必须强制覆盖，而不是“仅修复格式错误”。
+  const pack = getThemePack(theme);
+  const { series: _series, ...forcedTokens } = pack.tokens;
+  const fontPairing = getThemePackFonts(theme);
 
   return SlideIrSchema.parse({
     ...candidate,
     theme: {
       ...themeRecord,
-      tokens: repairedTokens
+      tokens: forcedTokens,
+      fonts: {
+        heading: fontPairing.heading,
+        body: fontPairing.body,
+        mono: fontPairing.mono
+      }
     }
   });
 }

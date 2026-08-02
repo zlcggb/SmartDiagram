@@ -3,6 +3,8 @@
  * 约 12 套覆盖常见职场场景；token / 系列色 / accent 预设均为自研。
  */
 
+import { getFontPairing, type FontPairing } from "./fontPairings.js";
+
 export const pptExportThemes = [
   "white-blue",
   "soft-product",
@@ -57,6 +59,8 @@ export interface ThemePackMeta {
   family: "light" | "dark";
   /** 普通自动选风时尽量避开（如金融金色） */
   avoidAutoSelect?: boolean;
+  /** 默认字体配对方案 ID（对应 fontPairings.ts） */
+  fontPairingId: string;
   tokens: ThemePackTokens;
   /** 页级强调色枚举（有限选项） */
   accentPresets: ThemeAccentPreset[];
@@ -73,6 +77,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "浅底 Bento，适合周报与售前",
     suitableFor: "企业汇报 / 售前",
     family: "light",
+    fontPairingId: "modern-sans",
     tokens: {
       bg: "#EDF6FB",
       bgSoft: "#F3F8FC",
@@ -103,6 +108,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "柔光浅灰 + 雾蓝强调，适合产品介绍",
     suitableFor: "产品介绍 / 创业团队",
     family: "light",
+    fontPairingId: "modern-sans",
     tokens: {
       bg: "#F5F7FA",
       bgSoft: "#EEF2F6",
@@ -133,6 +139,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "深色看板，适合方案与发布",
     suitableFor: "技术方案 / 发布会",
     family: "dark",
+    fontPairingId: "sharp-tech",
     tokens: {
       bg: "#071C33",
       bgSoft: "#06111F",
@@ -163,6 +170,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "深浅代码风，适合工程与架构",
     suitableFor: "技术方案 / 开发者",
     family: "dark",
+    fontPairingId: "sharp-tech",
     tokens: {
       bg: "#0D1117",
       bgSoft: "#161B22",
@@ -193,6 +201,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "浅色玻璃感 + 薄荷绿，适合年轻化品牌",
     suitableFor: "消费品牌 / 创意提案",
     family: "light",
+    fontPairingId: "modern-sans",
     tokens: {
       bg: "#F7FBFA",
       bgSoft: "#EEF8F5",
@@ -223,6 +232,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "中性底 + 多系列色，适合数据报告",
     suitableFor: "数据报告 / 市场分析",
     family: "light",
+    fontPairingId: "classic-report",
     tokens: {
       bg: "#F8FAFC",
       bgSoft: "#F1F5F9",
@@ -253,6 +263,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "近黑底 + 琥珀强调，适合高密度战略",
     suitableFor: "战略分析 / 投资人",
     family: "dark",
+    fontPairingId: "editorial-serif",
     tokens: {
       bg: "#0B0F14",
       bgSoft: "#111827",
@@ -283,6 +294,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "冷灰白底 + 墨青强调，适合白皮书/调研",
     suitableFor: "白皮书 / 调研报告",
     family: "light",
+    fontPairingId: "classic-report",
     tokens: {
       bg: "#F4F6F8",
       bgSoft: "#EEF1F4",
@@ -313,6 +325,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "暖白纸面 + 墨黑结构 + 电光黄，适合实验性品牌提案",
     suitableFor: "高端发布 / 品牌提案",
     family: "light",
+    fontPairingId: "premium-contrast",
     tokens: {
       bg: "#FBFAF4",
       bgSoft: "#EFEFF6",
@@ -343,6 +356,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "杂志深蓝 + 纸白，适合品牌故事",
     suitableFor: "品牌故事 / 人物专题",
     family: "dark",
+    fontPairingId: "premium-contrast",
     tokens: {
       bg: "#0C1B33",
       bgSoft: "#132743",
@@ -374,6 +388,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     suitableFor: "金融投资 / 指数榜单",
     family: "dark",
     avoidAutoSelect: true,
+    fontPairingId: "editorial-serif",
     tokens: {
       bg: "#1C2740",
       bgSoft: "#33405C",
@@ -404,6 +419,7 @@ export const themePacks: Record<PptExportTheme, ThemePackMeta> = {
     description: "暖白底 + 珊瑚主色，适合路演/增长",
     suitableFor: "增长复盘 / 路演",
     family: "light",
+    fontPairingId: "modern-sans",
     tokens: {
       bg: "#FFF8F5",
       bgSoft: "#FFF1EB",
@@ -482,4 +498,12 @@ export function formatThemePackCatalog(): string {
         }`
     )
     .join("\n");
+}
+
+/**
+ * 根据主题获取绑定的字体配对方案。
+ * 每套 ThemePack 有默认的 fontPairingId；此函数将其解析为完整的 FontPairing 对象。
+ */
+export function getThemePackFonts(theme: string | null | undefined): FontPairing {
+  return getFontPairing(getThemePack(theme).fontPairingId);
 }
