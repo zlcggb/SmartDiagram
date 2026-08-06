@@ -1,4 +1,16 @@
-export type { GeminiAdapter, ModelUsageEvent, ModelUsageReporter, ModelUsageStage } from "./types.js";
+export type {
+  GeminiAdapter,
+  ModelUsageEvent,
+  ModelUsageReporter,
+  ModelUsageStage,
+  SpeechScriptContext,
+  VisibleTextCandidateRef
+} from "./types.js";
+export {
+  buildSafeFocusTargets,
+  normalizeSpeechScriptPlan,
+  speechScriptPlanJsonSchema
+} from "./speechScriptPlan.js";
 export {
   buildSlideIrPrompt,
   createMockSlideIr,

@@ -36,6 +36,7 @@ import {
   designRecipeMeta
 } from "./designKnowledge/index.js";
 import { normalizeSlideDesignGuide, selectedSearchMaterials } from "./studioHelpers.js";
+import type { SpeechScriptContext } from "./types.js";
 
 export const extractFactsSystemPrompt = [
   "你是严谨的企业 PPT 资料分析师。",
@@ -169,14 +170,6 @@ export function buildPageSearchPrompt(slide: SlideDto, context: { topic?: string
   ].join("\n\n");
 }
 
-export interface SpeechScriptContext {
-  index: number;
-  total: number;
-  prevTitle?: string;
-  nextTitle?: string;
-  style: SpeechWritingStyleId;
-}
-
 /** 写稿风格对应的 system prompt（决定「稿子怎么写」，与 TTS 朗读 prompt 解耦）。 */
 export function speechScriptSystemPrompt(style: SpeechWritingStyleId): string {
   const preset = speechWritingStylePresets.find((item) => item.id === style) ?? speechWritingStylePresets[0];
@@ -210,6 +203,17 @@ export function buildSpeechScriptPrompt(slide: SlideDto, context: SpeechScriptCo
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+export function buildSpeechScriptPlanPrompt(slide: SlideDto, context: SpeechScriptContext) {
+  return [
+    buildSpeechScriptPrompt(slide, context),
+    "请同时规划口播中的语义聚焦目标。只能从 visibleTextCandidates 选择 targetTextIds，并原样复制对应文字到 anchors；禁止输出任何坐标。",
+    "narrationText 必须是 scriptText 中连续出现的完整短句；每个短句只聚焦一个紧凑语义区域，空间分离的区域必须拆成不同目标。",
+    "若口播没有讲到候选文字，不要为它创建聚焦目标。",
+    "visibleTextCandidates：",
+    JSON.stringify(context.visibleTextCandidates ?? [], null, 2)
+  ].join("\n\n");
 }
 
 export function buildOutlinePrompt(

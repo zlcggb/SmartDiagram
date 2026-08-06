@@ -186,6 +186,7 @@ GATEWAY_PORT=9237
 | `PPT_INTERNAL_API_SECRET` | 🤖 自动 | |
 | `AUTH_SESSION_SECRET` | 🤖 自动 | |
 | `FFMPEG_PATH` | ➖ 留空 | 自动探测 |
+| `WHISPER_CPP_PATH` / `WHISPER_MODEL_PATH` | ➖ 可选 | 同时配置后，用最终音频转写对齐驱动字幕与聚焦；未配置时聚焦安全关闭 |
 
 ---
 

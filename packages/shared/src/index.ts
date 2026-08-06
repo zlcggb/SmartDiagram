@@ -14,6 +14,7 @@ import {
   presentationStyleIds,
   type PresentationStyleId
 } from "./presentationStyles.js";
+import type { NarrationAlignment, NarrationFocusPlan } from "./narrationFocus.js";
 
 export const themeTokens = {
   pageBg: "#FFFFFF",
@@ -358,7 +359,9 @@ export const videoExportSchema = narrationOptionsSchema.extend({
   subtitles: z.boolean().optional().default(false),
   subtitleFont: z.enum(["noto-sans-cjk-sc"]).optional().default("noto-sans-cjk-sc"),
   subtitleStyle: SubtitleStyleSchema.optional().default("soft-capsule"),
-  subtitleLayout: subtitleLayoutSchema.optional()
+  subtitleLayout: subtitleLayoutSchema.optional(),
+  /** 启用矩形聚焦动效：按演讲内容自动高亮幻灯片上的文本区域，周围压暗。 */
+  focus: z.boolean().optional().default(false)
 });
 
 export type FactCategory = z.infer<typeof FactCategorySchema>;
@@ -931,6 +934,8 @@ export interface SlideNarrationDto {
   audioPath?: string | null;
   audioUrl?: string | null;
   audioDurationMs?: number | null;
+  focusPlan?: NarrationFocusPlan | null;
+  alignment?: NarrationAlignment | null;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -946,6 +951,8 @@ export interface MediaExportDto {
   subtitleFont?: string | null;
   subtitleStyle?: SubtitleStyleId | null;
   subtitleLayout?: SubtitleLayout | null;
+  focus?: boolean;
+  focusReportUrl?: string | null;
   previewUrl?: string | null;
   downloadUrl?: string | null;
   subtitleUrl?: string | null;
@@ -1156,3 +1163,17 @@ export {
 export type { CopyIssue, CopyValidationResult } from "./validateCopyQuality.js";
 export { fitSvgTextToBounds, getSvgTextBoxIssues } from "./svgTextFit.js";
 export type { SvgTextFitResult } from "./svgTextFit.js";
+export {
+  NarrationAlignmentCueSchema,
+  NarrationAlignmentSchema,
+  NarrationFocusPlanSchema,
+  NarrationFocusTargetSchema,
+  SpeechScriptPlanSchema
+} from "./narrationFocus.js";
+export type {
+  NarrationAlignment,
+  NarrationAlignmentCue,
+  NarrationFocusPlan,
+  NarrationFocusTarget,
+  SpeechScriptPlan
+} from "./narrationFocus.js";

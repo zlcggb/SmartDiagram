@@ -26,6 +26,7 @@ import {
   buildOutlinePrompt,
   buildSlidePlanPrompt,
   buildSpeechScriptPrompt,
+  buildSpeechScriptPlanPrompt,
   buildSvgPreviewPrompt,
   extractFactsSystemPrompt,
   outlineSystemPrompt,
@@ -33,6 +34,7 @@ import {
   speechScriptSystemPrompt,
   svgPreviewSystemPrompt
 } from "./prompts.js";
+import { normalizeSpeechScriptPlan, speechScriptPlanJsonSchema } from "./speechScriptPlan.js";
 import { normalizeSlideDesignGuide } from "./studioHelpers.js";
 import {
   buildSlideIrPrompt,
@@ -40,7 +42,7 @@ import {
   slideIrJsonSchema,
   slideIrSystemPrompt
 } from "./slideIrGeneration.js";
-import type { GeminiAdapter, ModelUsageEvent, ModelUsageReporter, ModelUsageStage, SvgGenerationOptions } from "./types.js";
+import type { GeminiAdapter, ModelUsageEvent, ModelUsageReporter, ModelUsageStage, SpeechScriptContext, SvgGenerationOptions } from "./types.js";
 
 const GEMINI_INTERACTIONS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions";
 const defaultModel = "gemini-3.1-flash-lite";
@@ -801,7 +803,7 @@ export class RealGeminiAdapter implements GeminiAdapter {
 
   async generateSpeechScript(
     slide: SlideDto,
-    context: { index: number; total: number; prevTitle?: string; nextTitle?: string; style: SpeechWritingStyleId },
+    context: SpeechScriptContext,
     onToken?: (token: string) => void
   ): Promise<string> {
     // 演讲稿固定主模型；禁止落入 designModels 优先逻辑。
@@ -812,6 +814,21 @@ export class RealGeminiAdapter implements GeminiAdapter {
       onToken
     );
     return result.replace(/\r\n/g, "\n").replace(/^#+\s.*$/gm, "").replace(/\*\*/g, "").trim();
+  }
+
+  async generateSpeechScriptPlan(
+    slide: SlideDto,
+    context: SpeechScriptContext,
+    onToken?: (token: string) => void
+  ) {
+    const result = await this.generateJson<unknown>(
+      buildSpeechScriptPlanPrompt(slide, context),
+      speechScriptPlanJsonSchema,
+      speechScriptSystemPrompt(context.style),
+      { stage: "main", model: this.model, temperature: 0.35, thinkingLevel: "low" },
+      onToken
+    );
+    return normalizeSpeechScriptPlan(result, context.visibleTextCandidates ?? []);
   }
 
   async startBrief(topic: string) {

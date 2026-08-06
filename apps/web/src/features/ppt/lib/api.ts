@@ -567,6 +567,7 @@ export const api = {
       models: string[];
       ttsConcurrency: number;
       subtitleFonts: Array<{ id: string; label: string; family: string; license: string }>;
+      focusAlignment?: { available: boolean; engine: "whisper.cpp" | null; minimumCoverage: number };
     }>("/api/media/status");
   },
   previewTts(input: TtsPreviewInput) {
@@ -599,7 +600,7 @@ export const api = {
   getMediaExports(projectId: string) {
     return request<MediaExportDto[]>(`/api/projects/${projectId}/media-exports`);
   },
-  exportVideo(projectId: string, input: NarrationOptionsInput & { subtitles?: boolean; subtitleFont?: string; subtitleStyle?: SubtitleStyleId; subtitleLayout?: SubtitleLayout } = {}) {
+  exportVideo(projectId: string, input: NarrationOptionsInput & { subtitles?: boolean; subtitleFont?: string; subtitleStyle?: SubtitleStyleId; subtitleLayout?: SubtitleLayout; focus?: boolean } = {}) {
     return request<MediaExportDto>(`/api/projects/${projectId}/export-video`, json("POST", { ...input, width: 1920, height: 1080, fps: 30 }));
   }
 };

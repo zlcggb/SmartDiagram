@@ -131,6 +131,13 @@ export function wrapAdapterWithUsage(adapter: GeminiAdapter): GeminiAdapter {
         { slideId: slide.id, outputSummary: `生成演讲稿：${slide.title}` },
         () => adapter.generateSpeechScript(slide, context, onToken)
       );
+    },
+    async generateSpeechScriptPlan(slide, context, onToken) {
+      recordAiCall("plan");
+      return runWithModelUsageResource(
+        { slideId: slide.id, outputSummary: `生成演讲稿与聚焦计划：${slide.title}` },
+        () => adapter.generateSpeechScriptPlan(slide, context, onToken)
+      );
     }
   };
 }

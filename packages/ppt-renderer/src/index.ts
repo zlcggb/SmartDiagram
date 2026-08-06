@@ -27,8 +27,10 @@ import { postprocessEditableSvgGeometry } from "./pptxPostprocess.js";
 export type { PageRenderResult, RenderProjectPptxInput, RenderProjectPptxResult } from "./exportTypes.js";
 export { compileSvgPreviewToSlide, tryRenderSvgSlide } from "./svgCompile.js";
 export type { SvgCompileResult } from "./svgCompile.js";
-export { renderSlidePng } from "./slideImage.js";
+export { prepareSlideSvgSource, renderSlidePng } from "./slideImage.js";
 export { renderSubtitleOverlayPng } from "./subtitleOverlay.js";
+export { buildFocusOverlaySvg, renderFocusOverlayPng } from "./focusOverlay.js";
+export type { FocusBox, FocusOverlayOptions } from "./focusOverlay.js";
 export type { SubtitleOverlayOptions, SubtitleStyle } from "./subtitleOverlay.js";
 export type { RenderSlidePngOptions } from "./slideImage.js";
 

@@ -14,7 +14,8 @@ import { factCategories, getThemePack, normalizePptExportTheme, themeFamily } fr
 import { selectDesignRecipe } from "./designKnowledge/index.js";
 import { buildMockPlanFromSearch } from "./studioHelpers.js";
 import { createMockSlideIr } from "./slideIrGeneration.js";
-import type { GeminiAdapter, SvgGenerationOptions } from "./types.js";
+import { buildSafeFocusTargets } from "./speechScriptPlan.js";
+import type { GeminiAdapter, SpeechScriptContext, SvgGenerationOptions } from "./types.js";
 
 const categories = {
   background: factCategories[0] as FactCategory,
@@ -251,7 +252,7 @@ export class MockGeminiAdapter implements GeminiAdapter {
 
   async generateSpeechScript(
     slide: SlideDto,
-    context: { index: number; total: number; prevTitle?: string; nextTitle?: string; style: SpeechWritingStyleId },
+    context: SpeechScriptContext,
     _onToken?: (token: string) => void
   ): Promise<string> {
     // Mock：不依赖真实模型，按风格前缀 + 模板生成可预测的稿子，保证 dev/test 可用
@@ -268,6 +269,14 @@ export class MockGeminiAdapter implements GeminiAdapter {
     const body = `${message ? `核心观点是：${message}。` : ""}${items.length ? `重点包括：${items.join("；")}。` : ""}`;
     const closing = context.nextTitle ? `接下来我们看“${context.nextTitle}”。` : "以上就是本次分享，谢谢大家。";
     return `${opening}${body}${closing}`.replace(/。+/g, "。").slice(0, 480);
+  }
+
+  async generateSpeechScriptPlan(slide: SlideDto, context: SpeechScriptContext) {
+    const scriptText = await this.generateSpeechScript(slide, context);
+    return {
+      scriptText,
+      focusTargets: buildSafeFocusTargets(scriptText, context.visibleTextCandidates ?? [])
+    };
   }
 
   async finalizeBrief(topic: string, answers: Record<string, string>, _onToken?: (token: string) => void) {

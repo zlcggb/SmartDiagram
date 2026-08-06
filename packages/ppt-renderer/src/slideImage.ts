@@ -8,6 +8,16 @@ export interface RenderSlidePngOptions {
   width?: number;
   theme?: string;
   accentId?: string | null;
+  /** 已由 prepareSlideSvgSource 处理的 SVG；让图片与几何解析共享同一来源。 */
+  preparedSvg?: string;
+}
+
+export function prepareSlideSvgSource(source: string, options: RenderSlidePngOptions = {}) {
+  return recolorSvgPreview(
+    fitSvgTextToBounds(source).svg,
+    normalizePptExportTheme(options.theme),
+    { accentId: options.accentId }
+  );
 }
 
 function escapeXml(value: string) {
@@ -44,9 +54,7 @@ function fallbackSvg(slide: SlideDto, theme?: string) {
 export function renderSlidePng(slide: SlideDto, outputPath: string, options: RenderSlidePngOptions = {}) {
   const width = options.width ?? 1920;
   const source = slide.svgPreview
-    ? recolorSvgPreview(fitSvgTextToBounds(slide.svgPreview).svg, normalizePptExportTheme(options.theme), {
-        accentId: options.accentId
-      })
+    ? options.preparedSvg ?? prepareSlideSvgSource(slide.svgPreview, options)
     : fallbackSvg(slide, options.theme);
   const png = new Resvg(source, {
     fitTo: { mode: "width", value: width },

@@ -156,6 +156,8 @@ model SlideNarration {
   languageCode    String   @default("cmn-CN")
   audioPath       String?
   audioDurationMs Int?
+  focusPlanJson   String?
+  alignmentJson   String?
   sourceHash      String?
   status          String   @default("draft")
   createdAt       DateTime @default(now())

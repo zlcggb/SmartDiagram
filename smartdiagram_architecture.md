@@ -294,6 +294,13 @@ PPT 设计历史由 Prisma `SlideDesignVersion` 按页持久化，AI 生成、Sm
 `Slide.irJson` 保存活跃 SmartSlide 源码；激活历史版本时两者一并恢复，
 使现有 PPTX、PNG、视频和媒体渲染链路无需感知版本表。
 
+PPT 导演视频的矩形聚焦由 `SlideNarration.focusPlanJson` 与 `alignmentJson` 持久化语义计划和
+最终音频时间轴。`packages/agents/src/speechScriptPlan.ts` 只选择 fitted SVG 的稳定文字 ID/锚点，
+`service-ppt-renderer/src/lib/focusResolver.ts` 从与 PNG 同源的 prepared SVG 解析确定性几何并执行质量门禁，
+`audioAlignment.ts` 可选调用本地 whisper.cpp 对最终音频转写，将作者文案对齐到波形时间戳并记录覆盖率。
+只有 `transcript` 来源且覆盖率达到门限的 cue 可驱动聚焦；FFmpeg 静音检测仅作为整页字幕降级，不驱动聚焦。
+导出链路位于 `routes/media.ts`，聚焦遮罩位于 `packages/ppt-renderer/src/focusOverlay.ts`，时间区间按帧量化，成片合并后必须通过 FFmpeg 视频/音频双流完整解码。
+
 ---
 
 ## 7. 环境变量（根 `.env` 三分区）
@@ -326,6 +333,7 @@ PPT 设计历史由 Prisma `SlideDesignVersion` 按页持久化，AI 生成、Sm
 | 改 SmartSlide 页面语言 / 双生成模式 | `packages/slide-ir/` + `packages/agents/src/slideIrGeneration.ts` + `service-ppt-renderer/src/routes/projects.ts` + `features/ppt/pages/StudioSpace.tsx` |
 | 改 Kimi 设计知识检索 / Prompt 注入 | `packages/agents/src/designKnowledge/kimiSlides/` + `packages/agents/src/prompts.ts` + `packages/agents/src/slideIrGeneration.ts` |
 | 改 PPTX 渲染 | `packages/ppt-renderer/` + `service-ppt-renderer/` |
+| 改 PPT 导演配音 / 字幕 / 矩形聚焦 | `service-ppt-renderer/src/routes/media.ts` + `src/lib/audioAlignment.ts` + `src/lib/focusResolver.ts` + `packages/agents/src/speechScriptPlan.ts` + `packages/ppt-renderer/src/focusOverlay.ts` |
 | 改生产路由 | `gateway/nginx.conf` |
 | 改本地 proxy | `apps/web/vite.config.ts` |
 | 改启动/端口 | `dev.sh`、`scripts/dev-common.sh`、`docker-compose.yml` |

@@ -16,6 +16,7 @@ import {
   buildOutlinePrompt,
   buildSlidePlanPrompt,
   buildSpeechScriptPrompt,
+  buildSpeechScriptPlanPrompt,
   buildSvgPreviewPrompt,
   extractFactsSystemPrompt,
   outlineSystemPrompt,
@@ -33,13 +34,14 @@ import {
   sanitizeSvgOutput,
   slidePlanSchema
 } from "./realGeminiAdapter.js";
+import { normalizeSpeechScriptPlan, speechScriptPlanJsonSchema } from "./speechScriptPlan.js";
 import {
   buildSlideIrPrompt,
   normalizeSlideIr,
   slideIrJsonSchema,
   slideIrSystemPrompt
 } from "./slideIrGeneration.js";
-import type { GeminiAdapter, ModelUsageEvent, ModelUsageReporter, SvgGenerationOptions } from "./types.js";
+import type { GeminiAdapter, ModelUsageEvent, ModelUsageReporter, SpeechScriptContext, SvgGenerationOptions } from "./types.js";
 
 type JsonObject = Record<string, unknown>;
 type FetchOptionsWithDispatcher = NonNullable<Parameters<typeof undiciFetch>[1]>;
@@ -657,7 +659,7 @@ export class OpenAiCompatibleAdapter implements GeminiAdapter {
 
   async generateSpeechScript(
     slide: SlideDto,
-    context: { index: number; total: number; prevTitle?: string; nextTitle?: string; style: SpeechWritingStyleId },
+    context: SpeechScriptContext,
     onToken?: (token: string) => void
   ): Promise<string> {
     // 演讲稿必须走主模型；generateText 会优先尝试 designModel，不能复用。
@@ -673,6 +675,21 @@ export class OpenAiCompatibleAdapter implements GeminiAdapter {
       onToken
     );
     return result.replace(/\r\n/g, "\n").replace(/^#+\s.*$/gm, "").replace(/\*\*/g, "").trim();
+  }
+
+  async generateSpeechScriptPlan(
+    slide: SlideDto,
+    context: SpeechScriptContext,
+    onToken?: (token: string) => void
+  ) {
+    const result = await this.generateJson<unknown>(
+      buildSpeechScriptPlanPrompt(slide, context),
+      speechScriptPlanJsonSchema,
+      speechScriptSystemPrompt(context.style),
+      { model: this.model, stage: "main" },
+      onToken
+    );
+    return normalizeSpeechScriptPlan(result, context.visibleTextCandidates ?? []);
   }
 
   async startBrief(topic: string) {

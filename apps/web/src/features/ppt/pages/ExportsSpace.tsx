@@ -157,6 +157,8 @@ export function ExportsSpace() {
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [previewAudio, setPreviewAudio] = useState<{ url: string; durationMs: number } | null>(null);
   const [previewVideo, setPreviewVideo] = useState<MediaExportDto | null>(null);
+  const [focusEnabled, setFocusEnabled] = useState(false);
+  const [focusAlignmentReady, setFocusAlignmentReady] = useState(false);
   const [scopeMode, setScopeMode] = useState<DirectorScopeMode>("designed");
   const [scopeStartPage, setScopeStartPage] = useState(1);
   const [scopeEndPage, setScopeEndPage] = useState(1);
@@ -204,6 +206,9 @@ export function ExportsSpace() {
         setVoices(status.voices.length ? status.voices : fallbackVoices);
         setTtsConcurrency(status.ttsConcurrency);
         setSubtitleFonts(status.subtitleFonts.length ? status.subtitleFonts : fallbackSubtitleFonts);
+        const focusReady = Boolean(status.focusAlignment?.available);
+        setFocusAlignmentReady(focusReady);
+        if (!focusReady) setFocusEnabled(false);
         if (status.subtitleFonts[0]) setSubtitleFont(status.subtitleFonts[0].id);
         useWorkbenchStore.setState({ ttsModel: status.model || null });
         const first = nextNarrations?.[0];
@@ -578,9 +583,10 @@ export function ExportsSpace() {
               subtitles: subtitlesEnabled,
               subtitleFont,
               subtitleStyle,
-              subtitleLayout
+              subtitleLayout,
+              focus: focusEnabled
             }))}>
-              <Video className="h-4 w-4" /> {subtitlesEnabled ? "导出带字幕视频" : "导出无字幕视频"}
+              <Video className="h-4 w-4" /> {subtitlesEnabled ? "导出带字幕视频" : "导出无字幕视频"}{focusEnabled ? "（聚焦）" : ""}
             </button>
           </div>
           <div className="mt-3 rounded-xl border border-line bg-white p-3">
@@ -690,13 +696,25 @@ export function ExportsSpace() {
           </div>
         </div>
 
+        {/* 聚焦动效开关 */}
+        <div className="mt-3 rounded-xl border border-line bg-white p-3">
+          <label className={`flex items-center gap-2 text-sm font-semibold ${focusAlignmentReady ? "cursor-pointer text-title" : "cursor-not-allowed text-muted"}`}>
+            <input type="checkbox" className="h-4 w-4 accent-black" disabled={!focusAlignmentReady} checked={focusEnabled} onChange={(event) => setFocusEnabled(event.target.checked)} />
+            矩形聚焦动效
+          </label>
+          <p className="mt-1 text-xs text-muted">
+            {focusAlignmentReady
+              ? "仅在最终配音转写对齐和 SVG 几何质检同时通过时生成；任一预定事件不可靠都会阻止聚焦版导出。"
+              : "未配置本地最终音频对齐引擎，聚焦已安全关闭；字幕和普通 FFmpeg 导出不受影响。"}
+          </p>
+        </div>
         {mediaExports.length > 0 ? (
           <div className="mt-6 border-t border-line pt-5">
             <h3 className="font-semibold text-title">视频导出历史</h3>
             <ul className="mt-3 space-y-2">
             {mediaExports.map((item) => (
               <li key={item.id} className="flex items-center justify-between rounded-xl bg-card px-4 py-3 text-sm">
-                <span>{new Date(item.createdAt).toLocaleString()} · {item.status === "completed" ? "已完成" : item.status}{item.status === "completed" ? ` · ${item.subtitles ? "带字幕" : "无字幕"}` : ""}</span>
+                <span>{new Date(item.createdAt).toLocaleString()} · {item.status === "completed" ? "已完成" : item.status}{item.status === "completed" ? ` · ${item.subtitles ? "带字幕" : "无字幕"}${item.focus ? " · 聚焦" : ""}` : ""}</span>
                 {item.downloadUrl && item.previewUrl ? (
                   <div className="flex flex-wrap gap-2">
                     <button type="button" className="secondary-button rounded-xl" onClick={() => setPreviewVideo(item)}>
@@ -708,6 +726,11 @@ export function ExportsSpace() {
                     {item.subtitleUrl ? (
                       <a className="secondary-button rounded-xl" href={absoluteDownloadUrl(item.subtitleUrl)}>
                         <FileDown className="h-4 w-4" /> 下载 SRT
+                      </a>
+                    ) : null}
+                    {item.focusReportUrl ? (
+                      <a className="secondary-button rounded-xl" href={absoluteDownloadUrl(item.focusReportUrl)}>
+                        聚焦质检报告
                       </a>
                     ) : null}
                   </div>

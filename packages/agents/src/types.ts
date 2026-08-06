@@ -12,6 +12,7 @@ import type {
   SlideSearchJson,
   PptExportTheme,
   PresentationStyleId,
+  SpeechScriptPlan,
   SpeechWritingStyleId,
   ThemeSurfaceId
 } from "@ppt-agent/shared";
@@ -55,6 +56,20 @@ export interface ModelUsageEvent {
 
 export type ModelUsageReporter = (event: ModelUsageEvent) => void | Promise<void>;
 
+export interface VisibleTextCandidateRef {
+  id: string;
+  text: string;
+}
+
+export interface SpeechScriptContext {
+  index: number;
+  total: number;
+  prevTitle?: string;
+  nextTitle?: string;
+  style: SpeechWritingStyleId;
+  visibleTextCandidates?: VisibleTextCandidateRef[];
+}
+
 export interface GeminiAdapter {
   extractFacts(text: string): Promise<ExtractFactsResult>;
   generateOutline(
@@ -85,7 +100,12 @@ export interface GeminiAdapter {
   /** 按指定写稿风格，把单页内容改写成口播稿（纯正文）。 */
   generateSpeechScript(
     slide: SlideDto,
-    context: { index: number; total: number; prevTitle?: string; nextTitle?: string; style: SpeechWritingStyleId },
+    context: SpeechScriptContext,
     onToken?: (token: string) => void
   ): Promise<string>;
+  generateSpeechScriptPlan(
+    slide: SlideDto,
+    context: SpeechScriptContext,
+    onToken?: (token: string) => void
+  ): Promise<SpeechScriptPlan>;
 }
