@@ -10,7 +10,7 @@ import type {
   SlidePlanDto,
   SpeechWritingStyleId
 } from "@ppt-agent/shared";
-import { factCategories, getThemePack, normalizePptExportTheme, themeFamily } from "@ppt-agent/shared";
+import { PPT_MAX_PAGE_COUNT, factCategories, getThemePack, normalizePptExportTheme, themeFamily } from "@ppt-agent/shared";
 import { selectDesignRecipe } from "./designKnowledge/index.js";
 import { buildMockPlanFromSearch } from "./studioHelpers.js";
 import { createMockSlideIr } from "./slideIrGeneration.js";
@@ -171,7 +171,23 @@ export class MockGeminiAdapter implements GeminiAdapter {
       }
     ];
 
-    return slides.slice(0, Math.max(1, Math.min(8, project.pageCount || 6)));
+    const pageCount = Math.max(1, Math.min(PPT_MAX_PAGE_COUNT, project.pageCount || 6));
+    if (pageCount <= slides.length) return slides.slice(0, pageCount);
+
+    const closing = slides.pop()!;
+    while (slides.length < pageCount - 1) {
+      const pageNumber = slides.length + 1;
+      slides.push({
+        title: `补充分析 ${pageNumber}`,
+        slideGoal: "补充展开汇报主题，确保叙事结构完整。",
+        keyMessage: "本页承接前文并补充一个独立的关键信息点。",
+        contentPoints: factSummary(usableFacts.slice((pageNumber - 1) % Math.max(1, usableFacts.length), pageNumber + 2), "结合已确认资料补充本页内容。"),
+        sourceFactIds: usableFacts.slice(0, 3).map((fact) => fact.id),
+        recommendedLayout: pageNumber % 2 === 0 ? "generic-cards" : "statement"
+      });
+    }
+    slides.push(closing);
+    return slides;
   }
 
   async generateSlidePlan(slide: SlideDto, facts: FactDto[], _theme?: string, _onToken?: (token: string) => void): Promise<SlidePlanDto> {

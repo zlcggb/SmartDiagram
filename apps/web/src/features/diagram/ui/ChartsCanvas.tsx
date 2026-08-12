@@ -9,14 +9,14 @@ import { useT } from '@/app/i18n';
 
 // ─── Streaming JSON Parser for Charts ───
 
-function tryParseStreamingJSON(rawStr: string) {
+function tryParseStreamingJSON(rawStr: string): unknown {
   let code = rawStr.trim();
   if (code.startsWith('```')) {
     code = code.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
   }
 
-  let cleaned = code;
-  let stack: string[] = [];
+  const cleaned = code;
+  const stack: string[] = [];
   let inString = false;
   let escaped = false;
   let lastValidIndex = 0;
@@ -59,7 +59,7 @@ function tryParseStreamingJSON(rawStr: string) {
         subStr = subStr.slice(0, -1).trim();
       }
 
-      let tempStack: string[] = [];
+      const tempStack: string[] = [];
       let tempInString = false;
       for (let i = 0; i < subStr.length; i++) {
         const char = subStr[i];
@@ -82,7 +82,7 @@ function tryParseStreamingJSON(rawStr: string) {
 
       return JSON.parse(subStr + suffix);
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
 
@@ -91,14 +91,14 @@ function tryParseStreamingJSON(rawStr: string) {
     if (inString) {
       suffix += '"';
     }
-    let tempStack = [...stack];
+    const tempStack = [...stack];
     while (tempStack.length > 0) {
       const top = tempStack.pop();
       if (top === '{') suffix += '}';
       if (top === '[') suffix += ']';
     }
     return JSON.parse(cleaned + suffix);
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -111,23 +111,16 @@ export default function ChartsCanvas() {
   const [error, setError] = useState<string | null>(null);
 
   // Background state for the chart canvas, default synchronized to global canvasMode but user override wins
-  const [chartBg, setChartBg] = useState<'dark' | 'light' | 'warm'>(() => {
+  const [chartBgOverride, setChartBgOverride] = useState<'dark' | 'light' | 'warm' | null>(() => {
     const stored = localStorage.getItem('smartdiagram_chart_bg');
     if (stored === 'light' || stored === 'dark' || stored === 'warm') {
-      return stored as 'dark' | 'light' | 'warm';
+      return stored;
     }
-    return canvasMode === 'light' ? 'light' : 'dark';
+    return null;
   });
+  const chartBg = chartBgOverride ?? (canvasMode === 'light' ? 'light' : 'dark');
 
   const [initCounter, setInitCounter] = useState(0);
-
-  // Follow global theme toggling unless user has set their local preference
-  useEffect(() => {
-    const stored = localStorage.getItem('smartdiagram_chart_bg');
-    if (!stored) {
-      setChartBg(canvasMode === 'light' ? 'light' : 'dark');
-    }
-  }, [canvasMode]);
 
   // Initialize/resize chart with adaptive theme
   useEffect(() => {
@@ -165,7 +158,7 @@ export default function ChartsCanvas() {
     if (!activeCode || !chartInstance.current) return;
 
     try {
-      let parsed: any = null;
+      let parsed: unknown = null;
       if (isStreaming) {
         parsed = tryParseStreamingJSON(activeCode);
       } else {
@@ -176,30 +169,33 @@ export default function ChartsCanvas() {
         parsed = JSON.parse(code);
       }
 
-      if (parsed) {
-        setError(null);
+      if (parsed && typeof parsed === 'object') {
+        const option = parsed as echarts.EChartsOption;
 
         // ─── 规避 ECharts 渐进式流渲染中的 series mismatch 警告 ───
-        if (isStreaming && parsed.legend) {
+        if (isStreaming && 'legend' in option) {
           // 在流式输出期间，series 数组尚未长全，legend 内的数据与 series 名字不吻合
           // 通过在流式中临时剔除 legend 可完全阻止 ECharts 抛出 series not exists 的警告
-          delete parsed.legend;
+          option.legend = undefined;
         }
 
         // 推迟 setOption 到下一帧，避免在 ECharts init 主流程中同步调用
         const instance = chartInstance.current;
-        setTimeout(() => instance?.setOption(parsed, true), 0);
+        setTimeout(() => {
+          setError(null);
+          instance?.setOption(option, true);
+        }, 0);
       }
     } catch (e: unknown) {
       if (!isStreaming) {
         const msg = e instanceof Error ? e.message : String(e);
-        setError(t('charts.parseError', { message: msg }));
+        setTimeout(() => setError(t('charts.parseError', { message: msg })), 0);
       }
     }
   }, [isStreaming, canvasCode, streamingCode, initCounter, t]);
 
   const handleBgChange = (bg: 'dark' | 'light' | 'warm') => {
-    setChartBg(bg);
+    setChartBgOverride(bg);
     localStorage.setItem('smartdiagram_chart_bg', bg);
   };
 

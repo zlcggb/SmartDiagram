@@ -15,6 +15,10 @@ from app.services.material_gateway_service import (
 PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
 
+def test_default_material_upload_limit_is_50_mib():
+    assert MAX_MATERIAL_BYTES == 50 * 1024 * 1024
+
+
 def _pptx_bytes() -> bytes:
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[6])

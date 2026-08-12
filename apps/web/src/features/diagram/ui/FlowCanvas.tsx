@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import ReactFlow, {
   Background, Controls, MiniMap,
   useNodesState, useEdgesState, MarkerType,
@@ -25,16 +26,31 @@ import { useT } from '@/app/i18n';
 const EXPORT_PADDING = 80;
 const EXPORT_SCALE = 2;
 
+interface FlowDocument extends Record<string, unknown> {
+  nodes: Node[];
+  edges: Edge[];
+}
+
+function toFlowDocument(value: unknown): FlowDocument | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  return {
+    ...record,
+    nodes: Array.isArray(record.nodes) ? record.nodes as Node[] : [],
+    edges: Array.isArray(record.edges) ? record.edges as Edge[] : [],
+  };
+}
+
 // ─── Streaming JSON Parser for Progressive Render ───
 
-function tryParseStreamingJSON(rawStr: string) {
+function tryParseStreamingJSON(rawStr: string): unknown {
   let code = rawStr.trim();
   if (code.startsWith('```')) {
     code = code.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
   }
 
-  let cleaned = code;
-  let stack: string[] = [];
+  const cleaned = code;
+  const stack: string[] = [];
   let inString = false;
   let escaped = false;
   let lastValidIndex = 0;
@@ -77,7 +93,7 @@ function tryParseStreamingJSON(rawStr: string) {
         subStr = subStr.slice(0, -1).trim();
       }
 
-      let tempStack: string[] = [];
+      const tempStack: string[] = [];
       let tempInString = false;
       for (let i = 0; i < subStr.length; i++) {
         const char = subStr[i];
@@ -100,7 +116,7 @@ function tryParseStreamingJSON(rawStr: string) {
 
       return JSON.parse(subStr + suffix);
     }
-  } catch (e) {
+  } catch {
     // ignore and fallback
   }
 
@@ -109,14 +125,14 @@ function tryParseStreamingJSON(rawStr: string) {
     if (inString) {
       suffix += '"';
     }
-    let tempStack = [...stack];
+    const tempStack = [...stack];
     while (tempStack.length > 0) {
       const top = tempStack.pop();
       if (top === '{') suffix += '}';
       if (top === '[') suffix += ']';
     }
     return JSON.parse(cleaned + suffix);
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -265,7 +281,7 @@ function EditableNode({ id, data, selected }: NodeProps) {
     whiteSpace: 'pre-wrap' as const,
     wordBreak: 'break-word' as const,
     maxWidth: origStyle.maxWidth ?? 360,
-    textAlign: (origStyle.textAlign as any) ?? 'left',
+    textAlign: (origStyle.textAlign as CSSProperties['textAlign']) ?? 'left',
   };
 
   return (
@@ -345,33 +361,34 @@ export default function FlowCanvas() {
     }
 
     try {
-      let parsed: any = null;
+      let parsedValue: unknown = null;
       if (isStreaming) {
-        parsed = tryParseStreamingJSON(activeCode);
+        parsedValue = tryParseStreamingJSON(activeCode);
       } else {
         let code = activeCode.trim();
         if (code.startsWith('```')) {
           code = code.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
         }
-        parsed = JSON.parse(code);
+        parsedValue = JSON.parse(code);
       }
 
+      const parsed = toFlowDocument(parsedValue);
       if (!parsed) return;
 
-      const rawNodes: Node[] = (parsed.nodes || []).map((n: any) => ({
+      const rawNodes: Node[] = parsed.nodes.map((n) => ({
         ...n,
         type: 'editableNode',
         data: { ...n.data, _style: n.style || {} },
         style: undefined,
       }));
-      const rawEdges: Edge[] = (parsed.edges || []).map((e: any) => ({
+      const rawEdges: Edge[] = parsed.edges.map((e) => ({
         ...e,
         markerEnd: e.markerEnd || { type: MarkerType.ArrowClosed },
       }));
 
       // Only set error if not streaming (streaming errors are transient)
       if (rawNodes.length === 0 && !isStreaming) {
-        setError('No nodes found in the flow data');
+        setTimeout(() => setError('No nodes found in the flow data'), 0);
         return;
       }
 
@@ -381,16 +398,18 @@ export default function FlowCanvas() {
         layoutedNodes = getLayoutedElements(rawNodes, rawEdges, 'TB');
       }
 
-      setError(null);
-      setNodes(layoutedNodes);
-      setEdges(rawEdges);
+      setTimeout(() => {
+        setError(null);
+        setNodes(layoutedNodes);
+        setEdges(rawEdges);
+      }, 0);
     } catch (e: unknown) {
       if (!isStreaming) {
         const msg = e instanceof Error ? e.message : String(e);
-        setError(`Parse error: ${msg}`);
+        setTimeout(() => setError(`Parse error: ${msg}`), 0);
       }
     }
-  }, [isStreaming, canvasCode, streamingCode]);
+  }, [isStreaming, canvasCode, streamingCode, setEdges, setNodes]);
 
   // Build a full snapshot from current ReactFlow state (live positions + labels)
   const buildSnapshot = useCallback(() => {
@@ -399,13 +418,14 @@ export default function FlowCanvas() {
       if (code.startsWith('```')) {
         code = code.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
       }
-      const parsed = JSON.parse(code);
+      const parsed = toFlowDocument(JSON.parse(code));
+      if (!parsed) return null;
 
       // Use current nodes from ReactFlow for position + data
       const currentNodes = getNodes();
       const nodeMap = new Map(currentNodes.map((n) => [n.id, n]));
 
-      const snapshotNodes = (parsed.nodes || []).map((origNode: any) => {
+      const snapshotNodes = parsed.nodes.map((origNode) => {
         const live = nodeMap.get(origNode.id);
         if (live) {
           return {
@@ -440,7 +460,7 @@ export default function FlowCanvas() {
         const snapshot = buildSnapshot();
         if (snapshot) {
           // Also apply the just-edited label in case getNodes hasn't updated yet
-          snapshot.nodes = snapshot.nodes.map((n: any) =>
+          snapshot.nodes = snapshot.nodes.map((n) =>
             n.id === nodeId ? { ...n, data: { ...n.data, label: newLabel } } : n
           );
           selfSyncRef.current = true;

@@ -12,6 +12,7 @@ import type {
   SlideSearchResult,
   SlideSearchSynthesis
 } from "@ppt-agent/shared";
+import { PPT_MAX_PAGE_COUNT } from "@ppt-agent/shared";
 
 type DesignGuideInput = {
   layoutType: string;
@@ -286,7 +287,8 @@ export function mockBriefQuestions(topic: string): BriefQuestion[] {
 }
 
 export function mockFinalizeBrief(topic: string, answers: Record<string, string>): BriefJson {
-  const pageCount = Number.parseInt(answers.pages?.replace(/\D/g, "") || "8", 10);
+  const pageValues = answers.pages?.match(/\d+/g)?.map(Number).filter((value) => value > 0) ?? [];
+  const pageCount = pageValues.length > 0 ? Math.max(...pageValues) : 8;
   return {
     topic,
     questions: mockBriefQuestions(topic),
@@ -294,7 +296,7 @@ export function mockFinalizeBrief(topic: string, answers: Record<string, string>
     summary: `围绕「${topic}」为 ${answers.audience || "目标受众"} 制作演示，目标：${answers.purpose || "完成汇报"}。必讲：${answers.must || "核心结论"}。`,
     audience: answers.audience || "待确认受众",
     purpose: answers.purpose || "待确认目的",
-    pageCount: Number.isFinite(pageCount) && pageCount > 0 ? Math.min(16, pageCount) : 8,
+    pageCount: Number.isFinite(pageCount) && pageCount > 0 ? Math.min(PPT_MAX_PAGE_COUNT, pageCount) : 8,
     styleNotes: answers.avoid || ""
   };
 }

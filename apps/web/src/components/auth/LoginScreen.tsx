@@ -164,9 +164,6 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
   // Fetch captcha config on mount and allow a real retry when the API is still starting.
   useEffect(() => {
     let cancelled = false;
-    setCaptchaConfigState('loading');
-    setCaptchaConfig(null);
-    setCaptchaResult(null);
     void fetchCaptchaConfig().then((config) => {
       if (cancelled) return;
       if (!config.challenge_url) {
@@ -175,6 +172,7 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
       }
       setCaptchaConfig(config);
       setCaptchaConfigState('ready');
+      setMode((current) => current === 'register' && !config.enabled ? 'login' : current);
       // Auto-fill demo credentials only when demo presets are enabled
       const userPreset = config.demo_presets?.user;
       if (config.show_demo_presets && userPreset) {
@@ -188,12 +186,6 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
       cancelled = true;
     };
   }, [captchaReloadKey]);
-
-  useEffect(() => {
-    if (mode === 'register' && captchaConfigState === 'ready' && !captchaConfig?.enabled) {
-      setMode('login');
-    }
-  }, [captchaConfig?.enabled, captchaConfigState, mode]);
 
   const switchMode = (next: AuthMode) => {
     setMode(next);
@@ -462,7 +454,16 @@ export default function LoginScreen({ onLogin, displayMode = 'page', onClose }: 
               <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800" role="alert">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span className="min-w-0 flex-1">安全验证服务暂不可用</span>
-                <button type="button" className="rounded-md px-2 py-1 font-semibold hover:bg-amber-100" onClick={() => setCaptchaReloadKey((key) => key + 1)}>
+                <button
+                  type="button"
+                  className="rounded-md px-2 py-1 font-semibold hover:bg-amber-100"
+                  onClick={() => {
+                    setCaptchaConfigState('loading');
+                    setCaptchaConfig(null);
+                    setCaptchaResult(null);
+                    setCaptchaReloadKey((key) => key + 1);
+                  }}
+                >
                   重试
                 </button>
               </div>

@@ -33,9 +33,9 @@ export default function SaveButton() {
     let newCode = '';
     try {
       const elements = excalidrawAPI.getSceneElements();
-      const active = elements.filter((el: any) => !el.isDeleted);
+      const active = elements.filter((el) => !el.isDeleted);
       newCode = JSON.stringify(active, null, 2);
-    } catch (e) {
+    } catch {
       setError('Failed to read canvas content');
       return;
     }
@@ -58,7 +58,9 @@ export default function SaveButton() {
         try {
           const payload = await response.json();
           msg = payload.detail || msg;
-        } catch {}
+        } catch {
+          // Fall back to the HTTP status text when the response is not JSON.
+        }
         throw new Error(msg);
       }
 
@@ -90,9 +92,9 @@ export default function SaveButton() {
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2500);
-    } catch (e: any) {
-      console.error('[SaveButton] Save failed:', e);
-      setError(e.message || 'Failed to save diagram');
+    } catch (error: unknown) {
+      console.error('[SaveButton] Save failed:', error);
+      setError(error instanceof Error ? error.message : 'Failed to save diagram');
     } finally {
       setSaving(false);
     }

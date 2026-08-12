@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Loader2, SlidersHorizontal, X } from 'lucide-react';
 import { useChatStore } from '@/features/diagram/model/chatStore';
 import { API_BASE, enterpriseBodyContext, enterpriseHeaders, hasProjectContext } from '@/shared/lib/config/enterpriseContext';
@@ -27,7 +27,7 @@ interface PreferenceForm {
 
 interface PreferenceMemory {
   status?: string;
-  preferences?: Record<string, any>;
+  preferences?: Record<string, unknown>;
   sources?: Record<string, boolean>;
 }
 
@@ -55,11 +55,14 @@ const hexColor = (value: unknown, fallback: string) => {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
 };
 
+const asRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
+
 const formFromPreferences = (memory: PreferenceMemory | null, currentScope: PreferenceScope): PreferenceForm => {
   const preferences = memory?.preferences || {};
-  const style = typeof preferences.style === 'object' && preferences.style ? preferences.style : {};
-  const flow = typeof preferences.flow === 'object' && preferences.flow ? preferences.flow : {};
-  const charts = typeof preferences.charts === 'object' && preferences.charts ? preferences.charts : {};
+  const style = asRecord(preferences.style);
+  const flow = asRecord(preferences.flow);
+  const charts = asRecord(preferences.charts);
   const mergedFlow = { ...style, ...flow };
   const palette = Array.isArray(charts.palette) && charts.palette.length > 0
     ? charts.palette.map(String).join(', ')
@@ -85,7 +88,7 @@ const preferencesFromForm = (form: PreferenceForm) => {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 12);
-  const preferences: Record<string, any> = {
+  const preferences: Record<string, unknown> = {
     flow: {
       edge_color: form.edgeColor,
       edge_width: clampNumber(form.edgeWidth, 2, 1, 8),
@@ -133,7 +136,7 @@ export default function DiagramPreferencesPanel({ open, onClose, embedded = fals
     setSaved(false);
   };
 
-  const loadPreferences = async (scope: PreferenceScope = form.scope) => {
+  const loadPreferences = useCallback(async (scope?: PreferenceScope) => {
     setLoading(true);
     setError('');
     try {
@@ -144,14 +147,14 @@ export default function DiagramPreferencesPanel({ open, onClose, embedded = fals
       if (!res.ok) throw new Error(await res.text());
       const payload = await res.json() as PreferenceMemory;
       setMemory(payload);
-      setForm(formFromPreferences(payload, scope));
+      setForm((current) => formFromPreferences(payload, scope ?? current.scope));
     } catch (err) {
       console.error('[Preferences] Load failed:', err);
       setError((err as Error).message);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const savePreferences = async () => {
     setSaving(true);
@@ -183,8 +186,10 @@ export default function DiagramPreferencesPanel({ open, onClose, embedded = fals
   };
 
   useEffect(() => {
-    if (open) void loadPreferences(form.scope);
-  }, [open]);
+    if (!open) return;
+    const timer = window.setTimeout(() => void loadPreferences(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadPreferences, open]);
 
   if (!open) return null;
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -344,10 +344,12 @@ export default function OpsDashboard({ open, onClose, embedded = false }: { open
     }
   };
 
+  const loadDashboardOnOpen = useEffectEvent(loadDashboard);
+
   useEffect(() => {
-    if (open) {
-      void loadDashboard();
-    }
+    if (!open) return;
+    const timer = window.setTimeout(() => void loadDashboardOnOpen(), 0);
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   useEffect(() => {

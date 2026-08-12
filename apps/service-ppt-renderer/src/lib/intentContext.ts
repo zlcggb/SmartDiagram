@@ -1,4 +1,4 @@
-import type { BriefJson, BriefQuestion, ProjectDto } from "@ppt-agent/shared";
+import { PPT_MAX_PAGE_COUNT, type BriefJson, type BriefQuestion, type ProjectDto } from "@ppt-agent/shared";
 
 type FactExtractionProject = Pick<
   ProjectDto,
@@ -61,7 +61,7 @@ function confirmedPageCount(
     /多少页|页数|总页数|页面数量/i
   );
   const values = raw?.match(/\d+/g)?.map(Number).filter((value) => value > 0) ?? [];
-  return values.length > 0 ? Math.min(20, Math.max(...values)) : project.pageCount;
+  return values.length > 0 ? Math.min(PPT_MAX_PAGE_COUNT, Math.max(...values)) : project.pageCount;
 }
 
 export function buildConfirmedBrief(

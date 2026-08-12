@@ -44,6 +44,16 @@ const stageNames: Record<string, string> = {
   brief: "需求澄清",
 };
 
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div style={{ minWidth: 0, padding: "14px 16px", borderRadius: 12, background: "#fff", border: "1px solid #e5e7eb" }}>
+      <div style={{ marginBottom: 6, fontSize: 11, color: "#6b7280", fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: "#111827", letterSpacing: "-0.02em" }}>{value}</div>
+      {sub ? <div style={{ marginTop: 2, fontSize: 10, color: "#9ca3af" }}>{sub}</div> : null}
+    </div>
+  );
+}
+
 export function TokenDashboardModal({ onClose }: { onClose: () => void }) {
   const summary = useWorkbenchStore((state) => state.aiUsageSummary);
   const refreshAiUsage = useWorkbenchStore((state) => state.refreshAiUsage);
@@ -59,8 +69,14 @@ export function TokenDashboardModal({ onClose }: { onClose: () => void }) {
   }, [refreshAiUsage]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let cancelled = false;
+    void refreshAiUsage().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshAiUsage]);
 
   const tokenUsage = summary?.tokenUsage;
   const inputTokens = tokenUsage?.promptTokens ?? 0;
@@ -83,14 +99,6 @@ export function TokenDashboardModal({ onClose }: { onClose: () => void }) {
     new Set(events.map((event) => event.model).filter((name) => name && name !== "unknown")),
   );
   const headerModel = usedModels.length > 0 ? usedModels.join(" · ") : (summary?.model ?? "AI");
-
-  const Stat = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
-    <div style={{ minWidth: 0, padding: "14px 16px", borderRadius: 12, background: "#fff", border: "1px solid #e5e7eb" }}>
-      <div style={{ marginBottom: 6, fontSize: 11, color: "#6b7280", fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: "#111827", letterSpacing: "-0.02em" }}>{value}</div>
-      {sub ? <div style={{ marginTop: 2, fontSize: 10, color: "#9ca3af" }}>{sub}</div> : null}
-    </div>
-  );
 
   return (
     <div

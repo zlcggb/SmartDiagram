@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 部署前环境变量：合并旧文件（可选）+ 双库/密钥校验
+# 部署前环境变量：只读校验，或显式合并旧文件后校验
 #
 # 用法:
 #   bash scripts/validate-deploy-env.sh              # 仅校验
@@ -35,7 +35,7 @@ usage() {
   -h, --help      显示帮助
 
 校验项:
-  - 根 .env 存在；缺键从 .env.example 追加
+  - 根 .env 存在，且包含 .env.example 声明的键
   - DIAGRAM_DATABASE_URL → smartdiagram；DATABASE_URL → ppt_agent（不可混用）
   - DB_PASSWORD 与连接串中的密码一致
   - PPT_INTERNAL_API_SECRET 长度 ≥ 32
@@ -81,6 +81,7 @@ info() {
 
 strip_quotes() {
   local value="$1"
+  value="${value%$'\r'}"
   value="${value%\"}"
   value="${value#\"}"
   value="${value%\'}"
@@ -111,7 +112,7 @@ env_has_key() {
 is_placeholder() {
   local value="$1"
   case "$value" in
-    ""|"sk-your-api-key"|"replace-with-a-long-random-value"|"smartdiagram-ppt-internal-dev-change-me"|"smartdiagram-dev-session-secret-change-me"|"smartdiagram-dev-altcha-hmac-key-change-me") return 0 ;;
+    ""|"sk-your-api-key"|"your-api-key"|"your-openai-api-key"|"your-gemini-api-key"|"replace-with-a-long-random-value"|"smartdiagram-ppt-internal-dev-change-me"|"smartdiagram-dev-session-secret-change-me"|"smartdiagram-dev-altcha-hmac-key-change-me") return 0 ;;
   esac
   return 1
 }
@@ -239,8 +240,7 @@ ensure_root_env_keys() {
   status="$(ensure_root_env "$ROOT_DIR")"
   case "$status" in
     created)
-      fail "已从 .env.example 创建根 .env，请先填入密钥后再部署"
-      return 1
+      warn "已从 .env.example 创建根 .env，请先填入真实配置"
       ;;
     appended)
       warn "已向根 .env 追加 .env.example 中的缺失键，请确认并填入真实值"
@@ -251,6 +251,29 @@ ensure_root_env_keys() {
       return 1
       ;;
   esac
+}
+
+validate_root_env_keys() {
+  local line key
+
+  if [ ! -f "$ENV_FILE" ]; then
+    fail "缺少 $ENV_FILE；请先从 .env.example 创建，默认校验不会写入文件"
+    return 1
+  fi
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      ""|\#*) continue ;;
+      *=*) ;;
+      *) continue ;;
+    esac
+    key="${line%%=*}"
+    key="$(printf '%s' "$key" | tr -d '[:space:]')"
+    [ -n "$key" ] || continue
+    if ! env_has_key "$ENV_FILE" "$key"; then
+      fail "根 .env 缺少键: $key（运行 --merge-legacy 可显式补齐模板键）"
+    fi
+  done <"$EXAMPLE_FILE"
 }
 
 validate_dual_database() {
@@ -421,8 +444,11 @@ detect_stale_legacy_files() {
 
 validate_deploy_env() {
   local root_dir="${1:-$ROOT_DIR}"
+  ROOT_DIR="$root_dir"
   ENV_FILE="$root_dir/.env"
   EXAMPLE_FILE="$root_dir/.env.example"
+  ERRORS=0
+  WARNINGS=0
 
   echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
   echo -e "${CYAN}║   部署前环境变量检查                      ║${NC}"
@@ -437,23 +463,11 @@ validate_deploy_env() {
   if [ "$MERGE_LEGACY" = true ]; then
     info "合并旧环境文件中的缺失键..."
     merge_legacy_env_files
+    ensure_root_env_keys || return 1
     echo ""
   fi
 
-  ensure_root_env_keys || return 1
-
-  info "自动生成部署密钥（数据库 / Auth，首次部署）..."
-  # shellcheck source=scripts/bootstrap-deploy-secrets.sh
-  source "$ROOT_DIR/scripts/bootstrap-deploy-secrets.sh"
-  bootstrap_deploy_secrets "$ENV_FILE" || {
-    fail "部署密钥自动初始化失败"
-    return 1
-  }
-  case "${DEPLOY_DB_BOOTSTRAP_STATUS:-}" in
-    generated) ok "已自动生成 DB_PASSWORD 并同步双库 URL" ;;
-    existing_volume) ok "已有 PostgreSQL 卷，保留 DB_PASSWORD" ;;
-  esac
-  echo ""
+  validate_root_env_keys || return 1
 
   info "校验双库与密钥..."
   validate_dual_database

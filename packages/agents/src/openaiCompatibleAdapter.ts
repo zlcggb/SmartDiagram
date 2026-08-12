@@ -11,6 +11,7 @@ import type {
   SlidePlanDto,
   SpeechWritingStyleId
 } from "@ppt-agent/shared";
+import { PPT_MAX_PAGE_COUNT } from "@ppt-agent/shared";
 import {
   buildExtractFactsPrompt,
   buildOutlinePrompt,
@@ -26,10 +27,10 @@ import {
 } from "./prompts.js";
 import {
   extractFactsSchema,
+  generateExactOutline,
   normalizeFactsResult,
-  normalizeOutline,
   normalizeSlidePlan,
-  outlineSchema,
+  outlineSchemaForPageCount,
   parseModelJson,
   sanitizeSvgOutput,
   slidePlanSchema
@@ -615,8 +616,19 @@ export class OpenAiCompatibleAdapter implements GeminiAdapter {
     onToken?: (token: string) => void
   ): Promise<OutlineSlideDraft[]> {
     const allowedFactIds = new Set(confirmedFacts.map((fact) => fact.id));
-    const result = await this.generateJson<unknown>(buildOutlinePrompt(project, confirmedFacts), outlineSchema, outlineSystemPrompt, { stage: "outline" }, onToken);
-    return normalizeOutline(result, allowedFactIds, Math.max(1, Math.min(12, project.pageCount || 6)));
+    const pageCount = Math.max(1, Math.min(PPT_MAX_PAGE_COUNT, project.pageCount || 6));
+    return generateExactOutline(pageCount, allowedFactIds, (attempt, previousCount) => {
+      const retryInstruction = attempt === 0
+        ? ""
+        : `\n\n上一次只返回 ${previousCount ?? 0} 页。请重新生成完整数组，这一次必须恰好 ${pageCount} 页。`;
+      return this.generateJson<unknown>(
+        `${buildOutlinePrompt(project, confirmedFacts)}${retryInstruction}`,
+        outlineSchemaForPageCount(pageCount),
+        outlineSystemPrompt,
+        { stage: "outline" },
+        attempt === 0 ? onToken : undefined
+      );
+    });
   }
 
   async generateSlidePlan(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void): Promise<SlidePlanDto> {

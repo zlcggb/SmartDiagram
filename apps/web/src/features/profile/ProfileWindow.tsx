@@ -193,15 +193,15 @@ export function ProfileWindow({ onClose, triggerRef }: ProfileWindowProps) {
               <label>
                 <span>本月 Token 消耗</span>
                 <output style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Zap size={14} color={(budget as any).budget?.hard_limit_enabled ? '#f59e0b' : '#ef4444'} />
+                  <Zap size={14} color={budget.budget.hard_limit_enabled ? '#f59e0b' : '#ef4444'} />
                   <span style={{ fontWeight: 500 }}>
-                    {((budget as any).usage?.estimated_total_tokens ?? 0).toLocaleString()} / {((budget as any).budget?.monthly_token_limit ?? 0).toLocaleString()}
+                    {budget.usage.estimated_total_tokens.toLocaleString()} / {budget.budget.monthly_token_limit.toLocaleString()}
                   </span>
                 </output>
               </label>
               <label>
                 <span>AI 生成次数</span>
-                <output>{(budget as any).usage?.run_count ?? 0}</output>
+                <output>{budget.usage.run_count}</output>
               </label>
             </div>
           )}

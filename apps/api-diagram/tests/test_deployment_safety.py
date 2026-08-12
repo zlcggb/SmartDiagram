@@ -1,15 +1,96 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DESTRUCTIVE_SQL = re.compile(r"\b(?:DROP|TRUNCATE)\b|\bDELETE\s+FROM\b", re.IGNORECASE)
+
+
+def _bash_candidates() -> list[Path]:
+    candidates: list[Path] = []
+    configured = os.environ.get("SMARTDIAGRAM_BASH")
+    if configured:
+        candidates.append(Path(configured))
+
+    if sys.platform == "win32":
+        git_exec = subprocess.run(
+            ["git", "--exec-path"],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        if git_exec.returncode == 0 and git_exec.stdout.strip():
+            exec_path = Path(git_exec.stdout.strip())
+            for parent in (exec_path, *exec_path.parents):
+                candidates.append(parent / "usr" / "bin" / "bash.exe")
+
+    path_bash = shutil.which("bash")
+    if path_bash:
+        candidates.append(Path(path_bash))
+
+    unique: list[Path] = []
+    for candidate in candidates:
+        if candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
+@lru_cache(maxsize=1)
+def _resolve_bash() -> str | None:
+    for candidate in _bash_candidates():
+        try:
+            probe = subprocess.run(
+                [
+                    str(candidate),
+                    "--noprofile",
+                    "--norc",
+                    "-c",
+                    "export PATH=/usr/local/bin:/usr/bin:/bin:$PATH; "
+                    "command -v chmod >/dev/null && command -v dirname >/dev/null && "
+                    "printf smartdiagram-bash-ok",
+                ],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if probe.returncode == 0 and probe.stdout == "smartdiagram-bash-ok":
+            return str(candidate)
+    return None
+
+
+def _require_bash() -> str:
+    bash = _resolve_bash()
+    if bash is None:
+        pytest.skip("deployment shell tests require a working POSIX Bash; set SMARTDIAGRAM_BASH")
+    return bash
+
+
+def _bash_command(bash: str, *arguments: str) -> list[str]:
+    return [
+        bash,
+        "--noprofile",
+        "--norc",
+        "-c",
+        'export PATH=/usr/local/bin:/usr/bin:/bin:$PATH; exec "$@"',
+        "smartdiagram-bash",
+        *arguments,
+    ]
 
 
 def _read_local_dev_stack() -> str:
@@ -25,11 +106,40 @@ def _run_secret_bootstrap(env_file: Path, *, secret: str | None = None) -> subpr
     if secret is not None:
         environment["PPT_INTERNAL_API_SECRET"] = secret
     return subprocess.run(
-        ["bash", str(REPO_ROOT / "scripts" / "ensure-deploy-secret.sh"), str(env_file)],
+        _bash_command(
+            _require_bash(),
+            str(REPO_ROOT / "scripts" / "ensure-deploy-secret.sh"),
+            str(env_file),
+        ),
         cwd=REPO_ROOT,
         env=environment,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+
+
+def _validator_fixture(tmp_path: Path) -> Path:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    for name in ("validate-deploy-env.sh", "ensure-root-env.sh"):
+        shutil.copy2(REPO_ROOT / "scripts" / name, scripts_dir / name)
+    shutil.copy2(REPO_ROOT / ".env.example", tmp_path / ".env.example")
+    return scripts_dir / "validate-deploy-env.sh"
+
+
+def _run_env_validator(project_root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        _bash_command(
+            _require_bash(),
+            str(project_root / "scripts" / "validate-deploy-env.sh"),
+            *arguments,
+        ),
+        cwd=project_root,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
 
@@ -52,7 +162,11 @@ def test_deploy_secret_bootstrap_generates_once_with_private_permissions(tmp_pat
     values = _dotenv_values(env_file, "PPT_INTERNAL_API_SECRET")
     assert len(values) == 1
     assert re.fullmatch(r"[0-9a-f]{64}", values[0])
-    assert env_file.stat().st_mode & 0o777 == 0o600
+    if os.name == "nt":
+        bootstrap = (REPO_ROOT / "scripts" / "ensure-deploy-secret.sh").read_text(encoding="utf-8")
+        assert 'chmod 600 "$temp_file"' in bootstrap
+    else:
+        assert env_file.stat().st_mode & 0o777 == 0o600
     assert values[0] not in first.stdout
     assert values[0] not in first.stderr
 
@@ -70,6 +184,7 @@ def test_deploy_secret_bootstrap_replaces_placeholders_and_deduplicates_key(tmp_
         "ANOTHER_SETTING=also-keep\n"
         "PPT_INTERNAL_API_SECRET=replace-with-a-long-random-value\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     result = _run_secret_bootstrap(env_file)
@@ -105,6 +220,35 @@ def test_deploy_secret_bootstrap_respects_external_secret_without_writing_file(t
     assert not env_file.exists()
     assert external_secret not in result.stdout
     assert external_secret not in result.stderr
+
+
+def test_env_validation_is_read_only_by_default(tmp_path: Path) -> None:
+    _validator_fixture(tmp_path)
+    env_file = tmp_path / ".env"
+    env_file.write_bytes((tmp_path / ".env.example").read_bytes())
+    before = hashlib.sha256(env_file.read_bytes()).digest()
+
+    result = _run_env_validator(tmp_path)
+
+    assert result.returncode != 0
+    assert hashlib.sha256(env_file.read_bytes()).digest() == before
+    assert "OPENAI_API_KEY（Diagram 分区）仍为占位符或未设置" in result.stderr
+    assert "PPT OPENAI_COMPATIBLE_API_KEY 未配置" in result.stderr
+    assert "sk-your-api-key" not in result.stdout + result.stderr
+    assert "your-openai-api-key" not in result.stdout + result.stderr
+
+
+def test_env_merge_mode_explicitly_adds_missing_template_keys(tmp_path: Path) -> None:
+    _validator_fixture(tmp_path)
+    env_file = tmp_path / ".env"
+    env_file.write_text("AI_PROVIDER=mock\n", encoding="utf-8")
+    before = hashlib.sha256(env_file.read_bytes()).digest()
+
+    result = _run_env_validator(tmp_path, "--merge-legacy")
+
+    assert result.returncode != 0
+    assert hashlib.sha256(env_file.read_bytes()).digest() != before
+    assert "DIAGRAM_DATABASE_URL=" in env_file.read_text(encoding="utf-8")
 
 
 def test_deploy_bootstraps_ppt_secret_before_compose_actions() -> None:

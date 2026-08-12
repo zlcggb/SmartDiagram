@@ -1,8 +1,14 @@
-import type { ProjectMaterialDto, ProjectMaterialStatus } from "@ppt-agent/shared";
+import {
+  materialUploadLimitBytes,
+  resolveMaterialUploadLimitMib,
+  type ProjectMaterialDto,
+  type ProjectMaterialStatus
+} from "@ppt-agent/shared";
 
 export type { ProjectMaterialDto } from "@ppt-agent/shared";
 
-export const MAX_MATERIAL_FILE_BYTES = 15 * 1024 * 1024;
+export const MAX_MATERIAL_FILE_MIB = resolveMaterialUploadLimitMib(import.meta.env?.VITE_PPT_MAX_MATERIAL_MB);
+export const MAX_MATERIAL_FILE_BYTES = materialUploadLimitBytes(MAX_MATERIAL_FILE_MIB);
 export const MAX_MATERIAL_FILES = 8;
 
 export const MATERIAL_EXTENSIONS = [
@@ -73,7 +79,7 @@ function validationError(file: Pick<File, "name" | "size">): string | undefined 
     return `不支持 .${extension || "未知"} 格式，请选择文本、Office、PDF 或图片资料。`;
   }
   if (file.size <= 0) return "文件为空，请选择包含内容的资料。";
-  if (file.size > MAX_MATERIAL_FILE_BYTES) return "单个文件不能超过 15 MB。";
+  if (file.size > MAX_MATERIAL_FILE_BYTES) return `单个文件不能超过 ${MAX_MATERIAL_FILE_MIB} MiB。`;
   return undefined;
 }
 

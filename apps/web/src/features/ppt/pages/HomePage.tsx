@@ -90,8 +90,23 @@ export function HomePage() {
   }, []);
 
   useEffect(() => {
-    void loadRecentProjects();
-  }, [loadRecentProjects]);
+    let cancelled = false;
+    void api.listProjects()
+      .then((projects) => {
+        if (!cancelled) setRecentProjects(projects);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) {
+          setProjectsError(reason instanceof Error ? reason.message : "项目列表加载失败");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const targetId = location.hash.slice(1);

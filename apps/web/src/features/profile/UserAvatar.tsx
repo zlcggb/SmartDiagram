@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { UserRound } from 'lucide-react';
 import type { AuthUser } from '@/shared/store/auth';
 
@@ -15,10 +15,9 @@ export function UserAvatar({
   className = '',
   label,
 }: UserAvatarProps) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState('');
   const avatarUrl = user?.avatar_url?.trim() || '';
-
-  useEffect(() => setImageFailed(false), [avatarUrl]);
+  const imageFailed = avatarUrl === failedAvatarUrl;
 
   const style = { '--user-avatar-size': `${size}px` } as CSSProperties;
   const accessibleLabel = label || (user ? `${user.display_name || user.email}的头像` : '用户头像');
@@ -32,7 +31,7 @@ export function UserAvatar({
       aria-label={accessibleLabel}
     >
       {avatarUrl && !imageFailed ? (
-        <img src={avatarUrl} alt="" onError={() => setImageFailed(true)} />
+        <img src={avatarUrl} alt="" onError={() => setFailedAvatarUrl(avatarUrl)} />
       ) : (
         <UserRound aria-hidden="true" />
       )}

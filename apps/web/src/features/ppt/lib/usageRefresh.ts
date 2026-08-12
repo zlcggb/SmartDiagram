@@ -26,12 +26,32 @@ export function createLatestAsyncCommit<T>(
 
 /** Refresh once now, then poll only while an AI operation is running. */
 export function startAiUsageAutoRefresh(options: AiUsageRefreshOptions): () => void {
+  let refreshInFlight = false;
+  let stopped = false;
+
   const refreshSafely = () => {
-    void Promise.resolve(options.refresh()).catch(() => undefined);
+    if (stopped || refreshInFlight) return;
+    refreshInFlight = true;
+    try {
+      void Promise.resolve(options.refresh())
+        .catch(() => undefined)
+        .finally(() => {
+          refreshInFlight = false;
+        });
+    } catch {
+      refreshInFlight = false;
+    }
   };
   refreshSafely();
-  if (!options.busy) return () => undefined;
+  if (!options.busy) {
+    return () => {
+      stopped = true;
+    };
+  }
 
   const handle = options.schedule(refreshSafely, options.intervalMs ?? 2_000);
-  return () => options.cancel(handle);
+  return () => {
+    stopped = true;
+    options.cancel(handle);
+  };
 }

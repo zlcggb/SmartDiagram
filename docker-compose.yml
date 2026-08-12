@@ -153,6 +153,7 @@ services:
         CN_MIRROR: ${CN_MIRROR:-false}
         NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}
         NGINX_IMAGE: ${NGINX_IMAGE:-nginx:stable-alpine}
+        VITE_PPT_MAX_MATERIAL_MB: ${VITE_PPT_MAX_MATERIAL_MB:-50}
     container_name: smartdiagram-web
     restart: always
     depends_on:

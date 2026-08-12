@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from 'react';
+import { useMemo, useState, type ComponentType } from 'react';
 import {
   Activity,
   AlertCircle,
@@ -48,11 +48,18 @@ interface NavItem {
 
 export default function SettingsModal({
   open,
+  ...props
+}: SettingsModalProps) {
+  if (!open) return null;
+  return <SettingsModalContent {...props} />;
+}
+
+function SettingsModalContent({
   authSession,
   onClose,
   onLogout,
   onClearConversation,
-}: SettingsModalProps) {
+}: Omit<SettingsModalProps, 'open'>) {
   const { modelConfig, setModelConfig, canvasMode, setCanvasMode } = useChatStore();
   const { t, locale, toggleLocale } = useT();
   const isMobile = useIsMobile();
@@ -63,17 +70,6 @@ export default function SettingsModal({
   const [modelId, setModelId] = useState(modelConfig?.model_id || '');
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testError, setTestError] = useState('');
-
-  useEffect(() => {
-    if (open) {
-      setActiveSection('appearance');
-      setApiKey(modelConfig?.api_key || '');
-      setBaseUrl(modelConfig?.base_url || '');
-      setModelId(modelConfig?.model_id || '');
-      setTestStatus('idle');
-      setTestError('');
-    }
-  }, [open, modelConfig]);
 
   const navItems = useMemo<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -158,8 +154,6 @@ export default function SettingsModal({
     });
     onClose();
   };
-
-  if (!open) return null;
 
   const sidebarClass = isLight
     ? 'border-slate-200 bg-cyan-100/80 text-slate-800'

@@ -106,3 +106,20 @@ test("确认需求只根据现有问题和回答生成确定性快照", () => {
     visual_rule: "不要大段文字"
   });
 });
+
+test("确认需求中的页数不会超过项目统一上限", () => {
+  const confirmed = buildConfirmedBrief(
+    {
+      ...project,
+      briefJson: {
+        topic: project.topic ?? project.name,
+        questionSource: "ai",
+        questions: [{ id: "page_plan", question: "预期多少页？" }],
+        answers: {}
+      }
+    },
+    { page_plan: "希望生成 30 页" }
+  );
+
+  assert.equal(confirmed.pageCount, 16);
+});

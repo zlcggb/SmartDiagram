@@ -10,8 +10,10 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import MindElixir from 'mind-elixir';
+import type { MindElixirInstance, NodeObj } from 'mind-elixir';
 import 'mind-elixir/style.css';
 import { Transformer } from 'markmap-lib';
+import type { IPureNode } from 'markmap-common';
 import { useChatStore } from '@/features/diagram/model/chatStore';
 import { useT } from '@/app/i18n';
 
@@ -24,16 +26,16 @@ const stripHtmlAndDecode = (html: string) => {
 };
 
 /** Convert markmap tree node → mind-elixir tree node */
-const convertToMindElixir = (node: any, pathId: string = 'root'): any => ({
+const convertToMindElixir = (node: IPureNode, pathId: string = 'root'): NodeObj => ({
   topic: stripHtmlAndDecode(node.content),
   id: pathId,
-  children: node.children?.map((c: any, index: number) => convertToMindElixir(c, `${pathId}-${index}`)) || [],
+  children: node.children?.map((child, index) => convertToMindElixir(child, `${pathId}-${index}`)) || [],
 });
 
 /**
  * Recursively restores expanded states from the old instance to the new data node tree
  */
-const restoreExpandedStates = (newNode: any, oldInstance: any) => {
+const restoreExpandedStates = (newNode: NodeObj, oldInstance: MindElixirInstance | null) => {
   if (!oldInstance) return;
   try {
     const oldData = oldInstance.getData?.();
@@ -43,16 +45,16 @@ const restoreExpandedStates = (newNode: any, oldInstance: any) => {
         newNode.expanded = false;
       }
     }
-  } catch (err) {
+  } catch {
     // Quietly ignore if node lookup fails
   }
   if (newNode.children) {
-    newNode.children.forEach((child: any) => restoreExpandedStates(child, oldInstance));
+    newNode.children.forEach((child) => restoreExpandedStates(child, oldInstance));
   }
 };
 
 /** Convert MindElixir tree back to Markdown (for canvasCode sync) */
-const convertToMarkdown = (node: any, level: number = 1): string => {
+const convertToMarkdown = (node: NodeObj, level: number = 1): string => {
   let md = '';
   if (level === 1) {
     md += `# ${node.topic}\n`;
@@ -64,7 +66,7 @@ const convertToMarkdown = (node: any, level: number = 1): string => {
     md += `${'  '.repeat(level - 3)}- ${node.topic}\n`;
   }
   if (node.children) {
-    node.children.forEach((child: any) => {
+    node.children.forEach((child) => {
       md += convertToMarkdown(child, level + 1);
     });
   }
@@ -76,7 +78,7 @@ const convertToMarkdown = (node: any, level: number = 1): string => {
  * First calls scaleFit + toCenter, then measures actual bounding box
  * of rendered .topic elements and applies a second pass if content is clipped.
  */
-const fitWithPadding = (me: any) => {
+const fitWithPadding = (me: MindElixirInstance) => {
   if (!me || !me.container) return;
 
   const container = me.container as HTMLElement;
@@ -161,7 +163,7 @@ export default function MindmapCanvas() {
   const { canvasCode, streamingCode, isStreaming, setCanvasCode, setMindmapInstance, setSelectedNode, canvasMode } = useChatStore();
   const { t } = useT();
   const containerRef = useRef<HTMLDivElement>(null);
-  const mindInstance = useRef<any>(null);
+  const mindInstance = useRef<MindElixirInstance | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isSyncingRef = useRef(false);
   const lastCanvasMode = useRef(canvasMode);
@@ -272,10 +274,10 @@ export default function MindmapCanvas() {
 
     // Reconstruct lines from tree structure
     const lines: { x1: number; y1: number; x2: number; y2: number; toDepth: number }[] = [];
-    const buildLines = (node: any) => {
+    const buildLines = (node: NodeObj) => {
       const fromNode = mappedNodes.find(mn => mn.id === node.id);
       if (fromNode && node.children) {
-        node.children.forEach((child: any) => {
+        node.children.forEach((child) => {
           const toNode = mappedNodes.find(mn => mn.id === child.id);
           if (toNode) {
             lines.push({
@@ -296,7 +298,7 @@ export default function MindmapCanvas() {
       if (currentData?.nodeData) {
         buildLines(currentData.nodeData);
       }
-    } catch (e) {
+    } catch {
       // Quiet fail if data is not fully ready
     }
 
@@ -369,7 +371,7 @@ export default function MindmapCanvas() {
       return;
     }
 
-    setError(null);
+    setTimeout(() => setError(null), 0);
 
     // 如果背景模式切换了，强制清空并重建 MindElixir 实例以加载正确的主题
     if (lastCanvasMode.current !== canvasMode) {
@@ -428,7 +430,7 @@ export default function MindmapCanvas() {
           editable: true,
           contextMenu: true,
           toolBar: true,
-          theme: canvasMode === 'light' ? undefined : ((MindElixir as any).dark || undefined),
+          theme: canvasMode === 'light' ? undefined : MindElixir.DARK_THEME,
         });
         me.init(data);
         mindInstance.current = me;
@@ -447,7 +449,11 @@ export default function MindmapCanvas() {
         });
 
         // Listen for node selection to invoke precise optimization
-        (me.bus as any).addListener('select-node', (node: any) => {
+        const selectionBus = me.bus as unknown as {
+          addListener(type: 'select-node', handler: (node: NodeObj) => void): void;
+          addListener(type: 'unselect-node', handler: () => void): void;
+        };
+        selectionBus.addListener('select-node', (node) => {
           if (node && node.topic) {
             setSelectedNode({
               id: node.id,
@@ -456,7 +462,7 @@ export default function MindmapCanvas() {
             });
           }
         });
-        (me.bus as any).addListener('unselect-node', () => {
+        selectionBus.addListener('unselect-node', () => {
           setSelectedNode(null);
         });
 
@@ -482,7 +488,11 @@ export default function MindmapCanvas() {
         });
 
         // Re-register node selection listeners
-        mindInstance.current.bus.addListener('select-node', (node: any) => {
+        const selectionBus = mindInstance.current.bus as unknown as {
+          addListener(type: 'select-node', handler: (node: NodeObj) => void): void;
+          addListener(type: 'unselect-node', handler: () => void): void;
+        };
+        selectionBus.addListener('select-node', (node) => {
           if (node && node.topic) {
             setSelectedNode({
               id: node.id,
@@ -491,7 +501,7 @@ export default function MindmapCanvas() {
             });
           }
         });
-        mindInstance.current.bus.addListener('unselect-node', () => {
+        selectionBus.addListener('unselect-node', () => {
           setSelectedNode(null);
         });
 
@@ -506,10 +516,10 @@ export default function MindmapCanvas() {
       console.error('[MindmapCanvas] Render error:', e);
       // Only set UI error state if NOT streaming to prevent interrupting the stream due to temporary parsing states
       if (!isStreaming) {
-        setError(msg);
+        setTimeout(() => setError(msg), 0);
       }
     }
-  }, [isStreaming, codeToRender, syncToCanvasCode, setMindmapInstance, canvasMode, updateMiniMap]);
+  }, [isStreaming, codeToRender, syncToCanvasCode, setMindmapInstance, setSelectedNode, canvasMode, updateMiniMap]);
 
   // Final fit and center adjustment when streaming concludes
   useEffect(() => {
@@ -601,7 +611,7 @@ export default function MindmapCanvas() {
           <div ref={containerRef} className="w-full h-full animate-fadeIn" />
 
           {/* MiniMap and Floating Controls */}
-          {!isStreaming && mindInstance.current && (
+          {!isStreaming && codeToRender && (
             <div className="absolute bottom-5 right-5 z-20 flex flex-col gap-2.5 items-end">
               {/* Zoom & Fit & Collapse Controls */}
               <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border shadow-lg backdrop-blur-md transition-colors duration-300 ${
@@ -655,8 +665,8 @@ export default function MindmapCanvas() {
                     if (mindInstance.current) {
                       const rootNode = mindInstance.current.getData().nodeData;
                       if (rootNode.children) {
-                        rootNode.children.forEach((c: any) => {
-                          mindInstance.current.expandNode(mindInstance.current.findEle(c.id), false);
+                        rootNode.children.forEach((child) => {
+                          mindInstance.current?.expandNode(mindInstance.current.findEle(child.id), false);
                         });
                       }
                       syncToCanvasCode();

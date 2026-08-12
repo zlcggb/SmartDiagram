@@ -53,7 +53,7 @@ test("资料白名单覆盖文本、Office、PDF 和常见图片", () => {
   for (const extension of [".txt", ".md", ".csv", ".json", ".html", ".xml", ".rtf", ".pdf", ".docx", ".xlsx", ".pptx", ".png", ".jpg", ".jpeg", ".webp"]) {
     assert.match(MATERIAL_ACCEPT, new RegExp(extension.replace(".", "\\.")));
   }
-  assert.equal(MAX_MATERIAL_FILE_BYTES, 15 * 1024 * 1024);
+  assert.equal(MAX_MATERIAL_FILE_BYTES, 50 * 1024 * 1024);
   assert.equal(MAX_MATERIAL_FILES, 8);
 });
 
@@ -81,7 +81,7 @@ test("选择资料时逐项保留格式与大小错误，不吞掉同批成功�
   assert.match(result.items[1]?.errorMessage ?? "", /不支持/);
   assert.equal(result.items[1]?.retryable, false);
   assert.equal(result.items[2]?.status, "failed");
-  assert.match(result.items[2]?.errorMessage ?? "", /15 MB/);
+  assert.match(result.items[2]?.errorMessage ?? "", /50 MiB/);
   assert.deepEqual(result.overflow, []);
 });
 

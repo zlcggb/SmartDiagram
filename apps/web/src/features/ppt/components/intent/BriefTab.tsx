@@ -23,12 +23,18 @@ export function BriefTab() {
   }, [questions, startBrief]);
 
   useEffect(() => {
+    let cancelled = false;
     const list = questions ?? [];
     const next: Record<string, string> = { ...(project?.briefJson?.answers ?? {}) };
     for (const question of list) {
       if (next[question.id] === undefined) next[question.id] = "";
     }
-    setAnswers(next);
+    queueMicrotask(() => {
+      if (!cancelled) setAnswers(next);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [project?.briefJson?.answers, questions]);
 
   const answeredCount = useMemo(() => {

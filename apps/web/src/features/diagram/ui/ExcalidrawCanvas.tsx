@@ -5,21 +5,64 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useChatStore } from '@/features/diagram/model/chatStore';
+import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 
 // Import Excalidraw's CSS — required for toolbar icons, UI panels, shortcuts
 import '@excalidraw/excalidraw/index.css';
 
 // Lazy imports for Excalidraw (large bundle)
-let ExcalidrawComponent: any = null;
-let exportToBlobFn: any = null;
+type ExcalidrawModule = typeof import('@excalidraw/excalidraw');
+let excalidrawModulePromise: Promise<ExcalidrawModule> | null = null;
 
-async function loadExcalidraw() {
-  if (!ExcalidrawComponent) {
-    const mod = await import('@excalidraw/excalidraw');
-    ExcalidrawComponent = mod.Excalidraw;
-    exportToBlobFn = mod.exportToBlob;
+function loadExcalidraw(): Promise<ExcalidrawModule> {
+  if (!excalidrawModulePromise) {
+    excalidrawModulePromise = import('@excalidraw/excalidraw');
   }
-  return { Excalidraw: ExcalidrawComponent, exportToBlob: exportToBlobFn };
+  return excalidrawModulePromise;
+}
+
+interface RawExcalidrawElement extends Record<string, unknown> {
+  id?: string;
+  type?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  strokeColor?: string;
+  backgroundColor?: string;
+  fillStyle?: string;
+  strokeWidth?: number;
+  roughness?: number;
+  opacity?: number;
+  angle?: number;
+  groupIds?: string[];
+  boundElements?: unknown;
+  link?: string | null;
+  frameId?: string | null;
+  text?: string;
+  originalText?: string;
+  fontSize?: number;
+  fontFamily?: number;
+  textAlign?: string;
+  verticalAlign?: string;
+  baseline?: number;
+  lineHeight?: number;
+  containerId?: string | null;
+  autoResize?: boolean;
+  points?: unknown;
+  lastCommittedPoint?: unknown;
+  startBinding?: unknown;
+  endBinding?: unknown;
+  startArrowhead?: unknown;
+  endArrowhead?: unknown;
+  roundness?: unknown;
+}
+
+function asRawElement(value: unknown): RawExcalidrawElement {
+  return value !== null && typeof value === 'object'
+    ? value as RawExcalidrawElement
+    : {};
 }
 
 /**
@@ -37,17 +80,19 @@ async function loadExcalidraw() {
  *   fontSize, fontFamily, textAlign, verticalAlign, lineHeight,
  *   originalText, containerId, baseline
  */
-function normalizeElement(el: any, idx: number): any {
+function normalizeElement(value: unknown, idx: number): RawExcalidrawElement {
+  const el = asRawElement(value);
   const id = el.id || `el_${idx}`;
   const type = el.type || 'rectangle';
+  const width = el.width ?? 100;
 
   // Universal defaults — EVERY element must have these
-  const base: Record<string, any> = {
+  const base: RawExcalidrawElement = {
     id,
     type,
     x: el.x ?? 0,
     y: el.y ?? 0,
-    width: el.width ?? 100,
+    width,
     height: el.height ?? 50,
     strokeColor: el.strokeColor ?? '#1e1e1e',
     backgroundColor: el.backgroundColor ?? 'transparent',
@@ -99,7 +144,7 @@ function normalizeElement(el: any, idx: number): any {
   if (type === 'arrow' || type === 'line') {
     return {
       ...base,
-      points: el.points ?? [[0, 0], [base.width, 0]],
+      points: el.points ?? [[0, 0], [width, 0]],
       lastCommittedPoint: el.lastCommittedPoint ?? null,
       startBinding: el.startBinding ?? null,
       endBinding: el.endBinding ?? null,
@@ -128,17 +173,45 @@ function normalizeElement(el: any, idx: number): any {
   };
 }
 
+const EXCALIDRAW_ELEMENT_TYPES = new Set([
+  'rectangle', 'diamond', 'ellipse', 'text', 'image', 'arrow', 'line',
+  'freedraw', 'frame', 'magicframe', 'embeddable', 'iframe',
+]);
+
+function isExcalidrawElement(
+  value: RawExcalidrawElement,
+): value is RawExcalidrawElement & ExcalidrawElement {
+  return typeof value.id === 'string'
+    && typeof value.type === 'string'
+    && EXCALIDRAW_ELEMENT_TYPES.has(value.type)
+    && typeof value.x === 'number'
+    && typeof value.y === 'number'
+    && typeof value.width === 'number'
+    && typeof value.height === 'number'
+    && typeof value.strokeColor === 'string'
+    && typeof value.backgroundColor === 'string'
+    && typeof value.fillStyle === 'string'
+    && typeof value.strokeWidth === 'number'
+    && typeof value.roughness === 'number'
+    && typeof value.opacity === 'number'
+    && typeof value.angle === 'number'
+    && Array.isArray(value.groupIds)
+    && typeof value.version === 'number'
+    && typeof value.versionNonce === 'number'
+    && typeof value.seed === 'number';
+}
+
 /**
  * Attempt to recover valid elements from truncated/malformed JSON.
  * Uses brace-counting to extract complete {...} objects even if the
  * overall array is truncated (missing trailing ] or has partial object at end).
  */
-function attemptJSONRecovery(raw: string): any[] | null {
+function attemptJSONRecovery(raw: string): unknown[] | null {
   // If it starts with [, try to extract complete objects from it
   const trimmed = raw.trim();
   if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) return null;
 
-  const objects: any[] = [];
+  const objects: unknown[] = [];
   let braceDepth = 0;
   let inString = false;
   let escapeNext = false;
@@ -172,22 +245,22 @@ function attemptJSONRecovery(raw: string): any[] | null {
 
 export default function ExcalidrawCanvas() {
   const { canvasCode, isStreaming, setExcalidrawAPI, pendingElements } = useChatStore();
-  const [excalidrawAPI, setLocalAPI] = useState<any>(null);
-  const [readyAPI, setReadyAPI] = useState<any>(null);
-  const [ExcalidrawMod, setExcalidrawMod] = useState<any>(null);
+  const [excalidrawAPI, setLocalAPI] = useState<ExcalidrawImperativeAPI | null>(null);
+  const [readyAPI, setReadyAPI] = useState<ExcalidrawImperativeAPI | null>(null);
+  const [ExcalidrawMod, setExcalidrawMod] = useState<ExcalidrawModule | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Track how many elements we've rendered so far (to detect new ones)
   const renderedCountRef = useRef(0);
   // Track all normalized elements currently on canvas
-  const sceneElementsRef = useRef<any[]>([]);
+  const sceneElementsRef = useRef<ExcalidrawElement[]>([]);
   // Whether we've done initial scroll for this generation
   const hasScrolledRef = useRef(false);
 
   // Register excalidraw API to store for toolbar export access
   // Use requestAnimationFrame to ensure Excalidraw is fully initialized
   // before we consider the API "ready" for updateScene calls.
-  const handleAPIReady = useCallback((api: any) => {
+  const handleAPIReady = useCallback((api: ExcalidrawImperativeAPI) => {
     setLocalAPI(api);
     setExcalidrawAPI(api);
     // Delay setting readyAPI to next animation frame so Excalidraw's
@@ -226,7 +299,9 @@ export default function ExcalidrawCanvas() {
       const newElements = pendingElements.slice(prevCount);
       for (let i = 0; i < newElements.length; i++) {
         const normalized = normalizeElement(newElements[i], prevCount + i);
-        sceneElementsRef.current.push(normalized);
+        if (isExcalidrawElement(normalized)) {
+          sceneElementsRef.current.push(normalized);
+        }
       }
 
       // Update the scene with all elements so far
@@ -264,9 +339,9 @@ export default function ExcalidrawCanvas() {
     if (!isStreaming && readyAPI && canvasCode && pendingElements.length === 0) {
       const trimmed = canvasCode.trim();
       try {
-        let elements: any[];
+        let elements: unknown[];
 
-        let parsed: any = null;
+        let parsed: unknown = null;
         try {
           parsed = JSON.parse(trimmed);
         } catch {
@@ -279,14 +354,20 @@ export default function ExcalidrawCanvas() {
         if (Array.isArray(parsed)) {
           elements = parsed;
         } else if (typeof parsed === 'object') {
-          elements = parsed.elements || parsed.code || [];
-          if (!Array.isArray(elements)) elements = [];
+          const record = parsed as Record<string, unknown>;
+          elements = Array.isArray(record.elements)
+            ? record.elements
+            : Array.isArray(record.code)
+              ? record.code
+              : [];
         } else {
           return;
         }
 
         if (Array.isArray(elements) && elements.length > 0) {
-          const processed = elements.map((el, idx) => normalizeElement(el, idx));
+          const processed = elements
+            .map((element, index) => normalizeElement(element, index))
+            .filter(isExcalidrawElement);
           sceneElementsRef.current = processed;
           // Use setTimeout to ensure Excalidraw's scene is fully ready
           setTimeout(() => {
@@ -305,7 +386,7 @@ export default function ExcalidrawCanvas() {
     }
   }, [isStreaming, canvasCode, readyAPI, pendingElements.length]);
 
-  if (loading) {
+  if (loading || !ExcalidrawMod) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-slate-50">
         <div className="text-gray-400 flex flex-col items-center gap-3">

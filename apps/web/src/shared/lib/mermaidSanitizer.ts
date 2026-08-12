@@ -49,7 +49,7 @@ export function stripMermaidCodeFences(content: string): string {
     .replace(/^\uFEFF/, '')
     .replace(CODE_FENCE_RE, '')
     .trim();
-  const smartUnwrapped = unfenced.replace(/^[""\"']+/, '').replace(/[""\"']+$/, '').trim();
+  const smartUnwrapped = unfenced.replace(/^[""']+/, '').replace(/[""']+$/, '').trim();
   return smartUnwrapped || unfenced;
 }
 

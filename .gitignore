@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+/.pnpm-store/
+/package-lock.json
 __pycache__/
 *.pyc
 .venv/
@@ -75,11 +77,13 @@ prisma/dev.db
 /backups/
 playwright-report/
 test-results/
+/.smartdiagram-dev.*.log
 .pytest_cache/
 /.tmp-skill-extract
 # OS
 .DS_Store
 Thumbs.db
+~$*.docx
 
 # GCP Credentials & Test scripts
 gcp-credentials.json

@@ -12,8 +12,10 @@ from typing import Final
 
 from fastapi import UploadFile
 
+from app.core.config import settings
 
-MAX_MATERIAL_BYTES: Final[int] = 15 * 1024 * 1024
+
+MAX_MATERIAL_BYTES: Final[int] = settings.VITE_PPT_MAX_MATERIAL_MB * 1024 * 1024
 _READ_CHUNK_BYTES: Final[int] = 1024 * 1024
 _MAX_ARCHIVE_ENTRIES: Final[int] = 10_000
 _MAX_ARCHIVE_UNCOMPRESSED_BYTES: Final[int] = 100 * 1024 * 1024

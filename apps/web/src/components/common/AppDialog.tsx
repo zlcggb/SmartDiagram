@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface DialogShellProps {
@@ -31,18 +31,7 @@ function DialogShell({ open, title, closeLabel, children, onClose }: DialogShell
   );
 }
 
-export function TextInputDialog({
-  open,
-  title,
-  label,
-  description,
-  initialValue,
-  confirmLabel,
-  cancelLabel,
-  busy = false,
-  onConfirm,
-  onCancel,
-}: {
+interface TextInputDialogProps {
   open: boolean;
   title: string;
   label: string;
@@ -53,16 +42,26 @@ export function TextInputDialog({
   busy?: boolean;
   onConfirm: (value: string) => void | Promise<void>;
   onCancel: () => void;
-}) {
+}
+
+export function TextInputDialog(props: TextInputDialogProps) {
+  if (!props.open) return null;
+  return <TextInputDialogContent {...props} />;
+}
+
+function TextInputDialogContent({
+  title,
+  label,
+  description,
+  initialValue,
+  confirmLabel,
+  cancelLabel,
+  busy = false,
+  onConfirm,
+  onCancel,
+}: Omit<TextInputDialogProps, 'open'>) {
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (open) {
-      setValue(initialValue);
-      setError('');
-    }
-  }, [open, initialValue]);
 
   const submit = async () => {
     const trimmed = value.trim();
@@ -74,7 +73,7 @@ export function TextInputDialog({
   };
 
   return (
-    <DialogShell open={open} title={title} closeLabel={cancelLabel} onClose={onCancel}>
+    <DialogShell open title={title} closeLabel={cancelLabel} onClose={onCancel}>
       <div className="px-5 py-4">
         {description && <p className="mb-4 text-xs leading-relaxed text-slate-500">{description}</p>}
         <label className="mb-1.5 block text-xs font-medium text-slate-700">{label}</label>

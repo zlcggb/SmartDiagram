@@ -226,7 +226,6 @@ function GuestQuotaForm({
     </div>
   );
 }
-
 export function PlatformQuotaProfilesPanel({ open, isLight = true }: PlatformQuotaProfilesPanelProps) {
   const { t } = useT();
   const [profiles, setProfiles] = useState<QuotaProfileRow[]>([]);
@@ -276,7 +275,9 @@ export function PlatformQuotaProfilesPanel({ open, isLight = true }: PlatformQuo
   }, []);
 
   useEffect(() => {
-    if (open) void loadAll();
+    if (!open) return;
+    const timer = window.setTimeout(() => void loadAll(), 0);
+    return () => window.clearTimeout(timer);
   }, [open, loadAll]);
 
   const updateProfile = (
@@ -441,13 +442,4 @@ export function PlatformQuotaProfilesPanel({ open, isLight = true }: PlatformQuo
       )}
     </div>
   );
-}
-
-export function formatQuotaUsage(
-  used: number,
-  limit: number | null | undefined,
-  unlimitedLabel: string
-): string {
-  const limitText = !limit || limit <= 0 ? unlimitedLabel : limit.toLocaleString();
-  return `${used.toLocaleString()} / ${limitText}`;
 }

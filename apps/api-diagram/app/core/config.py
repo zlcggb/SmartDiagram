@@ -11,6 +11,14 @@ load_dotenv(_REPOSITORY_ROOT / ".env", override=False)
 load_dotenv(_BACKEND_ROOT / ".env", override=True)
 
 
+def _material_upload_limit_mib() -> int:
+    try:
+        value = int(os.getenv("VITE_PPT_MAX_MATERIAL_MB", "50"))
+    except ValueError:
+        return 50
+    return value if 1 <= value <= 50 else 50
+
+
 class Settings:
     PROJECT_NAME: str = "SmartDiagram"
     API_PREFIX: str = "/api"
@@ -48,6 +56,7 @@ class Settings:
     USAGE_ROLLUP_REFRESH_ON_STARTUP: bool = os.getenv("USAGE_ROLLUP_REFRESH_ON_STARTUP", "false").lower() == "true"
     USAGE_ROLLUP_REFRESH_INTERVAL_SECONDS: int = int(os.getenv("USAGE_ROLLUP_REFRESH_INTERVAL_SECONDS", "900"))
     PPT_INTERNAL_API_SECRET: str = os.getenv("PPT_INTERNAL_API_SECRET", "")
+    VITE_PPT_MAX_MATERIAL_MB: int = _material_upload_limit_mib()
     MODEL_USAGE_PRICING_JSON: str = os.getenv(
         "MODEL_USAGE_PRICING_JSON",
         '{"gpt-5.3-codex-spark":{"input":18,"output":72,"cache":9,"currency":"CNY"},'

@@ -19,7 +19,8 @@ import {
 import { useT, type Locale } from "@/app/i18n";
 import { API_BASE, enterpriseHeaders } from "@/shared/lib/config/enterpriseContext";
 import { readAuthSession } from "@/shared/lib/config/auth";
-import { PlatformQuotaProfilesPanel, formatQuotaUsage } from "@/shared/ui/settings/PlatformQuotaProfilesPanel";
+import { PlatformQuotaProfilesPanel } from "@/shared/ui/settings/PlatformQuotaProfilesPanel";
+import { formatQuotaUsage } from "@/shared/ui/settings/quotaFormatting";
 
 interface PlatformGuestStats {
   ai_calls: number;
@@ -210,7 +211,9 @@ export default function PlatformUserCenterPanel({
   };
 
   useEffect(() => {
-    if (open) void loadUsers();
+    if (!open) return;
+    const timer = window.setTimeout(() => void loadUsers(), 0);
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   const platformRoleErrorMessage = (detail: string) => {

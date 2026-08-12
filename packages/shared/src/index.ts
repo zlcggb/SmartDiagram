@@ -5,6 +5,7 @@ import {
 } from "@ppt-agent/slide-ir";
 
 export * from "./studioPipeline.js";
+export * from "./uploadLimits.js";
 export { SlideIrSchema };
 export type { SlideIrDocument };
 import { pptExportThemes } from "./themePacks.js";
@@ -57,6 +58,7 @@ export const slideGenerationStatuses = [
 ] as const;
 export const slideDesignVersionSourceSchema = z.enum(["ai", "manual", "legacy"]);
 export const projectModes = ["topic", "paste"] as const;
+export const PPT_MAX_PAGE_COUNT = 16;
 export const briefQuestionSources = ["ai", "fallback"] as const;
 export {
   pptExportThemes,
@@ -382,7 +384,7 @@ export const createProjectSchema = z.object({
   reportType: z.string().min(1).default("项目周报"),
   audience: z.string().min(1).default("待确认受众"),
   purpose: z.string().min(1).default("待确认目的"),
-  pageCount: z.coerce.number().int().min(1).max(16).default(8),
+  pageCount: z.coerce.number().int().min(1).max(PPT_MAX_PAGE_COUNT).default(8),
   theme: z.string().default("white-blue"),
   presentationStyle: PresentationStyleIdSchema.default("consulting"),
   mode: ProjectModeSchema.default("paste"),

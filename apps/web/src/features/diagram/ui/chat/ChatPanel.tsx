@@ -1418,14 +1418,14 @@ function AssistantContent({ content, canvasMode }: { content: string; canvasMode
 
 /* ── Live Timer — ticks every 100ms while streaming ── */
 function LiveTimer({ startTime }: { startTime: number | null }) {
-  const [elapsed, setElapsed] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!startTime) { setElapsed(0); return; }
-    setElapsed(Date.now() - startTime);
-    const timer = setInterval(() => setElapsed(Date.now() - startTime), 100);
+    if (!startTime) return;
+    const timer = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(timer);
   }, [startTime]);
   if (!startTime) return null;
+  const elapsed = Math.max(0, now - startTime);
   const secs = (elapsed / 1000).toFixed(1);
   return <span className="text-[10px] text-slate-400 tabular-nums font-mono">{secs}s</span>;
 }
@@ -1561,7 +1561,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     if (payload.design_concept) setDesignConcept(payload.design_concept);
   };
 
-  const loadDiagramHistory = async (searchText = historyQuery) => {
+  const loadDiagramHistory = useCallback(async (searchText: string) => {
     setHistoryLoading(true);
     setHistoryError('');
     try {
@@ -1572,9 +1572,9 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, []);
 
-  const loadConversationHistory = async (searchText = historyQuery) => {
+  const loadConversationHistory = useCallback(async (searchText: string) => {
     setHistoryLoading(true);
     setHistoryError('');
     try {
@@ -1585,7 +1585,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, []);
 
   const loadCurrentHistory = (searchText = historyQuery, mode = historyMode) => {
     if (mode === 'conversations') {
@@ -1613,12 +1613,15 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     const mode: HistoryMode = params.get('historyMode') === 'conversations'
       ? 'conversations'
       : 'diagrams';
-    setHistoryQuery(query);
-    setHistoryMode(mode);
-    setHistoryOpen(true);
-    if (mode === 'conversations') void loadConversationHistory(query);
-    else void loadDiagramHistory(query);
-  }, [location.search]);
+    const timer = window.setTimeout(() => {
+      setHistoryQuery(query);
+      setHistoryMode(mode);
+      setHistoryOpen(true);
+      if (mode === 'conversations') void loadConversationHistory(query);
+      else void loadDiagramHistory(query);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [location.search, loadConversationHistory, loadDiagramHistory]);
 
   const startNewConversation = () => {
     if (isStreaming) return;
@@ -1652,20 +1655,22 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     setStreamingCode('');
   };
 
-  diagramShellHandlersRef.current = {
-    'new-conversation': startNewConversation,
-    'open-history': openDiagramHistory,
-    'focus-chat': () => {
-      setMobileActivePanel('chat');
-      window.requestAnimationFrame(() => textareaRef.current?.focus());
-    },
-    'focus-canvas': () => {
-      setMobileActivePanel('canvas');
-      window.requestAnimationFrame(() => {
-        document.querySelector<HTMLElement>('[data-shell-region="canvas"]')?.focus();
-      });
-    },
-  };
+  useEffect(() => {
+    diagramShellHandlersRef.current = {
+      'new-conversation': startNewConversation,
+      'open-history': openDiagramHistory,
+      'focus-chat': () => {
+        setMobileActivePanel('chat');
+        window.requestAnimationFrame(() => textareaRef.current?.focus());
+      },
+      'focus-canvas': () => {
+        setMobileActivePanel('canvas');
+        window.requestAnimationFrame(() => {
+          document.querySelector<HTMLElement>('[data-shell-region="canvas"]')?.focus();
+        });
+      },
+    };
+  });
 
   useEffect(() => {
     const handleDiagramShellCommand = (event: Event) => {
@@ -1988,10 +1993,11 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
       const tag = match[1].toLowerCase();
       const found = VISIBLE_DIAGRAM_AGENTS.find(a => a.id === tag);
       if (found && found !== selectedAgent) {
-        setSelectedAgent(found);
+        const timer = window.setTimeout(() => setSelectedAgent(found), 0);
+        return () => window.clearTimeout(timer);
       }
     }
-  }, [input]);
+  }, [input, selectedAgent]);
 
   /* ── Send message ── */
   const sendMessage = useCallback(async (directText?: string, overrides?: SendMessageOverrides) => {
@@ -2457,6 +2463,10 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     canvasCode, canvasTask, canvasEngine, canvasDiagramId, canvasDiagramVersionId,
     conversationId, selectedAgent, addPendingElement, clearPendingElements, inputImages,
     setConversationId, setCanvasDiagramId, setCanvasDiagramVersionId, t,
+    addMessage, clearInputImages, detailLevel, isGuest, setCanvasCode,
+    setCanvasEngine, setCanvasPhase, setCanvasTask, setCurrentEngine,
+    setCurrentTask, setDesignConcept, setIsStreaming, setStreamStartTime,
+    setStreamingCode, startMobileCountdown, updateLastAssistantMessage,
   ]);
 
   const handleChangeDiagramType = useCallback((msg: Message, agent: DiagramAgentMeta) => {
@@ -3486,18 +3496,17 @@ function ThinkingProcess({ steps, isStreaming }: ThinkingProcessProps) {
   const [collapsed, setCollapsed] = useState(!isStreaming);
 
   // 用组件内部 tick 在 isStreaming 为真时进行 100ms 的递增渲染，保证思考秒数实时变化
-  const [tick, setTick] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (isStreaming) {
       const timer = setInterval(() => {
-        setTick(t => t + 1);
+        setNow(Date.now());
       }, 100);
       return () => clearInterval(timer);
     }
   }, [isStreaming]);
 
   // 计算当前总共思考的秒数
-  const now = Date.now() + tick * 0;
   const totalDuration = steps.reduce((acc, step) => {
     if (step.duration !== undefined) {
       return acc + step.duration;
@@ -3512,11 +3521,8 @@ function ThinkingProcess({ steps, isStreaming }: ThinkingProcessProps) {
 
   // 当生成完毕且 steps 都为 completed 时，收起折叠
   useEffect(() => {
-    if (isCompleted) {
-      setCollapsed(true);
-    } else {
-      setCollapsed(false);
-    }
+    const timer = window.setTimeout(() => setCollapsed(isCompleted), 0);
+    return () => window.clearTimeout(timer);
   }, [isCompleted]);
 
   return (
@@ -3564,7 +3570,7 @@ function ThinkingProcess({ steps, isStreaming }: ThinkingProcessProps) {
               const isRunning = step.status === 'running';
               const stepDuration = step.duration !== undefined 
                 ? step.duration 
-                : isRunning ? (Date.now() - step.startTime) / 1000 : 0;
+                : isRunning ? (now - step.startTime) / 1000 : 0;
               return (
                 <div key={step.id} className="relative flex items-center justify-between">
                   {/* Timeline dot */}

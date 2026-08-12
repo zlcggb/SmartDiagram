@@ -230,13 +230,16 @@ function makeLog(message: string, stage?: string): AgentLogEntry {
 // SSE 进度连接管理（旁路：失败不影响主 AI 请求）
 let progressAbortController: AbortController | null = null;
 let progressReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+const PROGRESS_EVENT_BATCH_MS = 80;
+const pendingProgressEvents = new Map<string, PptProgressEvent>();
+let progressFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 const commitLatestAiUsage = createLatestAsyncCommit<AiUsageSummary | null>(
   (aiUsageSummary) => useWorkbenchStore.setState({ aiUsageSummary }),
   () => useWorkbenchStore.setState({ aiUsageSummary: null }),
 );
 
-function handleProgressEvent(data: PptProgressEvent) {
+function applyProgressEvent(data: PptProgressEvent) {
   const { stage, status, message, current, total, delta, subStage, clearDelta, timestamp, slideId, slideTitle } = data;
   const at = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
 
@@ -316,6 +319,35 @@ function handleProgressEvent(data: PptProgressEvent) {
   }
 }
 
+function flushProgressEvents() {
+  if (progressFlushTimer) clearTimeout(progressFlushTimer);
+  progressFlushTimer = null;
+  if (pendingProgressEvents.size === 0) return;
+
+  const events = [...pendingProgressEvents.values()];
+  pendingProgressEvents.clear();
+  events.forEach(applyProgressEvent);
+}
+
+function handleProgressEvent(data: PptProgressEvent) {
+  if (data.status !== "progress" || data.clearDelta) {
+    flushProgressEvents();
+    applyProgressEvent(data);
+    return;
+  }
+
+  const pending = pendingProgressEvents.get(data.stage);
+  pendingProgressEvents.set(data.stage, {
+    ...pending,
+    ...data,
+    delta: `${pending?.delta ?? ""}${data.delta ?? ""}` || undefined,
+  });
+
+  if (!progressFlushTimer) {
+    progressFlushTimer = setTimeout(flushProgressEvents, PROGRESS_EVENT_BATCH_MS);
+  }
+}
+
 function connectProgressSSE(projectId: string) {
   disconnectProgressSSE();
   const controller = new AbortController();
@@ -347,6 +379,7 @@ function connectProgressSSE(projectId: string) {
 }
 
 function disconnectProgressSSE() {
+  flushProgressEvents();
   progressAbortController?.abort();
   progressAbortController = null;
   if (progressReconnectTimer) clearTimeout(progressReconnectTimer);

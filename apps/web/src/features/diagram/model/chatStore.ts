@@ -3,6 +3,8 @@
  */
 
 import { create } from 'zustand';
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
+import type { MindElixirInstance } from 'mind-elixir';
 import type { DiagramEngineType, DiagramTaskType } from '@/types/diagram';
 
 const makeClientId = (prefix: string) => {
@@ -230,16 +232,16 @@ interface ChatStore {
   setModelConfig: (v: ModelConfig | null) => void;
 
   // Excalidraw API ref (shared so toolbar can export)
-  excalidrawAPI: any | null;
-  setExcalidrawAPI: (v: any | null) => void;
+  excalidrawAPI: ExcalidrawImperativeAPI | null;
+  setExcalidrawAPI: (v: ExcalidrawImperativeAPI | null) => void;
 
   // Mind-elixir instance ref (shared so toolbar can use official export API)
-  mindmapInstance: any | null;
-  setMindmapInstance: (v: any | null) => void;
+  mindmapInstance: MindElixirInstance | null;
+  setMindmapInstance: (v: MindElixirInstance | null) => void;
 
   // Streaming elements — individual elements added in real-time during generation
-  pendingElements: any[];
-  addPendingElement: (el: any) => void;
+  pendingElements: unknown[];
+  addPendingElement: (el: unknown) => void;
   clearPendingElements: () => void;
 
   // Image upload — base64 data URLs waiting to be sent

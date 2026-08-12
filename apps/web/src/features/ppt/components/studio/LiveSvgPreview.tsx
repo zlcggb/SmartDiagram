@@ -1,7 +1,10 @@
 import { useMemo } from "react";
 import { fitSvgTextToBounds, getThemeSurfacePreset, recolorSvgPreview } from "@ppt-agent/shared";
+import { useThrottledValue } from "@/features/ppt/hooks/useThrottledValue";
 import { useWorkbenchStore } from '@/features/ppt/store/workbenchStore';
 import type { RenderStrategy } from "../../lib/exportMode";
+
+const SVG_PREVIEW_THROTTLE_MS = 250;
 
 interface LiveSvgPreviewProps {
   slideId: string | null;
@@ -30,7 +33,7 @@ export function LiveSvgPreview({ slideId, strategy }: LiveSvgPreviewProps) {
 
   const designStage = progressStages["design"];
   const designSlideId = designStage?.slideId ?? null;
-  const delta = designStage?.delta ?? "";
+  const delta = useThrottledValue(designStage?.delta ?? "", SVG_PREVIEW_THROTTLE_MS);
 
   const status = designStage?.status;
   const isOtherSlide = Boolean(slideId && designSlideId && designSlideId !== slideId);

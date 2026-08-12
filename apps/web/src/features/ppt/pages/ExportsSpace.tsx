@@ -163,11 +163,16 @@ export function ExportsSpace() {
   const [scopeStartPage, setScopeStartPage] = useState(1);
   const [scopeEndPage, setScopeEndPage] = useState(1);
   const isDirectorRoute = location.pathname.includes(`/p/${projectId}/director`);
+  const maxScopePage = Math.max(slides.length, 1);
+  const boundedScopeStartPage = Math.min(Math.max(scopeStartPage, 1), maxScopePage);
+  const boundedScopeEndPage = scopeEndPage === 1
+    ? maxScopePage
+    : Math.min(Math.max(scopeEndPage, 1), maxScopePage);
 
   const effectivePrompt = `${directorPrompt.trim()} ${intensityNotes[intensity]}`.trim();
   const scope = useMemo(
-    () => resolveDirectorScope(slides, { mode: scopeMode, startPage: scopeStartPage, endPage: scopeEndPage }),
-    [slides, scopeMode, scopeStartPage, scopeEndPage]
+    () => resolveDirectorScope(slides, { mode: scopeMode, startPage: boundedScopeStartPage, endPage: boundedScopeEndPage }),
+    [slides, scopeMode, boundedScopeStartPage, boundedScopeEndPage]
   );
   const scopedNarrations = useMemo(() => {
     const selected = new Set(scope.slideIds);
@@ -179,12 +184,6 @@ export function ExportsSpace() {
     const firstId = scope.slideIds[0];
     return slides.find((slide) => slide.id === firstId) ?? slides[0] ?? null;
   }, [slides, scope.slideIds]);
-
-  useEffect(() => {
-    if (!slides.length) return;
-    setScopeStartPage((page) => Math.min(Math.max(page, 1), slides.length));
-    setScopeEndPage((page) => page === 1 ? slides.length : Math.min(Math.max(page, 1), slides.length));
-  }, [slides.length]);
 
   async function refreshMedia() {
     if (!projectId) return;
@@ -200,8 +199,17 @@ export function ExportsSpace() {
 
   useEffect(() => {
     if (!projectId || !isDirectorRoute) return;
-    void Promise.all([api.getMediaStatus(), refreshMedia()])
-      .then(([status, nextNarrations]) => {
+    let cancelled = false;
+    void Promise.all([
+      api.getMediaStatus(),
+      api.getNarrations(projectId),
+      api.getMediaExports(projectId)
+    ])
+      .then(([status, nextNarrations, nextExports]) => {
+        if (cancelled) return;
+        setNarrations(nextNarrations);
+        setMediaExports(nextExports);
+        setDrafts(Object.fromEntries(nextNarrations.map((item) => [item.slideId, item.scriptText])));
         setRuntimeReady(status.configured && status.ffmpeg);
         setVoices(status.voices.length ? status.voices : fallbackVoices);
         setTtsConcurrency(status.ttsConcurrency);
@@ -223,7 +231,12 @@ export function ExportsSpace() {
           setVoice(status.voice);
         }
       })
-      .catch((error) => setMediaError(error instanceof Error ? error.message : "媒体功能检查失败"));
+      .catch((error) => {
+        if (!cancelled) setMediaError(error instanceof Error ? error.message : "媒体功能检查失败");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, isDirectorRoute]);
 
   function selectPreset(id: NarrationStylePresetId) {
@@ -362,10 +375,10 @@ export function ExportsSpace() {
           {scopeMode === "custom" ? <>
             <label className="text-[11px] font-medium text-muted">
               从
-              <select aria-label="起始页" className="mt-0.5 block rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-title" value={scopeStartPage} onChange={(event) => {
+              <select aria-label="起始页" className="mt-0.5 block rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-title" value={boundedScopeStartPage} onChange={(event) => {
                 const page = Number(event.target.value);
                 setScopeStartPage(page);
-                if (page > scopeEndPage) setScopeEndPage(page);
+                if (page > boundedScopeEndPage) setScopeEndPage(page);
               }}>
                 {slides.map((slide, index) => <option key={slide.id} value={index + 1}>第 {index + 1} 页</option>)}
               </select>
@@ -373,10 +386,10 @@ export function ExportsSpace() {
             <span className="mb-2 text-xs text-muted">至</span>
             <label className="text-[11px] font-medium text-muted">
               到
-              <select aria-label="结束页" className="mt-0.5 block rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-title" value={scopeEndPage} onChange={(event) => {
+              <select aria-label="结束页" className="mt-0.5 block rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-title" value={boundedScopeEndPage} onChange={(event) => {
                 const page = Number(event.target.value);
                 setScopeEndPage(page);
-                if (page < scopeStartPage) setScopeStartPage(page);
+                if (page < boundedScopeStartPage) setScopeStartPage(page);
               }}>
                 {slides.map((slide, index) => <option key={slide.id} value={index + 1}>第 {index + 1} 页</option>)}
               </select>

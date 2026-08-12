@@ -16,6 +16,7 @@ import {
   applyCopyBudgetsToSlideFields,
   factCategories,
   factStatuses,
+  PPT_MAX_PAGE_COUNT,
   normalizePptExportTheme,
   normalizeRecommendedLayout,
   recommendedLayoutEnumValues,
@@ -135,6 +136,14 @@ export const outlineSchema = {
   type: "array",
   items: outlineSlideSchema
 } as const;
+
+export function outlineSchemaForPageCount(pageCount: number) {
+  return {
+    ...outlineSchema,
+    minItems: pageCount,
+    maxItems: pageCount
+  } as const;
+}
 
 export const slidePlanSchema = {
   type: "object",
@@ -416,6 +425,21 @@ export function normalizeOutline(value: unknown, allowedFactIds: Set<string>, pa
         partTitle: asString(object.partTitle) || undefined
       };
     });
+}
+
+export async function generateExactOutline(
+  pageCount: number,
+  allowedFactIds: Set<string>,
+  generate: (attempt: number, previousCount?: number) => Promise<unknown>
+): Promise<OutlineSlideDraft[]> {
+  const target = Math.max(1, Math.min(PPT_MAX_PAGE_COUNT, Math.trunc(pageCount || 6)));
+  let previousCount: number | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const outline = normalizeOutline(await generate(attempt, previousCount), allowedFactIds, target);
+    if (outline.length === target) return outline;
+    previousCount = outline.length;
+  }
+  throw new Error(`大纲页数不匹配：要求 ${target} 页，模型连续两次仅返回 ${previousCount ?? 0} 页。原大纲已保留，请重试。`);
 }
 
 export function normalizeSlidePlan(value: unknown, slide: SlideDto, allowedFactIds: Set<string>): SlidePlanDto {
@@ -757,11 +781,23 @@ export class RealGeminiAdapter implements GeminiAdapter {
 
   async generateOutline(
     project: Pick<ProjectDto, "name" | "audience" | "purpose" | "pageCount" | "theme">,
-    confirmedFacts: FactDto[]
+    confirmedFacts: FactDto[],
+    onToken?: (token: string) => void
   ): Promise<OutlineSlideDraft[]> {
     const allowedFactIds = new Set(confirmedFacts.map((fact) => fact.id));
-    const result = await this.generateJson<unknown>(buildOutlinePrompt(project, confirmedFacts), outlineSchema, outlineSystemPrompt, { stage: "outline" });
-    return normalizeOutline(result, allowedFactIds, Math.max(1, Math.min(12, project.pageCount || 6)));
+    const pageCount = Math.max(1, Math.min(PPT_MAX_PAGE_COUNT, project.pageCount || 6));
+    return generateExactOutline(pageCount, allowedFactIds, (attempt, previousCount) => {
+      const retryInstruction = attempt === 0
+        ? ""
+        : `\n\n上一次只返回 ${previousCount ?? 0} 页。请重新生成完整数组，这一次必须恰好 ${pageCount} 页。`;
+      return this.generateJson<unknown>(
+        `${buildOutlinePrompt(project, confirmedFacts)}${retryInstruction}`,
+        outlineSchemaForPageCount(pageCount),
+        outlineSystemPrompt,
+        { stage: "outline" },
+        attempt === 0 ? onToken : undefined
+      );
+    });
   }
 
   async generateSlidePlan(slide: SlideDto, facts: FactDto[], theme: PptExportTheme = "white-blue", onToken?: (token: string) => void): Promise<SlidePlanDto> {

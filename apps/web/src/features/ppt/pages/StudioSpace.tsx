@@ -6,12 +6,9 @@ import { renderSlideIrToSvg, stringifySmartSlide } from "@ppt-agent/slide-ir";
 import type { SlideIrDocument } from "@ppt-agent/slide-ir";
 import type { PptExportTheme, PresentationStyleId, SlidePlanDto } from '@ppt-agent/shared';
 import {
-  fitSvgTextToBounds,
   getAccentPresetHex,
   getThemePack,
-  getThemeSurfacePreset,
   normalizePresentationStyleId,
-  recolorSvgPreview,
   resolvePresentationStyleId,
   searchReferenceForDraft
 } from '@ppt-agent/shared';
@@ -25,6 +22,7 @@ import {
   type DesignConfigTab
 } from "../components/studio/DesignConfigPanel";
 import { AgentExecutionPanel } from "../components/AgentExecutionPanel";
+import { useThrottledValue } from "@/features/ppt/hooks/useThrottledValue";
 import { useWorkbenchStore, type StudioPhase } from '@/features/ppt/store/workbenchStore';
 import { useStudioWizard } from '@/features/ppt/hooks/useStudioWizard';
 import { WizardWaitBanner } from "../components/studio/WizardWaitBanner";
@@ -51,6 +49,7 @@ const phases: Array<{ id: StudioPhase; label: string; step: number }> = [
 const DEFAULT_BLANK_TITLE = "新增空白页";
 const DEFAULT_BLANK_KEY = "请补充本页核心结论";
 const SAVE_DEBOUNCE_MS = 450;
+const DESIGN_CODE_THROTTLE_MS = 150;
 
 type SlideMetaDraft = {
   title: string;
@@ -343,13 +342,6 @@ export function StudioSpace() {
   const currentSlideId = searchParams.get("slide") ?? slides[0]?.id ?? null;
   const currentPhase = (searchParams.get("phase") as StudioPhase) ?? "search";
 
-  function setSlideInUrl(slideId: string) {
-    setSearchParams((prev) => {
-      prev.set("slide", slideId);
-      return prev;
-    });
-  }
-
   function setPhaseInUrl(phase: StudioPhase) {
     setSearchParams((prev) => {
       prev.set("phase", phase);
@@ -495,17 +487,24 @@ export function StudioSpace() {
 
   // 切页时先落盘上一页草稿，再载入当前页
   useEffect(() => {
+    let cancelled = false;
     const slideId = selected?.id ?? null;
     if (metaSlideIdRef.current && metaSlideIdRef.current !== slideId) {
       void flushMetaSave();
       void flushPlanSave();
     }
     metaSlideIdRef.current = slideId;
-    if (selected) {
-      setMetaDraft(draftFromSlide(selected));
-    } else {
-      setMetaDraft({ title: "", keyMessage: "", contentPointsText: "" });
-    }
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (selected) {
+        setMetaDraft(draftFromSlide(selected));
+      } else {
+        setMetaDraft({ title: "", keyMessage: "", contentPointsText: "" });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
     // 仅随选中页切换同步；避免乐观更新回写打断输入
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
@@ -513,11 +512,18 @@ export function StudioSpace() {
   // 切页时载入初稿；重新生成完成后（busy 落下）再覆盖本地编辑态
   const prevBusyRef = useRef(busy);
   useEffect(() => {
-    if (selected?.planJson) {
-      setPlanDraft(planDraftFromPlan(selected.planJson));
-    } else {
-      setPlanDraft(null);
-    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (selected?.planJson) {
+        setPlanDraft(planDraftFromPlan(selected.planJson));
+      } else {
+        setPlanDraft(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
@@ -634,13 +640,6 @@ export function StudioSpace() {
       ? stringifySmartSlide(selected.irJson)
       : svgEditorSource;
 
-  /** 即时色板换色：预览也会反映尚未保存的源码编辑。 */
-  const themedSvgPreview = useMemo(() => {
-    if (!svgEditorSource) return null;
-    const fittedSvg = fitSvgTextToBounds(svgEditorSource).svg;
-    return recolorSvgPreview(fittedSvg, exportTheme, { accentId: themeAccentId });
-  }, [svgEditorSource, exportTheme, themeAccentId]);
-
   const editorThemeStyle = useMemo(() => {
     const pack = getThemePack(exportTheme);
     const accent = getAccentPresetHex(exportTheme, themeAccentId);
@@ -654,7 +653,6 @@ export function StudioSpace() {
     } as CSSProperties;
   }, [exportTheme, themeAccentId]);
 
-  const surfacePreviewFilter = getThemeSurfacePreset(themeSurfaceId).previewFilter;
   const designStage = progressStages.design;
   const designStreamMatchesSelected = Boolean(
     selected && (!designStage?.slideId || designStage.slideId === selected.id)
@@ -667,7 +665,10 @@ export function StudioSpace() {
       designStreamMatchesSelected &&
       (designGenerationBusy || designStage?.status === "running")
   );
-  const streamedDesignCode = designStage?.status === "running" ? designStage.delta ?? "" : "";
+  const streamedDesignCode = useThrottledValue(
+    designStage?.status === "running" ? designStage.delta ?? "" : "",
+    DESIGN_CODE_THROTTLE_MS,
+  );
   const streamWaitingCopy = designStage?.message
     ? designGenerationMode === "slide-ir"
       ? `# ${designStage.message}\n# 已连接进度流，等待模型返回 SmartSlide JSON…`
@@ -703,14 +704,27 @@ export function StudioSpace() {
   );
 
   useEffect(() => {
+    let cancelled = false;
     const source = selected?.svgPreview ?? "";
-    setSvgEditorValue(source);
-    setSvgEditorBaseline(source);
-    setSvgEditorSaving(false);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setSvgEditorValue(source);
+      setSvgEditorBaseline(source);
+      setSvgEditorSaving(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [selected?.id, selected?.svgPreview]);
 
   useEffect(() => {
-    setDesignViewMode("preview");
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setDesignViewMode("preview");
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [selected?.id]);
 
   useEffect(() => {
@@ -1041,7 +1055,6 @@ export function StudioSpace() {
               type="button"
               onClick={() => {
                 void flushMetaSave();
-                setSlideInUrl(slide.id);
                 setSearchParams((prev) => {
                   const next = new URLSearchParams(prev);
                   next.set("slide", slide.id);

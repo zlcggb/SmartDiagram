@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useWorkbenchStore, type ProgressStageState } from '@/features/ppt/store/workbenchStore';
 
 const STAGE_META: Record<string, { label: string; icon: string }> = {
@@ -33,6 +33,7 @@ export function AgentExecutionPanel({ variant = "floating" }: AgentExecutionPane
   const stages = sortStages(progressStages);
   const hasStages = stages.length > 0;
   const activeStage = stages.find(([, s]) => s.status === "running");
+  const activeStageName = activeStage?.[0];
 
   // 总进度
   const doneCount = stages.filter(([, s]) => s.status === "done" || s.status === "skip").length;
@@ -45,9 +46,9 @@ export function AgentExecutionPanel({ variant = "floating" }: AgentExecutionPane
     if (!el || !panelOpen) return;
     const running = el.querySelector(".agent-stage-running");
     if (running) {
-      running.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      running.scrollIntoView({ behavior: "auto", block: "nearest" });
     }
-  }, [progressStages, panelOpen]);
+  }, [activeStageName, panelOpen]);
 
   if (!busy && variant === "floating") return null;
 
@@ -215,21 +216,31 @@ function StageStatusBadge({ status }: { status: ProgressStageState["status"] }) 
 }
 
 function DeltaStream({ chunks }: { chunks: { id: string; text: string; subStage?: string }[] }) {
-  const endRef = useRef<HTMLDivElement>(null);
-  const output = chunks.map((chunk) => chunk.text).join("");
+  const contentRef = useRef<HTMLDivElement>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const output = useMemo(() => chunks.map((chunk) => chunk.text).join(""), [chunks]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "auto", block: "nearest" });
-  }, [chunks]);
+    const content = contentRef.current;
+    if (content && shouldStickToBottomRef.current) {
+      content.scrollTop = content.scrollHeight;
+    }
+  }, [output]);
+
+  const handleScroll = () => {
+    const content = contentRef.current;
+    if (!content) return;
+    const distanceFromBottom = content.scrollHeight - content.scrollTop - content.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom < 48;
+  };
 
   if (chunks.length === 0) return null;
 
   return (
     <div className="agent-delta-stream">
       <div className="agent-delta-stream-label">模型输出</div>
-      <div className="agent-delta-stream-content">
+      <div className="agent-delta-stream-content" ref={contentRef} onScroll={handleScroll}>
         <pre>{output}</pre>
-        <div ref={endRef} />
       </div>
     </div>
   );

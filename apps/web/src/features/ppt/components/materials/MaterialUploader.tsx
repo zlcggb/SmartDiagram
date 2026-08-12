@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, FileText, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
-import { formatMaterialSize, type MaterialSelectionError, type MaterialUploadItem } from "./materialUploadModel";
+import { MAX_MATERIAL_FILE_MIB, formatMaterialSize, type MaterialSelectionError, type MaterialUploadItem } from "./materialUploadModel";
 
 interface MaterialUploaderProps {
   items: readonly MaterialUploadItem[];
@@ -41,7 +41,7 @@ export function MaterialUploader({ items, selectionErrors = [], onRetry, onRemov
     <section className={`material-uploader ${className}`.trim()} aria-label="已选资料">
       <div className="material-uploader__summary" role="status" aria-live="polite" aria-atomic="true">
         <span>{summary}</span>
-        <small>最多 8 个，单文件 15 MB</small>
+        <small>最多 8 个，单文件 {MAX_MATERIAL_FILE_MIB} MiB</small>
       </div>
 
       {selectionErrors.length > 0 ? (

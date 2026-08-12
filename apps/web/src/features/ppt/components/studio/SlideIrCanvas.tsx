@@ -105,8 +105,7 @@ export function SlideIrCanvas({
     }
   }, [selected, svgMarkup]);
 
-  const handleCanvasClick = useCallback(
-    (event: React.MouseEvent) => {
+  function handleCanvasClick(event: React.MouseEvent) {
       if (readOnly || !svgWrapperRef.current) return;
 
       const target = event.target as SVGElement;
@@ -126,7 +125,7 @@ export function SlideIrCanvas({
       }
 
       // 获取 SVG ViewBox 坐标系下的真实 BBox
-      let bbox = { x: textEl.bounds[0], y: textEl.bounds[1], width: textEl.bounds[2], height: textEl.bounds[3] };
+      const bbox = { x: textEl.bounds[0], y: textEl.bounds[1], width: textEl.bounds[2], height: textEl.bounds[3] };
       try {
         const actualBBox = targetDom.getBBox();
         if (actualBBox.width > 0 && actualBBox.height > 0) {
@@ -172,11 +171,9 @@ export function SlideIrCanvas({
         }
       });
       setEditText(text);
-    },
-    [readOnly, selected, findTextElement]
-  );
+  }
 
-  const commitEdit = useCallback(() => {
+  function commitEdit() {
     if (!selected) return;
 
     if (editText === selected.text) {
@@ -230,7 +227,7 @@ export function SlideIrCanvas({
     onIrChange(updated);
     setSelected(null);
     setEditText("");
-  }, [selected, editText, irDoc, onIrChange]);
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {

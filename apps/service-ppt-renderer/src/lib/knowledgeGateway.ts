@@ -1,7 +1,14 @@
-import type { MaterialRouteMode, ProjectMaterialStatus } from "@ppt-agent/shared";
+import {
+  MATERIAL_MULTIPART_OVERHEAD_BYTES,
+  materialUploadLimitBytes,
+  resolveMaterialUploadLimitMib,
+  type MaterialRouteMode,
+  type ProjectMaterialStatus
+} from "@ppt-agent/shared";
 
-export const MAX_MATERIAL_BYTES = 15 * 1024 * 1024;
-export const MAX_MULTIPART_BYTES = MAX_MATERIAL_BYTES + 1024 * 1024;
+export const MAX_MATERIAL_MIB = resolveMaterialUploadLimitMib(process.env.VITE_PPT_MAX_MATERIAL_MB);
+export const MAX_MATERIAL_BYTES = materialUploadLimitBytes(MAX_MATERIAL_MIB);
+export const MAX_MULTIPART_BYTES = MAX_MATERIAL_BYTES + MATERIAL_MULTIPART_OVERHEAD_BYTES;
 
 type HeaderSource = Headers | Record<string, string | string[] | undefined>;
 type FetchLike = typeof fetch;
@@ -148,7 +155,7 @@ async function rebuiltUploadForm(input: UploadMaterialInput) {
     });
   }
   if (input.rawBody.byteLength > MAX_MULTIPART_BYTES) {
-    throw new KnowledgeGatewayError("上传内容超过 15 MiB 限制", {
+    throw new KnowledgeGatewayError(`上传内容超过 ${MAX_MATERIAL_MIB} MiB 限制`, {
       statusCode: 413,
       code: "material_too_large"
     });
@@ -185,7 +192,7 @@ async function rebuiltUploadForm(input: UploadMaterialInput) {
     });
   }
   if (file.size > MAX_MATERIAL_BYTES) {
-    throw new KnowledgeGatewayError("单个资料文件不能超过 15 MiB", {
+    throw new KnowledgeGatewayError(`单个资料文件不能超过 ${MAX_MATERIAL_MIB} MiB`, {
       statusCode: 413,
       code: "material_too_large"
     });

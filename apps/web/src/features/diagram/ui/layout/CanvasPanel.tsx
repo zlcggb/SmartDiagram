@@ -21,6 +21,7 @@ import {
 } from '@/shared/lib/config/diagramAgents';
 import { useT } from '@/app/i18n';
 import { SmartDiagramIconMark } from '@/components/brand/AppIconMarks';
+import type { DiagramEngineType, DiagramTaskType } from '@/types/diagram';
 
 const ExcalidrawCanvas = lazy(() => import('@/features/diagram/ui/ExcalidrawCanvas'));
 const MermaidCanvas = lazy(() => import('@/features/diagram/ui/MermaidCanvas'));
@@ -34,14 +35,14 @@ const ArtifactCanvas = lazy(() => import('@/features/diagram/ui/ArtifactCanvas')
 /* ── Live Timer for Canvas ── */
 function CanvasLiveTimer() {
   const { streamStartTime } = useChatStore();
-  const [elapsed, setElapsed] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!streamStartTime) { setElapsed(0); return; }
-    setElapsed(Date.now() - streamStartTime);
-    const timer = setInterval(() => setElapsed(Date.now() - streamStartTime), 100);
+    if (!streamStartTime) return;
+    const timer = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(timer);
   }, [streamStartTime]);
   if (!streamStartTime) return null;
+  const elapsed = Math.max(0, now - streamStartTime);
   const secs = (elapsed / 1000).toFixed(1);
   return <span className="text-[10px] text-indigo-400 tabular-nums font-mono ml-1">{secs}s</span>;
 }
@@ -118,20 +119,20 @@ function CanvasPanelInner() {
 
   // Preload drawio iframe in background — users get instant switch later
   const [drawioMounted, setDrawioMounted] = useState(false);
+  const shouldMountDrawio = drawioMounted || canvasEngine === 'drawio';
   useEffect(() => {
-    if (drawioMounted) return;
-    if (canvasEngine === 'drawio') { setDrawioMounted(true); return; }
+    if (shouldMountDrawio) return;
     // Background preload: mount hidden iframe 3s after page settles
     const timer = setTimeout(() => setDrawioMounted(true), 3000);
     return () => clearTimeout(timer);
-  }, [canvasEngine, drawioMounted]);
+  }, [shouldMountDrawio]);
 
   // Compute early — needed by both empty state and main view
   const hasStreamingContent = !!streamingCode || (canvasEngine === 'excalidraw' && pendingElements.length > 0);
   const isGenerating = canvasEngine && canvasPhase !== 'done' && !canvasCode && !hasStreamingContent;
 
   // Shared preloaded drawio element
-  const drawioPreload = drawioMounted ? (
+  const drawioPreload = shouldMountDrawio ? (
     <div
       className="absolute inset-0"
       style={{ display: canvasEngine === 'drawio' && !isGenerating ? 'block' : 'none', zIndex: 10 }}
@@ -309,12 +310,9 @@ function CanvasPanelInner() {
 function AINodeOptimizeOverlay() {
   const { selectedNode, setSelectedNode, canvasMode } = useChatStore();
   const { t } = useT();
-  const [inputVal, setInputVal] = useState('');
-
-  // Auto-reset input when selected node changes
-  useEffect(() => {
-    setInputVal('');
-  }, [selectedNode]);
+  const [inputState, setInputState] = useState({ nodeKey: '', value: '' });
+  const selectedNodeKey = selectedNode ? `${selectedNode.type}:${selectedNode.id}` : '';
+  const inputVal = inputState.nodeKey === selectedNodeKey ? inputState.value : '';
 
   if (!selectedNode) return null;
 
@@ -329,7 +327,7 @@ function AINodeOptimizeOverlay() {
       instruction: inputVal.trim(),
     });
     window.dispatchEvent(new CustomEvent('send-ai-message', { detail: { text: prompt } }));
-    setInputVal('');
+    setInputState({ nodeKey: selectedNodeKey, value: '' });
     setSelectedNode(null);
   };
 
@@ -377,7 +375,7 @@ function AINodeOptimizeOverlay() {
           <input
             type="text"
             value={inputVal}
-            onChange={(e) => setInputVal(e.target.value)}
+            onChange={(e) => setInputState({ nodeKey: selectedNodeKey, value: e.target.value })}
             onKeyDown={handleKeyDown}
             placeholder={t('canvas.nodeEditPlaceholder')}
             className={`flex-1 bg-transparent border-none outline-none text-xs py-1 ${
@@ -414,8 +412,8 @@ function GeneratingView({
   agentMeta, canvasTask, canvasEngine, canvasPhase, phaseText, designConcept, streamingCode,
 }: {
   agentMeta: ReturnType<typeof getAgentMeta>;
-  canvasTask: any;
-  canvasEngine: any;
+  canvasTask: DiagramTaskType | null;
+  canvasEngine: DiagramEngineType | null;
   canvasPhase: string;
   phaseText: string;
   designConcept: string;

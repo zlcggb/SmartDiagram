@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import {
   fitSvgTextToBounds,
   getThemeSurfacePreset,
@@ -17,7 +17,7 @@ interface SlideThumbnailProps {
  * 渲染 SVG 缩略图。使用 16:9 固定比例容器 + 缩小的 SVG 内嵌。
  * 未生成设计稿时显示占位灰底。
  */
-export function SlideThumbnail({
+export const SlideThumbnail = memo(function SlideThumbnail({
   svgPreview,
   exportTheme,
   themeAccentId,
@@ -73,4 +73,4 @@ export function SlideThumbnail({
       />
     </div>
   );
-}
+});

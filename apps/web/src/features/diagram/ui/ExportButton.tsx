@@ -209,7 +209,7 @@ export default function ExportButton() {
     }
   };
 
-  const exportCharts = async (_format: ExportFormat) => {
+  const exportCharts = async () => {
     // ECharts renders to <canvas> — grab it directly
     const canvasContainer = document.querySelector('[data-canvas]');
     const canvasEl = canvasContainer?.querySelector('canvas');
@@ -387,7 +387,7 @@ export default function ExportButton() {
     switch (canvasEngine) {
       case 'mermaid':     await exportMermaid(format); break;
       case 'excalidraw':  await exportExcalidraw(format); break;
-      case 'charts':      await exportCharts(format); break;
+      case 'charts':      await exportCharts(); break;
       case 'drawio':      await exportDrawio(format); break;
       case 'mindmap':     await exportMindmap(format); break;
       case 'flow':        await exportFlow(format); break;

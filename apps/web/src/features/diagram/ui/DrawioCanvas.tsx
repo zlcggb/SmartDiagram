@@ -26,6 +26,12 @@ const PRIMARY_URL = import.meta.env.DEV ? 'http://localhost:9022/' : '/drawio/';
 const FALLBACK_URL = 'https://embed.diagrams.net/';
 const LOAD_TIMEOUT_MS = 25_000; // draw.io is a heavy Java+JS app, needs 15-25s to fully init
 
+interface DrawioMessage {
+  event?: string;
+  data?: string;
+  format?: string;
+}
+
 // ─── XML Sanitizer ───
 
 function sanitizeDrawioXml(xml: string): string {
@@ -72,7 +78,7 @@ export default function DrawioCanvas() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [useFallback, setUseFallback] = useState(false);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasLoadedXml = useRef(false);
+  const hasLoadedXml = Boolean(canvasCode && cleanXml(canvasCode).startsWith('<'));
 
   const drawioUrl = useMemo(
     () => buildDrawioUrl(useFallback ? FALLBACK_URL : PRIMARY_URL),
@@ -84,8 +90,8 @@ export default function DrawioCanvas() {
     const handleMessage = (event: MessageEvent) => {
       if (!event.data || typeof event.data !== 'string') return;
 
-      let msg: any;
-      try { msg = JSON.parse(event.data); } catch { return; }
+      let msg: DrawioMessage;
+      try { msg = JSON.parse(event.data) as DrawioMessage; } catch { return; }
 
       if (msg.event === 'configure') {
         iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
@@ -147,7 +153,6 @@ export default function DrawioCanvas() {
     const xml = cleanXml(canvasCode);
     if (!xml.startsWith('<')) return;
 
-    hasLoadedXml.current = true;
     const win = iframeRef.current.contentWindow;
 
     win?.postMessage(JSON.stringify({
@@ -227,7 +232,7 @@ export default function DrawioCanvas() {
       )}
 
       {/* Download button */}
-      {!isLoading && hasLoadedXml.current && (
+      {!isLoading && hasLoadedXml && (
         <div className="absolute top-3 right-3 z-50">
           <button
             onClick={handleDownload}

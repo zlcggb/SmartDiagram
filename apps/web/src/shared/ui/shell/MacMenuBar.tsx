@@ -14,14 +14,20 @@ interface MacMenuBarProps {
 }
 
 export function MacMenuBar({
+  closeSignal,
+  overlayActive,
+  ...props
+}: MacMenuBarProps) {
+  return <MacMenuBarContent key={`${closeSignal}:${overlayActive}`} {...props} />;
+}
+
+function MacMenuBarContent({
   menus,
   onAction,
   homeControl,
   trailing,
   mobileUtilities,
-  closeSignal,
-  overlayActive
-}: MacMenuBarProps) {
+}: Omit<MacMenuBarProps, "closeSignal" | "overlayActive">) {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const barRef = useRef<HTMLElement>(null);
@@ -60,18 +66,6 @@ export function MacMenuBar({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [activeMenuId, mobileOpen]);
-
-  useEffect(() => {
-    setActiveMenuId(null);
-    setMobileOpen(false);
-  }, [closeSignal]);
-
-  useEffect(() => {
-    if (overlayActive) {
-      setActiveMenuId(null);
-      setMobileOpen(false);
-    }
-  }, [overlayActive]);
 
   const executeMobileAction = (item: ShellMenuItem) => {
     if (item.disabled || item.separator || !item.action) return;

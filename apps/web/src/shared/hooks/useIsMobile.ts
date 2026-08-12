@@ -3,26 +3,21 @@
  * 基于 matchMedia 监听 viewport 变化，避免 resize 事件的性能问题
  */
 
-import { useState, useEffect } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 const MOBILE_BREAKPOINT = 768;
 
 export function useIsMobile(breakpoint = MOBILE_BREAKPOINT): boolean {
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.innerWidth < breakpoint;
-  });
-
-  useEffect(() => {
+  const subscribe = useCallback((notify: () => void) => {
     const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-
-    // 初始同步
-    setIsMobile(mql.matches);
-
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
+    mql.addEventListener('change', notify);
+    return () => mql.removeEventListener('change', notify);
   }, [breakpoint]);
 
-  return isMobile;
+  const getSnapshot = useCallback(
+    () => window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches,
+    [breakpoint],
+  );
+
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }

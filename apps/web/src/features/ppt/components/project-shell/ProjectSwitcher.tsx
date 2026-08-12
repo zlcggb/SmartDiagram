@@ -29,10 +29,23 @@ export function ProjectSwitcher({ project }: { project: ProjectDto | null }) {
   const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
+  function closeSwitcher() {
+    setOpen(false);
+    setQuery("");
+  }
+
+  function toggleSwitcher() {
+    const nextOpen = !open;
+    if (nextOpen && projects.length === 0 && !loading) {
+      setLoading(true);
+      setError(null);
+    }
+    if (!nextOpen) setQuery("");
+    setOpen(nextOpen);
+  }
+
   useEffect(() => {
-    if (!open || projects.length > 0 || loading) return;
-    setLoading(true);
-    setError(null);
+    if (!open || projects.length > 0 || !loading) return;
     void api
       .listProjects()
       .then(setProjects)
@@ -45,10 +58,10 @@ export function ProjectSwitcher({ project }: { project: ProjectDto | null }) {
   useEffect(() => {
     if (!open) return;
     function closeOnPointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) closeSwitcher();
     }
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") closeSwitcher();
     }
     document.addEventListener("pointerdown", closeOnPointerDown);
     document.addEventListener("keydown", closeOnEscape);
@@ -56,10 +69,6 @@ export function ProjectSwitcher({ project }: { project: ProjectDto | null }) {
       document.removeEventListener("pointerdown", closeOnPointerDown);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) setQuery("");
   }, [open]);
 
   const filteredProjects = useMemo(() => {
@@ -77,7 +86,7 @@ export function ProjectSwitcher({ project }: { project: ProjectDto | null }) {
         className={`project-switcher__trigger ${open ? "is-open" : ""}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggleSwitcher}
       >
         <span className="project-switcher__glyph" aria-hidden="true">
           <FolderOpen className="h-[18px] w-[18px]" />
@@ -96,7 +105,7 @@ export function ProjectSwitcher({ project }: { project: ProjectDto | null }) {
               <p className="project-switcher__popover-title">切换项目</p>
               <p className="project-switcher__popover-subtitle">最近更新的工作空间</p>
             </div>
-            <Link to="../.." className="project-switcher__new" onClick={() => setOpen(false)}>
+            <Link to="../.." className="project-switcher__new" onClick={closeSwitcher}>
               <Plus className="h-4 w-4" />
               新建
             </Link>
@@ -131,7 +140,7 @@ export function ProjectSwitcher({ project }: { project: ProjectDto | null }) {
                   key={item.id}
                   to={projectEntryPath(item)}
                   className={`project-switcher__item ${isCurrent ? "is-current" : ""}`}
-                  onClick={() => setOpen(false)}
+                  onClick={closeSwitcher}
                 >
                   <span
                     className="project-switcher__theme"

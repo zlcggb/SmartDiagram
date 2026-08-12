@@ -62,8 +62,6 @@ function relativeTime(isoString: string, neverLabel: string): string {
 
 export default function UserManagementPanel({
   open,
-  onClose: _onClose,
-  embedded: _embedded = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -94,7 +92,9 @@ export default function UserManagementPanel({
   };
 
   useEffect(() => {
-    if (open) void loadUsers();
+    if (!open) return;
+    const timer = window.setTimeout(() => void loadUsers(), 0);
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   if (!open) return null;

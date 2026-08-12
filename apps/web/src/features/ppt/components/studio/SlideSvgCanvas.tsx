@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { fitSvgTextToBounds, getThemeSurfacePreset, recolorSvgPreview } from "@ppt-agent/shared";
 import { exportThemePreviewBg } from "../../lib/exportMode";
@@ -7,7 +7,6 @@ const SVG_WIDTH = 1280;
 const SVG_HEIGHT = 720;
 
 interface SelectedSvgText {
-  node: SVGTextElement | SVGTSpanElement;
   text: string;
   rect: {
     left: number;
@@ -47,6 +46,7 @@ export function SlideSvgCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const svgContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const selectedNodeRef = useRef<SVGTextElement | SVGTSpanElement | null>(null);
 
   const [selected, setSelected] = useState<SelectedSvgText | null>(null);
   const [editText, setEditText] = useState("");
@@ -83,8 +83,7 @@ export function SlideSvgCanvas({
     return () => observer.disconnect();
   }, []);
 
-  const handleCanvasClick = useCallback(
-    (event: React.MouseEvent) => {
+  function handleCanvasClick(event: React.MouseEvent) {
       if (readOnly || !containerRef.current || !svgContainerRef.current) return;
 
       const target = event.target as Element;
@@ -97,7 +96,7 @@ export function SlideSvgCanvas({
         return;
       }
 
-      if (selected && selected.node === textNode) return;
+      if (selected && selectedNodeRef.current === textNode) return;
       if (selected) {
         commitEdit();
       }
@@ -119,8 +118,8 @@ export function SlideSvgCanvas({
         const textAlign: "left" | "center" | "right" =
           textAnchor === "middle" ? "center" : textAnchor === "end" ? "right" : "left";
 
+        selectedNodeRef.current = textNode;
         setSelected({
-          node: textNode,
           text: rawText,
           rect: {
             left: bbox.x,
@@ -139,13 +138,12 @@ export function SlideSvgCanvas({
       } catch {
         // 忽略异常尺寸
       }
-    },
-    [readOnly, selected]
-  );
+  }
 
   useEffect(() => {
     if (!selected) return;
-    const node = selected.node;
+    const node = selectedNodeRef.current;
+    if (!node) return;
     const originalOpacity = node.style.opacity;
     node.style.opacity = "0";
 
@@ -154,14 +152,16 @@ export function SlideSvgCanvas({
     };
   }, [selected]);
 
-  const commitEdit = useCallback(() => {
-    if (!selected || !svgContainerRef.current) {
+  function commitEdit() {
+    const node = selectedNodeRef.current;
+    if (!selected || !node || !svgContainerRef.current) {
+      selectedNodeRef.current = null;
       setSelected(null);
       setEditText("");
       return;
     }
 
-    const { node, text: oldText } = selected;
+    const { text: oldText } = selected;
     if (editText.trim() !== oldText.trim()) {
       node.textContent = editText;
 
@@ -174,13 +174,15 @@ export function SlideSvgCanvas({
       }
     }
 
+    selectedNodeRef.current = null;
     setSelected(null);
     setEditText("");
-  }, [selected, editText, onSvgChange]);
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
-      if (selected) selected.node.style.opacity = "";
+      if (selectedNodeRef.current) selectedNodeRef.current.style.opacity = "";
+      selectedNodeRef.current = null;
       setSelected(null);
       setEditText("");
     }

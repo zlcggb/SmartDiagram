@@ -8,22 +8,19 @@
  *  - PNG/SVG export
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useChatStore } from '@/features/diagram/model/chatStore';
-import * as AntVInfographic from '@antv/infographic';
+import { Infographic, loadSVGResource, registerResourceLoader } from '@antv/infographic';
 import { AlertCircle } from 'lucide-react';
 import { useT } from '@/app/i18n';
 import { iconifyResourceUrl } from '../model/infographicResources';
-
-const Infographic: any = (AntVInfographic as any).Infographic;
 
 // ─── Resource Loader (Iconify icons + unDraw illustrations) ───
 
 const svgTextCache = new Map<string, string>();
 const pendingRequests = new Map<string, Promise<string | null>>();
 
-if ((AntVInfographic as any).registerResourceLoader) {
-  (AntVInfographic as any).registerResourceLoader(async (config: any) => {
+registerResourceLoader(async (config) => {
     const { data, scene } = config;
     try {
       const key = `${scene}::${data}`;
@@ -65,12 +62,11 @@ if ((AntVInfographic as any).registerResourceLoader) {
       }
 
       if (!svgText) return null;
-      return (AntVInfographic as any).loadSVGResource(svgText);
+      return loadSVGResource(svgText) as unknown as SVGSymbolElement | null;
     } catch {
       return null;
     }
-  });
-}
+});
 
 // ─── Component ───
 
@@ -79,51 +75,39 @@ export default function InfographicCanvas() {
   const { t } = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const svgWrapperRef = useRef<HTMLDivElement>(null);
-  const infographicRef = useRef<any>(null);
+  const infographicRef = useRef<Infographic | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeBlockIndex, setActiveBlockIndex] = useState(0);
-  const [blocks, setBlocks] = useState<string[]>([]);
 
   // Pan & zoom state
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
-  const isPanning = useRef(false);
+  const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
   const translateStart = useRef({ x: 0, y: 0 });
 
   // Split DSL content into infographic blocks
-  useEffect(() => {
-    if (!canvasCode) {
-      setBlocks([]);
-      return;
-    }
-
-    let dslContent = canvasCode.trim();
+  const blocks = useMemo(() => {
+    if (!canvasCode) return [];
+    const dslContent = canvasCode.trim();
     // Strip markdown code fences if present
     const codeBlockRegex = /```(?:\w+)?\n([\s\S]*?)```/g;
     const matches = [...dslContent.matchAll(codeBlockRegex)];
-    let extracted = matches.length > 0
+    const extracted = matches.length > 0
       ? matches.map(m => m[1].trim()).join('\n\n')
       : dslContent;
 
     // Split by 'infographic' keyword at start of line
-    const splitBlocks = extracted
+    return extracted
       .split(/(?=^infographic\s)/m)
       .map(b => b.trim())
       .filter(b => b.startsWith('infographic'));
-
-    // Follow latest block during streaming
-    if (isStreaming && splitBlocks.length > blocks.length) {
-      setActiveBlockIndex(splitBlocks.length - 1);
-    }
-
-    setBlocks(splitBlocks);
-
-    // Clamp index if out of bounds
-    if (!isStreaming && splitBlocks.length > 0 && activeBlockIndex >= splitBlocks.length) {
-      setActiveBlockIndex(splitBlocks.length - 1);
-    }
-  }, [canvasCode, isStreaming]);
+  }, [canvasCode]);
+  const displayedBlockIndex = blocks.length === 0
+    ? 0
+    : isStreaming
+      ? blocks.length - 1
+      : Math.min(activeBlockIndex, blocks.length - 1);
 
   // Export handler (exposed via custom event for toolbar)
   const handleExport = useCallback(async (type: 'png' | 'svg') => {
@@ -177,7 +161,7 @@ export default function InfographicCanvas() {
 
   // Render the active infographic block
   useEffect(() => {
-    const activeBlock = blocks[activeBlockIndex];
+    const activeBlock = blocks[displayedBlockIndex];
     if (!activeBlock || !containerRef.current) {
       if (infographicRef.current) {
         infographicRef.current.destroy();
@@ -196,19 +180,20 @@ export default function InfographicCanvas() {
     }
 
     try {
-      setError(null);
       infographicRef.current.render(activeBlock);
-      
-      // Reset view on new block rendering (but not on stream updates to keep zoom state)
-      if (!isStreaming) {
-        setScale(1);
-        setTranslate({ x: 0, y: 0 });
-      }
+      setTimeout(() => {
+        setError(null);
+        // Reset view on new block rendering (but not on stream updates to keep zoom state)
+        if (!isStreaming) {
+          setScale(1);
+          setTranslate({ x: 0, y: 0 });
+        }
+      }, 0);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to render infographic';
-      if (!isStreaming) setError(msg);
+      if (!isStreaming) setTimeout(() => setError(msg), 0);
     }
-  }, [blocks, activeBlockIndex, isStreaming]);
+  }, [blocks, displayedBlockIndex, isStreaming]);
 
   // Wheel zoom — must use non-passive listener for preventDefault()
   const handleWheel = useCallback((e: WheelEvent) => {
@@ -227,21 +212,21 @@ export default function InfographicCanvas() {
   // Pan handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    isPanning.current = true;
+    setIsPanning(true);
     panStart.current = { x: e.clientX, y: e.clientY };
     translateStart.current = { ...translate };
   }, [translate]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isPanning.current) return;
+    if (!isPanning) return;
     setTranslate({
       x: translateStart.current.x + (e.clientX - panStart.current.x),
       y: translateStart.current.y + (e.clientY - panStart.current.y),
     });
-  }, []);
+  }, [isPanning]);
 
   const handleMouseUp = useCallback(() => {
-    isPanning.current = false;
+    setIsPanning(false);
   }, []);
 
   const handleFitView = useCallback(() => {
@@ -270,7 +255,7 @@ export default function InfographicCanvas() {
         ref={svgWrapperRef}
         className="flex-1 w-full relative overflow-hidden"
         style={{
-          cursor: isPanning.current ? 'grabbing' : 'grab',
+          cursor: isPanning ? 'grabbing' : 'grab',
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -283,7 +268,7 @@ export default function InfographicCanvas() {
           style={{
             transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
             transformOrigin: 'center center',
-            transition: isPanning.current ? 'none' : 'transform 0.15s ease-out',
+            transition: isPanning ? 'none' : 'transform 0.15s ease-out',
           }}
         />
       </div>
@@ -334,7 +319,7 @@ export default function InfographicCanvas() {
                 key={idx}
                 onClick={() => setActiveBlockIndex(idx)}
                 className={`w-6 h-6 rounded flex items-center justify-center text-xs font-medium transition-all ${
-                  activeBlockIndex === idx
+                  displayedBlockIndex === idx
                     ? 'bg-slate-900 text-white shadow-md'
                     : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
@@ -344,7 +329,7 @@ export default function InfographicCanvas() {
             ))}
           </div>
           <span className="text-[10px] text-slate-400 font-medium tracking-wider uppercase">
-            {t('infographic.pageIndicator', { current: activeBlockIndex + 1, total: blocks.length })}
+            {t('infographic.pageIndicator', { current: displayedBlockIndex + 1, total: blocks.length })}
           </span>
         </div>
       )}

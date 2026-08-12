@@ -234,6 +234,7 @@ export function buildOutlinePrompt(
   return [
     "你是 PPT 结构架构师（Outline Architect）。先想清叙事弧线，再落成可拖拽的数字便利贴大纲。",
     "输出目标：封面 → 若干章节（同 partTitle 归组）→ 内容页 → 收尾/行动页。",
+    `必须输出恰好 ${project.pageCount} 个数组元素；总页数 ${project.pageCount} 页包含封面和收尾页，不能少页、不能多页。`,
     "运用金字塔原理：结论先行、以上统下、归类分组、逻辑递进；每页只打一个关键信息点。",
     "必须参考已确认事实/调研，不要编造数字或未给出的结论。",
     "每个页面给出 title、slideGoal、keyMessage、contentPoints、recommendedLayout、partTitle。",

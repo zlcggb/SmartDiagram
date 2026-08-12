@@ -15,7 +15,7 @@ import {
 import type { FactDto, FactStatus } from "@ppt-agent/shared";
 import { useWorkbenchStore } from '@/features/ppt/store/workbenchStore';
 import { MaterialUploader } from "../materials/MaterialUploader";
-import { MATERIAL_ACCEPT } from "../materials/materialUploadModel";
+import { MATERIAL_ACCEPT, MAX_MATERIAL_FILE_MIB } from "../materials/materialUploadModel";
 import { useMaterialUploads } from "../materials/useMaterialUploads";
 import { canContinueFromSource } from "./intentFlow";
 
@@ -158,7 +158,7 @@ export function SourceTab() {
               <Files />
               载入示例
             </button>
-            <span className="source-format-hint">PDF / Word / PPT / Excel / 文本 / 图片，最多 8 个，单文件 15 MB</span>
+            <span className="source-format-hint">PDF / Word / PPT / Excel / 文本 / 图片，最多 8 个，单文件 {MAX_MATERIAL_FILE_MIB} MiB</span>
           </div>
 
           <MaterialUploader

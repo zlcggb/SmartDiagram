@@ -35,10 +35,10 @@ test("refreshes immediately and repeatedly while generation is busy", async () =
     cancel: (handle) => { cancelledHandle = handle; },
   });
 
-  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(refreshCount, 1);
   callback?.();
-  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(refreshCount, 2);
   cleanup();
   assert.equal(cancelledHandle, "timer-1");
@@ -53,6 +53,36 @@ test("does not leak rejected refresh promises", async () => {
   });
 
   await new Promise((resolve) => setTimeout(resolve, 0));
+  cleanup();
+});
+
+test("does not start another refresh while the previous one is pending", async () => {
+  let refreshCount = 0;
+  let callback: (() => void) | undefined;
+  let resolveRefresh: (() => void) | undefined;
+  const cleanup = startAiUsageAutoRefresh({
+    busy: true,
+    refresh: () => {
+      refreshCount += 1;
+      return new Promise<void>((resolve) => {
+        resolveRefresh = resolve;
+      });
+    },
+    schedule: (next) => {
+      callback = next;
+      return "timer-1";
+    },
+    cancel: () => undefined,
+  });
+
+  assert.equal(refreshCount, 1);
+  callback?.();
+  assert.equal(refreshCount, 1);
+
+  resolveRefresh?.();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  callback?.();
+  assert.equal(refreshCount, 2);
   cleanup();
 });
 

@@ -52,7 +52,7 @@ export default function MermaidCanvas() {
   // Pan & zoom state
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
-  const isPanning = useRef(false);
+  const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
   const translateStart = useRef({ x: 0, y: 0 });
 
@@ -63,7 +63,7 @@ export default function MermaidCanvas() {
       if (code.startsWith('```')) {
         code = code.replace(/^```\w*\n?/, '').replace(/```$/, '').trim();
       }
-      setEditorCode(code);
+      setTimeout(() => setEditorCode(code), 0);
     }
   }, [canvasCode]);
 
@@ -81,7 +81,7 @@ export default function MermaidCanvas() {
 
   // Auto-switch Mermaid theme when canvasMode changes
   useEffect(() => {
-    setTheme(canvasMode === 'dark' ? 'dark' : 'default');
+    setTimeout(() => setTheme(canvasMode === 'dark' ? 'dark' : 'default'), 0);
   }, [canvasMode]);
 
   // Determine active mermaid code: use streamingCode during generation, canvasCode when done
@@ -212,11 +212,11 @@ export default function MermaidCanvas() {
           svgEl.style.maxWidth = 'none';
           svgEl.style.height = 'auto';
         }
-      } catch (e: any) {
-        console.warn('[MermaidCanvas] Intermediate parse/render error (ignored during streaming):', e);
+      } catch (error: unknown) {
+        console.warn('[MermaidCanvas] Intermediate parse/render error (ignored during streaming):', error);
         // Only trigger UI error state if NOT streaming to ensure fluid visual transitions
         if (!isStreaming) {
-          setError(e.message || 'Mermaid render failed');
+          setError(error instanceof Error ? error.message : 'Mermaid render failed');
           // 清空残留的半渲染 SVG，防止错误状态下显示空白
           if (containerRef.current) containerRef.current.innerHTML = '';
         }
@@ -232,16 +232,17 @@ export default function MermaidCanvas() {
     };
     render();
   // hasRendered 仅在 effect 内部用于条件判断（是否重置 pan/zoom），不应作为触发依赖
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStreaming, codeToRender, theme, canvasRenderRevision]);
+  }, [isStreaming, codeToRender, theme, canvasRenderRevision, hasRendered, setCanvasCode]);
 
   // Reset when canvas is cleared
   useEffect(() => {
     if (!canvasCode) {
-      setHasRendered(false);
-      setError(null);
-      setScale(1);
-      setTranslate({ x: 0, y: 0 });
+      setTimeout(() => {
+        setHasRendered(false);
+        setError(null);
+        setScale(1);
+        setTranslate({ x: 0, y: 0 });
+      }, 0);
     }
   }, [canvasCode]);
 
@@ -280,22 +281,22 @@ export default function MermaidCanvas() {
   // Pan handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    isPanning.current = true;
+    setIsPanning(true);
     panStart.current = { x: e.clientX, y: e.clientY };
     translateStart.current = { ...translate };
     (e.target as HTMLElement).style.cursor = 'grabbing';
   }, [translate]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isPanning.current) return;
+    if (!isPanning) return;
     setTranslate({
       x: translateStart.current.x + (e.clientX - panStart.current.x),
       y: translateStart.current.y + (e.clientY - panStart.current.y),
     });
-  }, []);
+  }, [isPanning]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
-    isPanning.current = false;
+    setIsPanning(false);
     (e.target as HTMLElement).style.cursor = 'grab';
   }, []);
 
@@ -478,7 +479,7 @@ export default function MermaidCanvas() {
             style={{
               transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
               transformOrigin: 'center center',
-              transition: isPanning.current ? 'none' : 'transform 0.1s ease-out',
+              transition: isPanning ? 'none' : 'transform 0.1s ease-out',
             }}
           />
         </div>

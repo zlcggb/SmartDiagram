@@ -79,7 +79,9 @@ export default function PricingPanel({
   };
 
   useEffect(() => {
-    if (open) void loadRates();
+    if (!open) return;
+    const timer = window.setTimeout(() => void loadRates(), 0);
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   const updateRate = (model: string, patch: Partial<EditableRate>) => {

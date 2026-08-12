@@ -183,13 +183,22 @@ export async function fetchCaptchaConfig(): Promise<CaptchaConfig> {
 }
 
 export interface BudgetMetrics {
-  allowed: boolean;
-  estimated_cost: number;
-  monthly_cost_limit: number;
-  estimated_total_tokens: number;
-  monthly_token_limit: number;
-  hard_limit_enabled: boolean;
-  run_count: number;
+  period: string;
+  scope: string;
+  usage: {
+    estimated_total_tokens: number;
+    run_count: number;
+  };
+  budget: {
+    monthly_cost_limit: number;
+    monthly_token_limit: number;
+    hard_limit_enabled: boolean;
+    status: string;
+  };
+  remaining: {
+    cost: number | null;
+    tokens: number | null;
+  };
 }
 
 export async function fetchBillingData(session: AuthSession): Promise<BudgetMetrics> {

@@ -2,10 +2,8 @@ import React from "react";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  DesignQualityFailurePanel,
-  highlightRejectedSvg
-} from "./DesignQualityFailurePanel.js";
+import { DesignQualityFailurePanel } from "./DesignQualityFailurePanel.js";
+import { highlightRejectedSvg } from "./designQualityFailure.js";
 
 const rejectedSvg = [
   '<svg viewBox="0 0 1280 720">',

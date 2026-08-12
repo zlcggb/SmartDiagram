@@ -7,6 +7,10 @@ import {
   normalizeKnowledgeMaterialStatus
 } from "./knowledgeGateway.js";
 
+test("资料网关默认允许 50 MiB 净文件", () => {
+  assert.equal(MAX_MATERIAL_BYTES, 50 * 1024 * 1024);
+});
+
 async function multipartPayload(
   content: BlobPart,
   options: { filename?: string; mimeType?: string; extra?: Record<string, string> } = {}
@@ -104,7 +108,7 @@ test("上传覆盖可信 origin/project 字段，同时完整保留文件正文"
   assert.equal(result.jobId, "job-1");
 });
 
-test("单文件超过 15 MiB 时在请求上游前拒绝", async () => {
+test("单文件超过配置上限时在请求上游前拒绝", async () => {
   let called = false;
   const fetchImpl: typeof fetch = async () => {
     called = true;

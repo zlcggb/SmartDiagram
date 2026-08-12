@@ -228,9 +228,21 @@ export function parseAiUsageSummary(payload: unknown): AiUsageSummary | null {
   return null;
 }
 
+const USAGE_FETCH_TIMEOUT_MS = 8_000;
+
+async function fetchUsageWithTimeout(url: string, options: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), USAGE_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchJsonLoose(apiPath: string): Promise<unknown | null> {
   try {
-    const response = await fetch(`${API_BASE}${apiPath}`, {
+    const response = await fetchUsageWithTimeout(`${API_BASE}${apiPath}`, {
       headers: createPptRequestHeaders(),
       credentials: "include"
     });
@@ -472,7 +484,7 @@ export const api = {
         const platformBase = String(import.meta.env?.VITE_PLATFORM_API_BASE_URL ?? (import.meta.env?.DEV ? "http://localhost:8000" : "")).replace(/\/$/, "");
         const query = new URLSearchParams({ limit: "100" });
         if (projectId) query.set("project_id", projectId);
-        const response = await fetch(`${platformBase}/api/billing/me/model-usage?${query}`, {
+        const response = await fetchUsageWithTimeout(`${platformBase}/api/billing/me/model-usage?${query}`, {
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         });

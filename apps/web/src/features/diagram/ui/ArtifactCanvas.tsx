@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Check,
   Code2,
@@ -88,7 +88,7 @@ const formatHtmlCode = (html: string) => {
 };
 
 const highlightJson = (code: string) => {
-  const tokenPattern = /("(?:\\.|[^"\\])*"(?=\s*:))|("(?:\\.|[^"\\])*")|(\btrue\b|\bfalse\b|\bnull\b)|(-?\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b)|([{}\[\],:])/gi;
+  const tokenPattern = /("(?:\\.|[^"\\])*"(?=\s*:))|("(?:\\.|[^"\\])*")|(\btrue\b|\bfalse\b|\bnull\b)|(-?\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b)|([{}[\],:])/gi;
   let cursor = 0;
   let html = '';
   code.replace(tokenPattern, (match, key, stringValue, literal, numberValue, punctuation, offset) => {
@@ -656,21 +656,16 @@ export default function ArtifactCanvas() {
   const payload = useMemo(() => parseArtifactDsl(sourceCode), [sourceCode]);
   const rendered = useMemo(() => renderHtmlArtifact(sourceCode), [sourceCode]);
   const formattedHtml = useMemo(() => formatHtmlCode(rendered.html), [rendered.html]);
-  const [htmlDraft, setHtmlDraft] = useState('');
+  const [htmlDraftState, setHtmlDraftState] = useState({ source: '', draft: '' });
   const isLight = canvasMode === 'light';
   const isEmail = String(payload?.artifact_type || canvasEngine) === 'html_email';
   const activeTemplate = getEmailTemplateId(payload);
   const canEdit = Boolean(canvasCode && payload && !rendered.error);
 
-  useEffect(() => {
-    setHtmlDraft(formattedHtml);
-  }, [formattedHtml]);
-
-  useEffect(() => {
-    if (tab === 'edit' && !isEmail) {
-      setTab('preview');
-    }
-  }, [isEmail, tab]);
+  const htmlDraft = htmlDraftState.source === formattedHtml
+    ? htmlDraftState.draft
+    : formattedHtml;
+  const activeTab = tab === 'edit' && !isEmail ? 'preview' : tab;
 
   const tabs: { id: TabKey; label: string; Icon: LucideIcon; hidden?: boolean }[] = [
     { id: 'preview', label: t('artifact.preview'), Icon: Eye },
@@ -740,7 +735,7 @@ export default function ArtifactCanvas() {
                   type="button"
                   onClick={() => setTab(id)}
                   className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                    tab === id
+                    activeTab === id
                       ? isLight ? 'bg-white text-slate-900 shadow-sm' : 'bg-slate-800 text-slate-100'
                       : isLight ? 'text-slate-500 hover:text-slate-800' : 'text-slate-500 hover:text-slate-200'
                   }`}
@@ -788,7 +783,7 @@ export default function ArtifactCanvas() {
       </div>
 
       <div className="min-h-0 flex-1 p-4">
-        {tab === 'preview' ? (
+        {activeTab === 'preview' ? (
           <div className={`h-full overflow-hidden rounded-lg border shadow-sm ${
             isLight ? 'border-slate-200 bg-white' : 'border-slate-800 bg-slate-900'
           }`}>
@@ -799,11 +794,11 @@ export default function ArtifactCanvas() {
               className="h-full w-full border-0 bg-white"
             />
           </div>
-        ) : tab === 'edit' && isEmail && payload ? (
+        ) : activeTab === 'edit' && isEmail && payload ? (
           <EmailContentEditor payload={payload} onChange={updatePayload} isLight={isLight} disabled={!canEdit} />
         ) : (
           <div className="relative h-full">
-            {tab === 'dsl' && (
+            {activeTab === 'dsl' && (
               <button
                 type="button"
                 onClick={() => copyText('dsl', sourceCode)}
@@ -818,11 +813,13 @@ export default function ArtifactCanvas() {
               </button>
             )}
             <SourceCodeEditor
-              value={tab === 'dsl' ? sourceCode : htmlDraft}
-              onChange={tab === 'dsl' ? (value) => canEdit && setCanvasCode(value) : setHtmlDraft}
-              language={tab === 'dsl' ? 'json' : 'html'}
+              value={activeTab === 'dsl' ? sourceCode : htmlDraft}
+              onChange={activeTab === 'dsl'
+                ? (value) => canEdit && setCanvasCode(value)
+                : (draft) => setHtmlDraftState({ source: formattedHtml, draft })}
+              language={activeTab === 'dsl' ? 'json' : 'html'}
               isLight={isLight}
-              disabled={tab === 'dsl' && !canEdit}
+              disabled={activeTab === 'dsl' && !canEdit}
             />
           </div>
         )}

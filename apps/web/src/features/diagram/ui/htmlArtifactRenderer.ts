@@ -162,7 +162,7 @@ const safeHref = (value: unknown) => {
 };
 
 const stripOrderedMarker = (value: unknown) =>
-  String(value ?? '').trim().replace(/^\s*\d+\s*[\.\．、\)）]\s*/, '');
+  String(value ?? '').trim().replace(/^\s*\d+\s*[.．、)）]\s*/, '');
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};

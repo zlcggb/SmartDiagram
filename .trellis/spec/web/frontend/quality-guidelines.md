@@ -45,4 +45,4 @@ import type { DiagramEngineType } from '@/types/diagram';
 
 - Tests colocated: `*.test.ts` next to source file
 - Example: `diagramHistory.test.ts` next to `diagramHistory.ts`
-- Use Vitest (configured via Vite)
+- Use Node's built-in `node:test` runner through `tsx`; run the cross-workspace suite with the root `npm run test:typescript` command
