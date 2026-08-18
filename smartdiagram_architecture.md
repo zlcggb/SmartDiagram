@@ -58,6 +58,7 @@ SmartDiagram/
 │       └── Prisma + PPTX 渲染 + 资料存储
 │
 ├── packages/
+│   ├── slide-ir/                 # PPT IR 与 SmartSlide DSL
 │   ├── shared/                   # PPT 共享类型（goalSpec 等）
 │   ├── agents/                   # PPT Agent 逻辑（TS）
 │   └── ppt-renderer/             # PPTX 渲染核心

@@ -340,6 +340,9 @@ def test_china_deploy_uses_configurable_ghcr_mirror_before_backup() -> None:
     assert "ARG UV_PYTHON_IMAGE=ghcr.io/astral-sh/uv:python3.13-bookworm-slim" in backend_dockerfile
     assert "FROM ${UV_PYTHON_IMAGE}" in backend_dockerfile
     assert "pnpm install --frozen-lockfile" in frontend_dockerfile
+    assert "COPY packages/slide-ir/package.json ./packages/slide-ir/package.json" in frontend_dockerfile
+    assert "COPY packages/slide-ir ./packages/slide-ir" in frontend_dockerfile
+    assert "pnpm --filter @ppt-agent/slide-ir build" in frontend_dockerfile
     assert "pnpm --filter @smartdiagram/web build" in frontend_dockerfile
     assert "context: ./" in compose[compose.index("  web:") : compose.index("\n  # ================= PPT Agent")]
     assert "NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}" in compose
@@ -349,6 +352,8 @@ def test_china_deploy_uses_configurable_ghcr_mirror_before_backup() -> None:
     assert "UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.10.5}" in ppt_node_compose
 
     root_dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY packages/slide-ir/package.json ./packages/slide-ir/package.json" in root_dockerfile
+    assert "pnpm --filter @ppt-agent/slide-ir build" in root_dockerfile
     assert "FROM ${UV_IMAGE} AS uv-bin" in root_dockerfile
     assert "COPY --from=uv-bin" in root_dockerfile
     assert not any(

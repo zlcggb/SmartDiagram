@@ -27,17 +27,20 @@ RUN if [ "$CN_MIRROR" = "true" ]; then pnpm config set registry https://registry
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web/package.json ./apps/web/package.json
+COPY packages/slide-ir/package.json ./packages/slide-ir/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 COPY packages/ppt-renderer/package.json ./packages/ppt-renderer/package.json
 
 RUN --mount=type=cache,id=pnpm-store-web,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
+COPY packages/slide-ir ./packages/slide-ir
 COPY packages/shared ./packages/shared
 COPY packages/ppt-renderer ./packages/ppt-renderer
 COPY apps/web ./apps/web
 
-RUN pnpm --filter @ppt-agent/shared build \
+RUN pnpm --filter @ppt-agent/slide-ir build \
+    && pnpm --filter @ppt-agent/shared build \
     && pnpm --filter @ppt-agent/ppt-renderer build \
     && pnpm --filter @smartdiagram/web build
 

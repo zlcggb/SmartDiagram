@@ -34,6 +34,7 @@ COPY apps/service-ppt-renderer/package.json ./apps/service-ppt-renderer/package.
 COPY packages/agents/package.json ./packages/agents/package.json
 COPY packages/ppt-renderer/package.json ./packages/ppt-renderer/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/slide-ir/package.json ./packages/slide-ir/package.json
 
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile
@@ -44,6 +45,7 @@ COPY packages ./packages
 COPY apps/service-ppt-renderer ./apps/service-ppt-renderer
 
 RUN pnpm exec prisma generate --schema prisma/schema.prisma \
+    && pnpm --filter @ppt-agent/slide-ir build \
     && pnpm --filter @ppt-agent/shared build \
     && pnpm --filter @ppt-agent/ppt-renderer build \
     && pnpm --filter @ppt-agent/agents build \

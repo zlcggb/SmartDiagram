@@ -9,6 +9,7 @@ cd "$ROOT_DIR"
 CI=true corepack pnpm install --frozen-lockfile
 corepack pnpm run test:typescript
 corepack pnpm run test:python
+corepack pnpm --filter @ppt-agent/slide-ir build
 corepack pnpm --filter @ppt-agent/shared build
 corepack pnpm --filter @ppt-agent/ppt-renderer build
 corepack pnpm --filter @ppt-agent/agents build

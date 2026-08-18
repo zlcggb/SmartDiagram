@@ -8,16 +8,16 @@ SmartDiagram 在一个桌面式 SPA 中集成 **图表 AI** 与 **PPT Agent**：
 
 ## 📋 操作速查
 
-| 我想… | 命令 |
-|--------|------|
-| **本地开发** | `cp .env.example .env` → 填 LLM 密钥 → `npm run dev` |
-| **检查环境变量** | `npm run env:validate` |
-| **检查 PPT 设计知识库** | `npm run design:knowledge -- --list` |
-| **服务器首次部署** | 见下方 [首次部署](#-服务器首次部署) |
-| **服务器一键更新** | `./deploy.sh --update --with-worker` |
-| **合并旧版 env 文件** | `npm run env:merge-legacy` |
-| **详细部署文档** | [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) · [docs/SERVER_DEPLOYMENT.md](./docs/SERVER_DEPLOYMENT.md) |
-| **架构 A 文档（AI/开发 onboarding）** | [AGENTS.md](./AGENTS.md) → [smartdiagram_architecture.md](./smartdiagram_architecture.md) |
+| 我想…                                      | 命令                                                                                                 |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **本地开发**                          | `cp .env.example .env` → 填 LLM 密钥 → `npm run dev`                                           |
+| **检查环境变量**                      | `npm run env:validate`                                                                             |
+| **检查 PPT 设计知识库**               | `npm run design:knowledge -- --list`                                                               |
+| **服务器首次部署**                    | 见下方[首次部署](#-服务器首次部署)                                                                    |
+| **服务器一键更新**                    | `./deploy.sh --update --with-worker`                                                               |
+| **合并旧版 env 文件**                 | `npm run env:merge-legacy`                                                                         |
+| **详细部署文档**                      | [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) · [docs/SERVER_DEPLOYMENT.md](./docs/SERVER_DEPLOYMENT.md) |
+| **架构 A 文档（AI/开发 onboarding）** | [AGENTS.md](./AGENTS.md) → [smartdiagram_architecture.md](./smartdiagram_architecture.md)             |
 
 ---
 
@@ -25,18 +25,18 @@ SmartDiagram 在一个桌面式 SPA 中集成 **图表 AI** 与 **PPT Agent**：
 
 ### 图表模块（`/diagram`）
 
-| 特性 | 说明 |
-|------|------|
-| **7 引擎渲染** | Excalidraw · Mermaid · React Flow · ECharts · mind-elixir · Draw.io · AntV |
-| **LangGraph 编排** | 智能路由、Knowledge、Validator/Repair、一致性检查 |
-| **企业能力** | 会话持久化、知识库、异步导出、运维看板（需 `--with-worker`） |
+| 特性                     | 说明                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| **7 引擎渲染**     | Excalidraw · Mermaid · React Flow · ECharts · mind-elixir · Draw.io · AntV |
+| **LangGraph 编排** | 智能路由、Knowledge、Validator/Repair、一致性检查                                |
+| **企业能力**       | 会话持久化、知识库、异步导出、运维看板（需`--with-worker`）                    |
 
 ### PPT 模块（`/ppt`）
 
-| 特性 | 说明 |
-|------|------|
-| **AI 生成** | 大纲 → 幻灯片 → 渲染 / TTS / 视频 |
-| **双库** | 图表库 `smartdiagram` + PPT 库 `ppt_agent`（根 `.env` 分开配置） |
+| 特性              | 说明                                                                  |
+| ----------------- | --------------------------------------------------------------------- |
+| **AI 生成** | 大纲 → 幻灯片 → 渲染 / TTS / 视频                                   |
+| **双库**    | 图表库`smartdiagram` + PPT 库 `ppt_agent`（根 `.env` 分开配置） |
 
 ---
 
@@ -106,10 +106,10 @@ npm run design:knowledge -- --topic "AI 销售培训" --page-type cover --theme 
 
 **双库不要混：**
 
-| 变量 | 指向的库 |
-|------|----------|
-| `DIAGRAM_DATABASE_URL` | `smartdiagram`（图表） |
-| `DATABASE_URL` | `ppt_agent`（PPT，Prisma 约定） |
+| 变量                     | 指向的库                          |
+| ------------------------ | --------------------------------- |
+| `DIAGRAM_DATABASE_URL` | `smartdiagram`（图表）          |
+| `DATABASE_URL`         | `ppt_agent`（PPT，Prisma 约定） |
 
 ---
 
@@ -176,17 +176,17 @@ GATEWAY_PORT=9237
 
 ### 自动生成 vs 必须手填（对照表）
 
-| 变量 | 首次部署 | 说明 |
-|------|----------|------|
-| `OPENAI_API_KEY` | ✍️ 手填 | 图表 LLM |
-| `OPENAI_BASE_URL` | ✍️ 手填 | API 地址 |
-| `OPENAI_COMPATIBLE_*` | ✍️ 手填或 mock | PPT AI |
-| `DB_PASSWORD` | 🤖 自动 | 有旧 PG 卷则保留原值 |
-| `DIAGRAM_DATABASE_URL` / `DATABASE_URL` | 🤖 自动同步密码 | 库名勿改 |
-| `PPT_INTERNAL_API_SECRET` | 🤖 自动 | |
-| `AUTH_SESSION_SECRET` | 🤖 自动 | |
-| `FFMPEG_PATH` | ➖ 留空 | 自动探测 |
-| `WHISPER_CPP_PATH` / `WHISPER_MODEL_PATH` | ➖ 可选 | 同时配置后，用最终音频转写对齐驱动字幕与聚焦；未配置时聚焦安全关闭 |
+| 变量                                          | 首次部署         | 说明                                                               |
+| --------------------------------------------- | ---------------- | ------------------------------------------------------------------ |
+| `OPENAI_API_KEY`                            | ✍️ 手填        | 图表 LLM                                                           |
+| `OPENAI_BASE_URL`                           | ✍️ 手填        | API 地址                                                           |
+| `OPENAI_COMPATIBLE_*`                       | ✍️ 手填或 mock | PPT AI                                                             |
+| `DB_PASSWORD`                               | 🤖 自动          | 有旧 PG 卷则保留原值                                               |
+| `DIAGRAM_DATABASE_URL` / `DATABASE_URL`   | 🤖 自动同步密码  | 库名勿改                                                           |
+| `PPT_INTERNAL_API_SECRET`                   | 🤖 自动          |                                                                    |
+| `AUTH_SESSION_SECRET`                       | 🤖 自动          |                                                                    |
+| `FFMPEG_PATH`                               | ➖ 留空          | 自动探测                                                           |
+| `WHISPER_CPP_PATH` / `WHISPER_MODEL_PATH` | ➖ 可选          | 同时配置后，用最终音频转写对齐驱动字幕与聚焦；未配置时聚焦安全关闭 |
 
 ---
 
@@ -303,15 +303,15 @@ cp .env .env.backup.$(date +%Y%m%d)
 ./deploy.sh --update --with-worker
 ```
 
-| 情况 | 命令 |
-|------|------|
-| 标准更新 | `./deploy.sh --update --with-worker` |
-| 已手动 `git pull` | `./deploy.sh --with-worker` |
-| 用了 Qdrant | `./deploy.sh --update --with-worker --with-qdrant` |
-| 国内网络 | `./deploy.sh --update --with-worker --cn` |
-| 仅备份不重启 | `./deploy.sh --backup` |
-| 看日志 | `./deploy.sh --logs` |
-| 验证 worker | `npm run worker:verify` |
+| 情况               | 命令                                                 |
+| ------------------ | ---------------------------------------------------- |
+| 标准更新           | `./deploy.sh --update --with-worker`               |
+| 已手动`git pull` | `./deploy.sh --with-worker`                        |
+| 用了 Qdrant        | `./deploy.sh --update --with-worker --with-qdrant` |
+| 国内网络           | `./deploy.sh --update --with-worker --cn`          |
+| 仅备份不重启       | `./deploy.sh --backup`                             |
+| 看日志             | `./deploy.sh --logs`                               |
+| 验证 worker        | `npm run worker:verify`                            |
 
 **安全保证：**
 
@@ -326,12 +326,12 @@ npm 等价：`npm run deploy:update`
 
 ## 🐳 部署命令说明
 
-| 场景 | 命令 |
-|------|------|
-| 首次部署 | `./deploy.sh --with-worker` |
+| 场景                       | 命令                                   |
+| -------------------------- | -------------------------------------- |
+| 首次部署                   | `./deploy.sh --with-worker`          |
 | **日常更新（推荐）** | `./deploy.sh --update --with-worker` |
-| 检查 env | `npm run env:validate` |
-| 停止服务（保留数据） | `./deploy.sh --down` |
+| 检查 env                   | `npm run env:validate`               |
+| 停止服务（保留数据）       | `./deploy.sh --down`                 |
 
 **`--with-worker`**：启动后台 worker（异步导出、知识库队列）。生产建议始终带上。PPT 服务默认就会部署，不需要额外 flag。
 
@@ -358,11 +358,11 @@ SmartDiagram/
 
 ## 📖 使用示例
 
-| Prompt | 引擎 |
-|--------|------|
-| 画一个微服务架构图 | Draw.io |
-| 项目管理思维导图 | mind-elixir |
-| @excalidraw 系统草图 | Excalidraw |
+| Prompt               | 引擎        |
+| -------------------- | ----------- |
+| 画一个微服务架构图   | Draw.io     |
+| 项目管理思维导图     | mind-elixir |
+| @excalidraw 系统草图 | Excalidraw  |
 
 PPT：浏览器打开 `/ppt` 进入工作台。
 

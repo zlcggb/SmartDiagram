@@ -6,12 +6,9 @@ import { renderSlideIrToSvg, stringifySmartSlide } from "@ppt-agent/slide-ir";
 import type { SlideIrDocument } from "@ppt-agent/slide-ir";
 import type { PptExportTheme, PresentationStyleId, SlidePlanDto } from '@ppt-agent/shared';
 import {
-  fitSvgTextToBounds,
   getAccentPresetHex,
   getThemePack,
-  getThemeSurfacePreset,
   normalizePresentationStyleId,
-  recolorSvgPreview,
   resolvePresentationStyleId,
   searchReferenceForDraft
 } from '@ppt-agent/shared';
@@ -634,13 +631,6 @@ export function StudioSpace() {
       ? stringifySmartSlide(selected.irJson)
       : svgEditorSource;
 
-  /** 即时色板换色：预览也会反映尚未保存的源码编辑。 */
-  const themedSvgPreview = useMemo(() => {
-    if (!svgEditorSource) return null;
-    const fittedSvg = fitSvgTextToBounds(svgEditorSource).svg;
-    return recolorSvgPreview(fittedSvg, exportTheme, { accentId: themeAccentId });
-  }, [svgEditorSource, exportTheme, themeAccentId]);
-
   const editorThemeStyle = useMemo(() => {
     const pack = getThemePack(exportTheme);
     const accent = getAccentPresetHex(exportTheme, themeAccentId);
@@ -654,7 +644,6 @@ export function StudioSpace() {
     } as CSSProperties;
   }, [exportTheme, themeAccentId]);
 
-  const surfacePreviewFilter = getThemeSurfacePreset(themeSurfaceId).previewFilter;
   const designStage = progressStages.design;
   const designStreamMatchesSelected = Boolean(
     selected && (!designStage?.slideId || designStage.slideId === selected.id)
