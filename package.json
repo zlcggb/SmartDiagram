@@ -40,6 +40,8 @@
         "deploy:down": "bash deploy.sh --down",
         "deploy:logs": "bash deploy.sh --logs",
         "deploy:status": "bash deploy.sh --status",
+        "migrate:export": "bash migrate.sh export",
+        "migrate:restore": "bash migrate.sh restore",
         "docker": "docker compose up --build -d",
         "docker:down": "docker compose down"
     },

@@ -20,7 +20,9 @@ htmlcov/
 # Environment (敏感！永不提交)
 .env
 .env.local
+.env.bak*
 backend/.env
+smartdiagram-migration-bundle-*.tar.gz
 prisma/dev.db
 
 # IDE

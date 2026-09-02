@@ -102,6 +102,32 @@ cp .env.example .env
 
 建议定期把整个备份目录同步到另一台机器或对象存储。只把备份留在同一块服务器磁盘上，无法防止磁盘损坏。
 
+## 跨服务器一键迁移与数据割接
+
+针对服务器换机、内存不足扩容迁移等场景，项目提供了专用的迁移打包与一键恢复部署脚本：
+
+### 1. 老服务器：一键导出并打包所有数据与配置
+```bash
+./migrate.sh export
+```
+- 自动包含：PostgreSQL 双库（`smartdiagram` 与 `ppt_agent`）、角色权限、全部持久化文件卷（`knowledgedata`、`pptdata`、`qdrantdata`）、根目录 `.env` 配置。
+- **低内存保护**：老服务器若内存紧张，可附加 `--low-mem` 自动临时停用高耗内存应用容器，确保备份平稳不被系统 OOM 中断。
+- 最终在根目录生成单个归档包：`smartdiagram-migration-bundle-<UTC时间戳>.tar.gz`。
+
+### 2. 传输归档包到新服务器
+```bash
+scp smartdiagram-migration-bundle-*.tar.gz root@<新服务器IP>:/opt/SmartDiagram/
+```
+
+### 3. 新服务器：一键恢复数据与全栈部署
+在新服务器拉取最新代码并放入迁移归档包后，直接执行：
+```bash
+./migrate.sh restore
+# 或显式指定包路径：
+./migrate.sh restore ./smartdiagram-migration-bundle-XXXXXX.tar.gz
+```
+脚本将全自动完成：解压与 SHA256 校验 → 还原 `.env` → 启动数据库与权限恢复 → 恢复双库数据 → 恢复文件卷与权限校正 → 执行 `./deploy.sh --with-worker` 自动化构建与启动 → 输出数据量统计核验报告与访问入口。
+
 ## 失败时如何处理
 
 迁移或健康检查失败时，脚本立即退出并显示备份路径，不会删除数据库或用户卷。先检查：

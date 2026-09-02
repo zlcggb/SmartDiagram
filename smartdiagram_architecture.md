@@ -71,6 +71,7 @@ SmartDiagram/
 ├── scripts/                      # dev-common、env 校验、bootstrap 密钥、db-wait
 ├── dev.sh                        # npm run dev 入口
 ├── deploy.sh                     # 生产部署 / 更新
+├── migrate.sh                    # 跨服务器一键迁移 / 恢复部署入口
 ├── docker-compose.yml            # 全栈容器定义
 ├── .env / .env.example           # 唯一主配置（三分区）
 └── README.md                     # 人类操作手册
