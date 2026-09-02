@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-smartdiagram_secret}
       POSTGRES_DB: smartdiagram
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -43,7 +43,7 @@ services:
     container_name: smartdiagram-redis
     restart: always
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-16379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

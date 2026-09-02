@@ -660,7 +660,7 @@ deploy() {
     fi
     if [ "$WITH_WORKER" = true ]; then
         echo -e "  🧵 Worker:   docker compose --profile worker ps worker"
-        echo -e "  📮 Redis:    redis://localhost:6379/0"
+        echo -e "  📮 Redis:    redis://localhost:${REDIS_PORT:-16379}/0"
     fi
     echo ""
     echo -e "${CYAN}常用命令:${NC}"
