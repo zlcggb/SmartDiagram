@@ -177,9 +177,13 @@ fi
 
 # 7. 恢复主图表数据库 (smartdiagram)
 if [ -f "$STAGING_DIR/smartdiagram.dump" ]; then
+    info "正在准备主数据库架构 (重置 public schema 并预装扩展)..."
+    docker compose exec -T db psql -U postgres -d smartdiagram -c \
+        "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO postgres; GRANT ALL ON SCHEMA public TO public; CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null 2>&1 || true
+
     info "正在恢复 SmartDiagram 主数据库 (用户、会话、画布、向量嵌入)..."
     cat "$STAGING_DIR/smartdiagram.dump" | docker compose exec -T db pg_restore \
-        -U postgres -d smartdiagram --clean --if-exists --no-owner --no-acl
+        -U postgres -d smartdiagram --no-owner --no-acl
     ok "主数据库 (smartdiagram) 恢复成功"
 else
     warn "未找到 smartdiagram.dump，跳过主库恢复"
@@ -187,9 +191,13 @@ fi
 
 # 8. 恢复 PPT Agent 数据库 (ppt_agent)
 if [ -f "$STAGING_DIR/ppt_agent.dump" ]; then
+    info "正在准备 PPT Agent 数据库架构 (重置 public schema)..."
+    docker compose exec -T db psql -U postgres -d ppt_agent -c \
+        "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO postgres; GRANT ALL ON SCHEMA public TO public;" >/dev/null 2>&1 || true
+
     info "正在恢复 PPT Agent 数据库 (项目、工作台、幻灯片历史)..."
     cat "$STAGING_DIR/ppt_agent.dump" | docker compose exec -T db pg_restore \
-        -U postgres -d ppt_agent --clean --if-exists --no-owner --no-acl
+        -U postgres -d ppt_agent --no-owner --no-acl
     ok "PPT Agent 数据库 (ppt_agent) 恢复成功"
 else
     info "未包含 ppt_agent.dump，跳过 PPT 库恢复"
