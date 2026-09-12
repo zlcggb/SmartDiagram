@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Download, Search, WandSparkles } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  Download,
+  MoreHorizontal,
+  Search,
+  WandSparkles,
+  Sparkles,
+  ChevronDown,
+  Layers,
+  CheckCircle2,
+  FileText,
+  History,
+  Palette,
+  Play
+} from "lucide-react";
 import { renderSlideIrToSvg, stringifySmartSlide } from "@ppt-agent/slide-ir";
 import type { SlideIrDocument } from "@ppt-agent/slide-ir";
 import type { PptExportTheme, PresentationStyleId, SlidePlanDto } from '@ppt-agent/shared';
@@ -38,12 +51,11 @@ import {
 import { SlideThumbnail } from "../components/studio/SlideThumbnail";
 import { SlideIrCanvas } from "../components/studio/SlideIrCanvas";
 import { SlideSvgCanvas } from "../components/studio/SlideSvgCanvas";
+import { StreamingDraftCanvas } from "../components/studio/StreamingDraftCanvas";
+import { StreamingSearchCanvas } from "../components/studio/StreamingSearchCanvas";
+import { SearchVisualCanvas } from "../components/studio/SearchVisualCanvas";
+import { WorkspaceStudioPortal } from "../components/project-shell/WorkspaceStudioPortal";
 
-const phases: Array<{ id: StudioPhase; label: string; step: number }> = [
-  { id: "search", label: "检索素材", step: 1 },
-  { id: "draft", label: "生成初稿", step: 2 },
-  { id: "design", label: "设计出图", step: 3 }
-];
 
 const DEFAULT_BLANK_TITLE = "新增空白页";
 const DEFAULT_BLANK_KEY = "请补充本页核心结论";
@@ -315,6 +327,7 @@ export function StudioSpace() {
   const generateAllPlans = useWorkbenchStore((s) => s.generateAllPlans);
   const generateSlideDesign = useWorkbenchStore((s) => s.generateSlideDesign);
   const generateAllDesigns = useWorkbenchStore((s) => s.generateAllDesigns);
+  const runPipeline = useWorkbenchStore((s) => s.runPipeline);
   const saveSlideSvg = useWorkbenchStore((s) => s.saveSlideSvg);
   const updateSlide = useWorkbenchStore((s) => s.updateSlide);
   const exportTheme = useWorkbenchStore((s) => s.exportTheme);
@@ -338,14 +351,24 @@ export function StudioSpace() {
   const clearDesignQualityFailure = useWorkbenchStore((s) => s.clearDesignQualityFailure);
 
   const currentSlideId = searchParams.get("slide") ?? slides[0]?.id ?? null;
-  const currentPhase = (searchParams.get("phase") as StudioPhase) ?? "search";
+  const targetSlide = slides.find((s) => s.id === currentSlideId);
+  const defaultPhase: StudioPhase = targetSlide?.svgPreview || targetSlide?.irJson ? "design" : (targetSlide?.planJson ? "draft" : "design");
+  const currentPhase = (searchParams.get("phase") as StudioPhase) ?? defaultPhase;
 
   function setSlideInUrl(slideId: string) {
+    useWorkbenchStore.setState({ selectedSlideId: slideId });
     setSearchParams((prev) => {
       prev.set("slide", slideId);
       return prev;
     });
   }
+
+  // 监听 URL 参数同步 store 中的 selectedSlideId
+  useEffect(() => {
+    if (currentSlideId && currentSlideId !== useWorkbenchStore.getState().selectedSlideId) {
+      useWorkbenchStore.setState({ selectedSlideId: currentSlideId });
+    }
+  }, [currentSlideId]);
 
   function setPhaseInUrl(phase: StudioPhase) {
     setSearchParams((prev) => {
@@ -353,6 +376,43 @@ export function StudioSpace() {
       return prev;
     });
   }
+
+  const navigate = useNavigate();
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!actionMenuOpen && !exportMenuOpen && !moreMenuOpen) return;
+    function handlePointerDown(e: PointerEvent) {
+      const target = e.target as Node;
+      if (actionMenuOpen && !actionMenuRef.current?.contains(target)) {
+        setActionMenuOpen(false);
+      }
+      if (exportMenuOpen && !exportMenuRef.current?.contains(target)) {
+        setExportMenuOpen(false);
+      }
+      if (moreMenuOpen && !moreMenuRef.current?.contains(target)) {
+        setMoreMenuOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setActionMenuOpen(false);
+        setExportMenuOpen(false);
+        setMoreMenuOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [actionMenuOpen, exportMenuOpen, moreMenuOpen]);
 
   const [metaDraft, setMetaDraft] = useState<SlideMetaDraft>({
     title: "",
@@ -548,7 +608,40 @@ export function StudioSpace() {
   const searchJson = selected?.searchJson;
   const plan = selected?.planJson;
   const draftResearch = searchReferenceForDraft(searchJson);
-  const isGeneratingDraft = draftEntryGenerating || Boolean(busy && (busy.includes("初稿") || busy.includes("策划")));
+
+  // 关键单页沙箱隔离：若当前选中的页面已经拥有初稿策划，坚决不进入 isGeneratingDraft，直接呈现编辑界面！
+  const planStage = progressStages.plan;
+  const planIsRunning = planStage?.status === "running";
+  const planIsForCurrentSlide = Boolean(selected && planStage?.slideId === selected.id);
+  const isGeneratingDraft = Boolean(
+    !plan && (
+      draftEntryGenerating ||
+      (busy && (busy.includes("初稿") || busy.includes("策划"))) ||
+      (planIsRunning && planIsForCurrentSlide)
+    )
+  );
+
+  // 单页专属流式 Delta：优先取 slideDeltas[selected.id]，避免多页并发时文本混杂
+  const streamedPlanDelta = useMemo(() => {
+    if (!selected) return "";
+    const perSlide = planStage?.slideDeltas?.[selected.id];
+    if (perSlide) return perSlide;
+    if (planStage?.slideId === selected.id && planStage?.delta) {
+      return planStage.delta;
+    }
+    return "";
+  }, [selected, planStage?.slideDeltas, planStage?.slideId, planStage?.delta]);
+
+  const searchStage = progressStages.search;
+  const searchIsRunning = searchStage?.status === "running";
+  const searchIsForCurrentSlide = Boolean(selected && searchStage?.slideId === selected.id);
+  // 关键单页沙箱隔离：若当前选中的页面已拥有检索事实，不被全局 busy 遮蔽，直接展示检索卡片！
+  const isSearching = Boolean(
+    !searchJson && (
+      (busy && (busy.includes("检索") || busy.includes("素材"))) ||
+      (searchIsRunning && searchIsForCurrentSlide)
+    )
+  );
   const showMetaHint = needsMetaHint(metaDraft.title, metaDraft.keyMessage);
 
   const handleMetaChange = (next: SlideMetaDraft) => {
@@ -654,9 +747,9 @@ export function StudioSpace() {
   const showDesignCodeStream = Boolean(
     currentPhase === "design" &&
       designStreamMatchesSelected &&
-      (designGenerationBusy || designStage?.status === "running")
+      (designStage?.status === "running" || (designGenerationBusy && !selected?.svgPreview))
   );
-  const streamedDesignCode = designStage?.status === "running" ? designStage.delta ?? "" : "";
+  const streamedDesignCode = designStage?.delta || "";
   const streamWaitingCopy = designStage?.message
     ? designGenerationMode === "slide-ir"
       ? `# ${designStage.message}\n# 已连接进度流，等待模型返回 SmartSlide JSON…`
@@ -863,156 +956,314 @@ export function StudioSpace() {
 
   return (
     <div className="space-y-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="studio-phase-nav flex items-center rounded-full border border-[rgba(0,0,0,0.13)] bg-white p-1 shadow-[0_5px_16px_-4px_rgba(0,0,0,0.07)]">
-          {phases.map((phase, idx) => {
-            // 判断该阶段是否已完成
-            const isDone = phase.id === "search"
-              ? slides.some((s) => s.searchJson)
-              : phase.id === "draft"
-                ? slides.some((s) => s.planJson)
-                : slides.some((s) => s.svgPreview || s.irJson);
-            const isActive = currentPhase === phase.id;
+      <WorkspaceStudioPortal>
+      <div className="studio-command-bar">
+        {/* 3. 工作室流程：检索 —— 初稿 —— 视觉 */}
+        <div
+          className="studio-phase-stepper"
+          role="tablist"
+          aria-label="工作室工作阶段"
+        >
+          {[
+            { id: "search" as const, label: "检索" },
+            { id: "draft" as const, label: "初稿" },
+            { id: "design" as const, label: "视觉" }
+          ].map((item, index) => {
+            const isActive = currentPhase === item.id;
             return (
-              <span key={phase.id} className="inline-flex items-center">
-                {idx > 0 && <span className="mx-0.5 text-xs text-[rgba(0,0,0,0.3)]">→</span>}
+              <div key={item.id} className="studio-phase-stepper__item">
+                {index > 0 && <span className="studio-phase-stepper__line" aria-hidden="true" />}
                 <button
                   type="button"
-                  className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition ${
-                    isActive ? "bg-[rgba(0,0,0,0.9)] text-white" : isDone ? "text-[rgba(0,0,0,0.9)] hover:bg-[rgba(0,0,0,0.03)]" : "text-[rgba(0,0,0,0.6)] hover:bg-[rgba(0,0,0,0.03)]"
-                  }`}
-                  onClick={() => setPhaseInUrl(phase.id)}
+                  role="tab"
+                  aria-selected={isActive}
+                  className={`studio-phase-stepper__btn ${isActive ? "is-active" : ""}`}
+                  onClick={() => setPhaseInUrl(item.id)}
                 >
-                  <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-medium ${
-                    isActive ? "bg-white/25 text-white" : isDone ? "bg-[rgba(0,0,0,0.06)] text-[rgba(0,0,0,0.9)]" : "bg-[rgba(0,0,0,0.03)] text-[rgba(0,0,0,0.45)]"
-                  }`}>
-                    {isDone && !isActive ? "✓" : phase.step}
-                  </span>
-                  {phase.label}
+                  {item.label}
                 </button>
-              </span>
+              </div>
             );
           })}
         </div>
-        <div className="studio-toolbar-actions flex flex-wrap gap-2">
-          {currentPhase === "search" ? (
+
+        <div className="studio-toolbar-actions">
+          {/* 4. 当前生成方式：SVG / SmartSlide */}
+          <div
+            className="studio-design-engine"
+            role="group"
+            aria-label="设计生成引擎"
+          >
+            {(
+              [
+                ["svg", "SVG"],
+                ["slide-ir", "Smart"]
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                disabled={Boolean(busy)}
+                className={`studio-design-engine__btn ${
+                  designGenerationMode === mode ? "is-active" : ""
+                }`}
+                title={
+                  mode === "slide-ir"
+                    ? "SmartSlide：结构化对象模型，优先导出为原生可编辑 PPT 元素"
+                    : "SVG：自由矢量画布，视觉表达更丰富"
+                }
+                onClick={() => setDesignGenerationMode(mode)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* 5. 页面主操作：拆分按钮（生成本页 + 下拉箭头） */}
+          <div ref={actionMenuRef} className="studio-split-button studio-split-button--primary">
             <button
               type="button"
-              className="secondary-button rounded-[10px]"
-              disabled={Boolean(busy)}
-              onClick={() => void runWithMetaFlush(() => searchAllSlides())}
-            >
-              <Search className="h-4 w-4" />
-              全部检索
-            </button>
-          ) : null}
-          {currentPhase === "draft" ? (
-            <>
-              <button
-                type="button"
-                className="secondary-button rounded-[10px]"
-                disabled={Boolean(busy) || !selected}
-                onClick={() => selected && void runWithMetaFlush(() => generateSlidePlan(selected.id))}
-              >
-                生成本页初稿
-              </button>
-              <button
-                type="button"
-                className="primary-button rounded-[10px]"
-                disabled={Boolean(busy)}
-                onClick={() => void runWithMetaFlush(() => generateAllPlans())}
-              >
-                全部初稿
-              </button>
-            </>
-          ) : null}
-          {currentPhase === "design" ? (
-            <>
-              <div
-                className="inline-flex rounded-[10px] border border-[rgba(0,0,0,0.13)] bg-[rgba(0,0,0,0.035)] p-1"
-                role="group"
-                aria-label="设计生成引擎"
-              >
-                {(
-                  [
-                    ["svg", "SVG"],
-                    ["slide-ir", "SmartSlide"]
-                  ] as const
-                ).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    disabled={Boolean(busy)}
-                    className={`rounded-[7px] px-2.5 py-1.5 text-xs font-medium transition ${
-                      designGenerationMode === mode
-                        ? "bg-white text-[rgba(0,0,0,0.9)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
-                        : "text-[rgba(0,0,0,0.48)] hover:text-[rgba(0,0,0,0.85)]"
-                    }`}
-                    title={
-                      mode === "slide-ir"
-                        ? "结构化对象模型，优先导出为原生可编辑 PPT 元素"
-                        : "自由 SVG 画布，视觉表达更灵活"
-                    }
-                    onClick={() => setDesignGenerationMode(mode)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="secondary-button rounded-[10px]"
-                disabled={Boolean(busy) || !selected || isWizardRunning}
-                onClick={() => {
+              className="studio-split-button__main"
+              disabled={
+                Boolean(busy) ||
+                isWizardRunning ||
+                (currentPhase === "draft" && !selected) ||
+                (currentPhase === "design" && !selected)
+              }
+              onClick={() => {
+                if (currentPhase === "search") {
+                  void runWithMetaFlush(() => searchAllSlides());
+                } else if (currentPhase === "draft") {
+                  if (selected) void runWithMetaFlush(() => generateSlidePlan(selected.id));
+                } else {
                   if (!selected) return;
                   if (pendingPageStyleChange) {
                     void regenerateWithPendingPageStyle();
                   } else {
                     void runWizard(selected.id);
                   }
-                }}
-                title={
-                  pendingPageStyleChange
-                    ? "按已选择的新风格重新生成本页"
-                    : `使用${designGenerationMode === "slide-ir" ? " SmartSlide" : " SVG"}生成本页设计稿（未检索/初稿会自动补齐）`
                 }
-              >
-                <WandSparkles className="h-4 w-4" />
-                {pendingPageStyleChange ? "按新风格重新生成" : "生成本页设计稿"}
-              </button>
-              <button
-                type="button"
-                className="primary-button rounded-[10px]"
-                disabled={Boolean(busy) || isWizardRunning}
-                onClick={() => void generateAllDesigns()}
-                title={`为全部页面生成${designGenerationMode === "slide-ir" ? " SmartSlide" : " SVG"}设计稿`}
-              >
-                全部生成设计稿
-              </button>
-              <button
-                type="button"
-                className="secondary-button rounded-[10px]"
-                disabled={Boolean(busy) || !selected || !currentDesignReady}
-                onClick={handleExportCurrentClick}
-                title={currentDesignReady ? "只导出当前选中页，不生成其他页" : "当前页尚未生成设计稿"}
-              >
-                <Download className="h-4 w-4" />
-                导出当前页
-              </button>
-              <button
-                type="button"
-                className="primary-button rounded-[10px]"
-                disabled={Boolean(busy) || slides.length === 0}
-                onClick={handleExportClick}
-                title="导出已生成的页面；未生成时会提示，不会自动跑完全部检索/初稿/出图"
-              >
-                <Download className="h-4 w-4" />
-                {busy?.includes("导出") ? busy : "导出 PPTX"}
-              </button>
-            </>
-          ) : null}
+              }}
+              title={
+                currentPhase === "search"
+                  ? "检索全部幻灯片所需资料"
+                  : currentPhase === "draft"
+                    ? "生成当前选中页的结构初稿"
+                    : pendingPageStyleChange
+                      ? "按已选择的新风格重新生成本页"
+                      : `使用${designGenerationMode === "slide-ir" ? " SmartSlide" : " SVG"}生成本页设计稿`
+              }
+            >
+              <WandSparkles className="h-4 w-4" />
+              <span>
+                {currentPhase === "search"
+                  ? "全部检索"
+                  : pendingPageStyleChange
+                    ? "按新风格重新生成"
+                    : "生成本页"}
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`studio-split-button__trigger ${actionMenuOpen ? "is-open" : ""}`}
+              aria-haspopup="menu"
+              aria-expanded={actionMenuOpen}
+              onClick={() => setActionMenuOpen((v) => !v)}
+              title="更多生成与自动化选项"
+            >
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${actionMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {actionMenuOpen ? (
+              <div className="studio-dropdown-menu" role="menu">
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  disabled={Boolean(busy) || isWizardRunning}
+                  onClick={() => {
+                    setActionMenuOpen(false);
+                    void generateAllDesigns();
+                  }}
+                >
+                  <Sparkles className="h-4 w-4 text-blue-600" />
+                  <span>全部生成设计稿</span>
+                </button>
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  disabled={Boolean(busy) || !selected || isWizardRunning}
+                  onClick={() => {
+                    setActionMenuOpen(false);
+                    void regenerateWithPendingPageStyle();
+                  }}
+                >
+                  <Palette className="h-4 w-4 text-purple-600" />
+                  <span>按新风格重新生成</span>
+                </button>
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  disabled={Boolean(busy) || !project}
+                  onClick={() => {
+                    setActionMenuOpen(false);
+                    void runPipeline();
+                  }}
+                >
+                  <Play className="h-4 w-4 text-emerald-600" />
+                  <span>全部自动生成</span>
+                </button>
+                <div className="studio-dropdown-menu__divider" />
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    setActionMenuOpen(false);
+                    void runWithMetaFlush(() => generateAllPlans());
+                  }}
+                >
+                  <FileText className="h-4 w-4 text-amber-600" />
+                  <span>全部生成初稿</span>
+                </button>
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    setActionMenuOpen(false);
+                    void runWithMetaFlush(() => searchAllSlides());
+                  }}
+                >
+                  <Search className="h-4 w-4 text-sky-600" />
+                  <span>全部重新检索</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {/* 6. 导出 PPTX：拆分按钮（导出 PPTX + 下拉箭头） */}
+          <div ref={exportMenuRef} className="studio-split-button studio-split-button--secondary">
+            <button
+              type="button"
+              className="studio-split-button__main"
+              disabled={Boolean(busy) || slides.length === 0}
+              onClick={handleExportClick}
+              title="导出 PPTX（默认弹出选择范围与画质）"
+            >
+              <Download className="h-4 w-4" />
+              <span>{busy?.includes("导出") ? busy : "导出 PPTX"}</span>
+            </button>
+            <button
+              type="button"
+              className={`studio-split-button__trigger ${exportMenuOpen ? "is-open" : ""}`}
+              aria-haspopup="menu"
+              aria-expanded={exportMenuOpen}
+              onClick={() => setExportMenuOpen((v) => !v)}
+              title="更多导出选项"
+            >
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${exportMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {exportMenuOpen ? (
+              <div className="studio-dropdown-menu" role="menu">
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  disabled={Boolean(busy) || !selected || !currentDesignReady}
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    handleExportCurrentClick();
+                  }}
+                  title={currentDesignReady ? "只导出当前选中页" : "当前页尚未生成设计稿"}
+                >
+                  <FileText className="h-4 w-4 text-neutral-600" />
+                  <span>仅导出当前页</span>
+                </button>
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  disabled={Boolean(busy) || readySlides.length === 0}
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    setExportScope("ready");
+                    setExportPromptOpen(true);
+                  }}
+                >
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <span>导出已完成页面 ({readySlides.length} 页)</span>
+                </button>
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  disabled={Boolean(busy) || slides.length === 0}
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    setExportScope("all");
+                    setExportPromptOpen(true);
+                  }}
+                >
+                  <Layers className="h-4 w-4 text-blue-600" />
+                  <span>导出全部页面 ({slides.length} 页)</span>
+                </button>
+                <div className="studio-dropdown-menu__divider" />
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    navigate("../director");
+                  }}
+                >
+                  <History className="h-4 w-4 text-neutral-500" />
+                  <span>查看导出记录</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {/* 7. 更多操作：··· 按钮 */}
+          <div ref={moreMenuRef} className="studio-more-container">
+            <button
+              type="button"
+              className={`studio-more-button ${moreMenuOpen ? "is-open" : ""}`}
+              onClick={() => setMoreMenuOpen((v) => !v)}
+              aria-label="更多操作"
+              title="更多操作"
+            >
+              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+            </button>
+            {moreMenuOpen ? (
+              <div className="studio-dropdown-menu studio-dropdown-menu--right" role="menu">
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  disabled={Boolean(busy) || !project}
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    void runPipeline();
+                  }}
+                >
+                  <WandSparkles className="h-4 w-4 text-amber-600" />
+                  <span>全部自动生成</span>
+                </button>
+                <button
+                  type="button"
+                  className="studio-dropdown-menu__item"
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    void runWithMetaFlush(() => searchAllSlides());
+                  }}
+                >
+                  <Search className="h-4 w-4 text-blue-600" />
+                  <span>重新检索全部</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
+      </WorkspaceStudioPortal>
 
       <WizardWaitBanner
         wizardState={wizardState}
@@ -1098,41 +1349,17 @@ export function StudioSpace() {
                 />
               </div>
 
-              <div className="mt-4 rounded-xl border border-[rgba(0,0,0,0.13)] bg-[rgba(0,0,0,0.03)] p-5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-medium text-[rgba(0,0,0,0.9)]">检索后</h3>
-                  </div>
-                  {searchJson ? (
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-medium text-[rgba(0,0,0,0.6)]">
-                      {searchJson.mode === "web" ? "联网检索" : "AI 整理 · 未联网"}
-                    </span>
-                  ) : null}
-                </div>
-
-                {draftResearch ? (
-                  <>
-                    <p className="mt-4 whitespace-pre-line text-sm leading-7 text-[rgba(0,0,0,0.7)]">{draftResearch.draftReference}</p>
-                    {searchJson?.mode === "web" && searchJson.results.some((card) => card.url) ? (
-                      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[rgba(0,0,0,0.1)] pt-3 text-xs text-[rgba(0,0,0,0.45)]">
-                        <span>参考来源：</span>
-                        {searchJson.results.filter((card) => card.url).map((card, index) => (
-                          <a key={`${card.url}-${index}`} className="hover:text-[rgba(0,0,0,0.9)] hover:underline" href={card.url} target="_blank" rel="noreferrer">
-                            {card.sourceName || `来源 ${index + 1}`}
-                          </a>
-                        ))}
-                      </div>
-                    ) : searchJson ? (
-                      <p className="mt-4 border-t border-[rgba(0,0,0,0.1)] pt-3 text-xs text-[rgba(0,0,0,0.45)]">当前未联网，内容需人工核验。</p>
-                    ) : null}
-                  </>
-                ) : (
-                  <div className="mt-4 rounded-lg border border-dashed border-[rgba(0,0,0,0.16)] bg-white px-4 py-10 text-center">
-                    <p className="text-sm font-medium text-[rgba(0,0,0,0.6)]">尚未检索</p>
-                    <p className="mt-1 text-xs text-[rgba(0,0,0,0.45)]">点击上方“检索本页”后，结果会显示在这里。</p>
-                  </div>
-                )}
-              </div>
+              {isSearching ? (
+                <StreamingSearchCanvas
+                  delta={searchStage?.delta}
+                  message={searchStage?.message}
+                />
+              ) : (
+                <SearchVisualCanvas
+                  searchJson={searchJson}
+                  draftResearch={draftResearch}
+                />
+              )}
 
               {draftResearch ? (
                 <div className="sticky bottom-0 z-10 mt-8 -mx-5 -mb-5 flex items-center justify-between border-t border-[rgba(0,0,0,0.13)] bg-white/95 px-5 py-4 backdrop-blur">
@@ -1158,10 +1385,11 @@ export function StudioSpace() {
                 {isGeneratingDraft ? <span className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 text-[10px] font-medium text-[rgba(0,0,0,0.9)]">生成中</span> : plan ? <span className="rounded-full bg-[rgba(0,0,0,0.06)] px-2 py-0.5 text-[10px] font-medium text-[rgba(0,0,0,0.9)]">已完成</span> : <span className="rounded-full bg-[rgba(0,0,0,0.03)] px-2 py-0.5 text-[10px] font-medium text-[rgba(0,0,0,0.45)]">待生成</span>}
               </div>
               {isGeneratingDraft ? (
-                <div className="mt-5 rounded-xl border border-[rgba(0,0,0,0.13)] bg-[rgba(0,0,0,0.03)] px-5 py-14 text-center">
-                  <span className="mx-auto block h-6 w-6 animate-spin rounded-full border-2 border-[rgba(0,0,0,0.15)] border-t-[rgba(0,0,0,0.75)]" />
-                  <p className="mt-4 text-sm font-medium text-[rgba(0,0,0,0.9)]">正在生成本页初稿…</p>
-                </div>
+                <StreamingDraftCanvas
+                  delta={streamedPlanDelta}
+                  message={planStage?.message}
+                  fallbackTitle={selected?.title}
+                />
               ) : plan && planDraft ? (
                 <>
                   <div className="mt-5">
@@ -1383,17 +1611,32 @@ export function StudioSpace() {
                   />
                 </div>
               ) : (
-                <div className="rounded-xl bg-[rgba(0,0,0,0.03)] px-4 py-14 text-center">
-                  <p className="text-sm text-[rgba(0,0,0,0.6)]">尚未生成设计稿</p>
-                  <button
-                    type="button"
-                    className="primary-button mt-5 rounded-[10px]"
-                    disabled={Boolean(busy) || !selected || isWizardRunning}
-                    onClick={() => selected && void runWizard(selected.id)}
-                    title="自动补齐检索素材和初稿后生成设计稿"
-                  >
-                    生成本页设计稿
-                  </button>
+                <div className="rounded-2xl border border-dashed border-[rgba(0,0,0,0.18)] bg-[rgba(0,0,0,0.02)] px-6 py-16 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-xs border border-[rgba(0,0,0,0.08)] mb-3">
+                    <span className="text-2xl">🎨</span>
+                  </div>
+                  <h3 className="text-base font-semibold text-[rgba(0,0,0,0.85)]">本页尚未生成设计稿</h3>
+                  <p className="mt-1 text-xs text-[rgba(0,0,0,0.5)] max-w-md mx-auto">
+                    无需手动分步执行，点击下方一键成稿，系统将全自动联动「检索素材 → 策划初稿 → 绘制视觉」，完成精准设计闭环。
+                  </p>
+                  <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      className="primary-button rounded-xl px-5 py-2.5 shadow-sm"
+                      disabled={Boolean(busy) || !selected || isWizardRunning}
+                      onClick={() => selected && void runWizard(selected.id)}
+                    >
+                      <WandSparkles className="h-4 w-4 mr-1.5" />
+                      ⚡ 一键生成本页设计稿
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button rounded-xl px-4 py-2.5"
+                      onClick={() => setPhaseInUrl("draft")}
+                    >
+                      📝 手动编辑初稿
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -3,6 +3,7 @@ export type {
   ModelUsageEvent,
   ModelUsageReporter,
   ModelUsageStage,
+  SlideCopilotResult,
   SpeechScriptContext,
   VisibleTextCandidateRef
 } from "./types.js";

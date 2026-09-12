@@ -667,3 +667,136 @@ export function buildSvgPreviewPrompt(
     "输出前自检：是否完整执行 STYLE_CONTRACT 的构图、排版、密度和禁止模式；viewBox 是否为 0 0 1280 720；全部业务内容是否处于 x=32..1248、y=24..696 安全区；独立业务区是否完全不相交并保留配方 minGutter；是否按 layer 从低到高输出语义 <g>；连接线是否位于内容后方且没有穿过文字；是否没有整高侧边色条、泛用胶囊、无意义光晕和错位叠片；是否存在视觉配方规定的全部 <g id> 与必要非矩形图元；是否逐步执行背景、标题、结论、正文和关系层的形状组装程序；是否没有退化成标题居中、等宽白卡和纯文字平铺；是否存在明确主视觉；是否体现 visualHint；是否所有 text 都有贴合文字范围的 data-w/data-h；超过 data-w 的文字是否已用带 x/dy 的 tspan 显式换行；文字右边是否与容器保留至少 20px；是否没有孤立 bullet/标点、重复事实和文字截断；是否能被拆成可编辑 PPT 文本和形状。"
   ].filter(Boolean).join("\n\n");
 }
+
+export const slideCopilotSystemPrompt = [
+  "你是顶级的 PPT 演示设计与文案协同专家（Slide Copilot）。",
+  "你的职责是根据用户的自然语言修改指令，协助用户对当前单页幻灯片的结构化初稿进行精准微调或重构。",
+  "你必须输出符合 JSON Schema 的 JSON，包含以下字段：",
+  "1. plan: 修改后的完整 SlidePlanDto 对象（含 title, pageGoal, keyMessage, layoutType, contentBlocks, visualHint 等）；",
+  "2. replyMessage: 面向用户的中文简短说明，解释你做了哪些修改、背后的逻辑或进一步建议（50-150字，亲切、专业、精准）。",
+  "3. suggestedAction: （可选）简短建议下一步动作，如“建议重新出图”、“建议精炼副标题”。",
+  "遵循原则：",
+  "- 尊重用户意图：若用户要求精炼，大幅删减冗余虚词保留核心数字与论点；若要求扩充论据，补充严密的支撑维度；若要求换版式，修改 layoutType 及 contentBlocks 的数量与结构；",
+  "- 确保结构完整性：每一个 contentBlock 必须有 title 与 items 数组，不要遗漏关键字段；",
+  "- 只输出合法的 JSON 格式，严禁输出 markdown 代码块外的多余说明。"
+].join("\n");
+
+export function buildSlideCopilotPrompt(
+  slide: SlideDto,
+  currentPlan: any,
+  instruction: string
+) {
+  return [
+    "请根据用户的修改要求，更新当前幻灯片的初稿策划内容。",
+    `用户修改指令：${instruction}`,
+    "当前幻灯片基本信息：",
+    JSON.stringify({
+      title: slide.title,
+      slideGoal: slide.slideGoal,
+      keyMessage: slide.keyMessage,
+      contentPoints: slide.contentPoints,
+      recommendedLayout: slide.recommendedLayout
+    }, null, 2),
+    "当前初稿策划（若有）：",
+    currentPlan ? JSON.stringify(currentPlan, null, 2) : "（暂无，请基于基本信息与用户指令创建新初稿）"
+  ].join("\n\n");
+}
+
+export const consultantProposalSchema = {
+  type: "object",
+  properties: {
+    takeaways: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          title: { type: "string" },
+          content: { type: "string" },
+          category: { type: "string" }
+        },
+        required: ["id", "title", "content", "category"]
+      }
+    },
+    chapters: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          title: { type: "string" },
+          keyGoal: { type: "string" },
+          pageCount: { type: "string" },
+          points: {
+            type: "array",
+            items: { type: "string" }
+          }
+        },
+        required: ["id", "title", "keyGoal", "pageCount", "points"]
+      }
+    },
+    consultantGreeting: { type: "string" },
+    quickActions: {
+      type: "array",
+      items: { type: "string" }
+    }
+  },
+  required: ["takeaways", "chapters", "consultantGreeting", "quickActions"]
+};
+
+export const consultantProposeSystemPrompt = [
+  "你是顶级商业与学术演示架构专家（McKinsey/BCG 级 PPT 策略顾问）。",
+  "你的职责：根据用户提供的 PPT 主题、受众画像、汇报目标，以及补充的任意文本或文档资料，进行深度研读、去粗取精，提炼出核心观点立论，并规划出金字塔结构的篇章故事线大纲。",
+  "你必须针对用户具体的行业、业务和材料定制，严禁泛泛而谈或输出通用套话。",
+  "必须输出严格符合 JSON Schema 的中文 JSON，不要输出任何额外的 markdown 或解释文字。",
+  "输出字段规范：",
+  "1. takeaways: 核心观点立论列表（3~4条），每条必须有 id, category, title, content；",
+  "2. chapters: 篇章故事线大纲（3~4个章节），每条必须有 id, title, keyGoal, pageCount, points；",
+  "3. consultantGreeting: 100-200字专业有深度的顾问分析诊断，直击核心卡点并向用户抛出关键架构建议；",
+  "4. quickActions: 针对该具体主题量身定制的 4 个专属快捷微调指令。"
+].join("\n");
+
+export const consultantChatSystemPrompt = [
+  "你是负责与用户共创 PPT 大纲架构的顶级顾问。",
+  "你的职责：接收用户针对当前观点和大纲提出的自然语言调整要求，以极高悟性吸收指令，动态重构核心立论（takeaways）与篇章大纲（chapters），并在 consultantGreeting 字段中给出专业、清晰的确认说明，同时生成最新的 4 个 quickActions。",
+  "必须输出严格符合 JSON Schema 的中文 JSON。"
+].join("\n");
+
+export function buildConsultantProposePrompt(context: {
+  project: Pick<ProjectDto, "name" | "audience" | "purpose" | "topic" | "reportType" | "pageCount">;
+  sourceText: string;
+  materialTexts?: string[];
+}) {
+  return [
+    "请对以下 PPT 创作需求及补充资料进行深度研读，提炼核心立论、规划篇章大纲，并输出顾问建议与快捷指令：",
+    `【PPT 主题】：${context.project.topic || context.project.name}`,
+    `【汇报类型】：${context.project.reportType || "专业演示"}`,
+    `【核心受众】：${context.project.audience || "受众未指定"}`,
+    `【汇报目的】：${context.project.purpose || "目的未指定"}`,
+    `【计划页数】：${context.project.pageCount || 8} 页`,
+    "",
+    "【用户补充的文字与背景材料】：",
+    context.sourceText ? context.sourceText : "（暂未输入额外补充文本）",
+    "",
+    context.materialTexts?.length
+      ? `【上传的材料内容摘要】：\n${context.materialTexts.join("\n\n---\n\n")}`
+      : ""
+  ].filter(Boolean).join("\n");
+}
+
+export function buildConsultantChatPrompt(context: {
+  project: Pick<ProjectDto, "name" | "audience" | "purpose" | "topic">;
+  currentProposal: any;
+  instruction: string;
+}) {
+  return [
+    "用户对当前的大纲架构提出了微调指令，请吸收用户意图，重构核心立论与篇章大纲，并给予专业答复：",
+    `【PPT 主题】：${context.project.topic || context.project.name}`,
+    `【用户调整指令】：${context.instruction}`,
+    "",
+    "【当前架构方案】：",
+    JSON.stringify(context.currentProposal, null, 2)
+  ].join("\n");
+}
+
+

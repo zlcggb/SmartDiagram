@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, ChevronDown, FolderOpen, LoaderCircle, Plus, Search } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle, Plus, Search } from "lucide-react";
 import { getThemePack, normalizePptExportTheme, type ProjectDto } from "@ppt-agent/shared";
 import { api } from "../../lib/api";
 
@@ -21,7 +21,13 @@ function projectEntryPath(project: ProjectDto) {
   return `../../p/${project.id}/studio`;
 }
 
-export function ProjectSwitcher({ project }: { project: ProjectDto | null }) {
+export function ProjectSwitcher({
+  project,
+  moduleSubtitle = "工作室"
+}: {
+  project: ProjectDto | null;
+  moduleSubtitle?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [query, setQuery] = useState("");
@@ -78,12 +84,10 @@ export function ProjectSwitcher({ project }: { project: ProjectDto | null }) {
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
+        title={project?.name ? `${project.name} (点击切换项目)` : "切换项目"}
       >
-        <span className="project-switcher__glyph" aria-hidden="true">
-          <FolderOpen className="h-[18px] w-[18px]" />
-        </span>
         <span className="project-switcher__copy">
-          <span className="project-switcher__eyebrow">当前项目</span>
+          <span className="project-switcher__eyebrow">PPT Agent / {moduleSubtitle}</span>
           <span className="project-switcher__name">{project?.name ?? "正在载入项目"}</span>
         </span>
         <ChevronDown className={`project-switcher__chevron ${open ? "rotate-180" : ""}`} />

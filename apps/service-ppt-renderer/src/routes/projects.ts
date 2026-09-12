@@ -9,6 +9,8 @@ import {
 } from "@ppt-agent/slide-ir";
 import {
   briefAnswerSchema,
+  consultantAdjustRequestSchema,
+  consultantProposeRequestSchema,
   createBlankSlideSchema,
   createFactSchema,
   createProjectSchema,
@@ -1029,6 +1031,216 @@ export async function projectRoutes(app: FastifyInstance) {
     return reply.send(ok(createdFacts.map(formatFactWithEvidence), "事实已提取"));
   });
 
+  app.post<{ Params: IdParams }>("/api/projects/:id/consultant-propose", async (request, reply) => {
+    const parsedBody = consultantProposeRequestSchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.status(400).send(fail(parsedBody.error.issues[0]?.message ?? "参数无效"));
+    }
+    const body = parsedBody.data;
+    const project = await findProjectOr404(request.params.id);
+    if (!project) {
+      return reply.status(404).send(fail("未找到项目"));
+    }
+
+    let sourceText = body.sourceText;
+    if (sourceText && sourceText.trim()) {
+      await prisma.sourceText.create({ data: { projectId: request.params.id, content: sourceText.trim() } });
+    } else {
+      const latest = await prisma.sourceText.findFirst({
+        where: { projectId: request.params.id },
+        orderBy: { createdAt: "desc" }
+      });
+      sourceText = latest?.content ?? "";
+    }
+
+    const storedMaterials = await prisma.projectMaterial.findMany({
+      where: {
+        projectId: request.params.id,
+        ...(body.materialIds?.length ? { id: { in: body.materialIds } } : {})
+      },
+      orderBy: { createdAt: "asc" }
+    });
+
+    const materialTexts: string[] = [];
+    if (storedMaterials.length > 0) {
+      try {
+        const formattedMaterials = await Promise.all(
+          storedMaterials.map(async (material) => {
+            try {
+              const knowledge = await knowledgeGateway.getDocument(material.knowledgeDocumentId, {
+                projectId: request.params.id,
+                requestHeaders: request.headers
+              });
+              return formatStoredProjectMaterial(material, knowledge);
+            } catch (error) {
+              return formatProjectMaterialGatewayFailure(material, error);
+            }
+          })
+        );
+        const materialSources = await loadMaterialContextSources({
+          gateway: knowledgeGateway,
+          materials: formattedMaterials.filter((m) => m.status === "ready"),
+          projectId: request.params.id,
+          requestHeaders: request.headers
+        });
+        for (const src of materialSources) {
+          const combined = src.chunks.map((c) => c.text).join("\n");
+          if (combined.trim()) {
+            materialTexts.push(`${src.material.filename}：\n${combined.slice(0, 1500)}`);
+          }
+        }
+      } catch (err) {
+        app.log.warn(err, "Load material context sources for consultant failed, skipping");
+      }
+    }
+
+    let proposal;
+    try {
+      if (adapter.proposeConsultantStructure) {
+        proposal = await adapter.proposeConsultantStructure({
+          project: {
+            name: project.name,
+            audience: project.audience,
+            purpose: project.purpose,
+            topic: project.topic,
+            reportType: project.reportType,
+            pageCount: project.pageCount
+          },
+          sourceText: sourceText || "",
+          materialTexts
+        });
+      } else {
+        throw new Error("模型适配器未实现 proposeConsultantStructure");
+      }
+    } catch (error) {
+      app.log.error(error, "Consultant propose failed");
+      return reply.status(502).send(fail(aiFailMessage(error)));
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.fact.deleteMany({
+          where: {
+            projectId: request.params.id,
+            sourceLocation: { in: ["AI顾问核心立论", "AI顾问篇章架构"] }
+          }
+        });
+
+        for (const takeaway of proposal.takeaways) {
+          await tx.fact.create({
+            data: {
+              projectId: request.params.id,
+              category: "建议与判断",
+              content: `【${takeaway.category}：${takeaway.title}】${takeaway.content}`,
+              status: "confirmed",
+              confidence: 0.98,
+              sourceText: takeaway.content,
+              sourceLocation: "AI顾问核心立论",
+              canUseInPpt: true
+            }
+          });
+        }
+
+        for (const chapter of proposal.chapters) {
+          await tx.fact.create({
+            data: {
+              projectId: request.params.id,
+              category: "项目进展",
+              content: `【篇章架构：${chapter.title}】（预计 ${chapter.pageCount}）目标：${chapter.keyGoal}；要点：${chapter.points.join("；")}`,
+              status: "confirmed",
+              confidence: 0.95,
+              sourceText: chapter.points.join("，"),
+              sourceLocation: "AI顾问篇章架构",
+              canUseInPpt: true
+            }
+          });
+        }
+      });
+    } catch (error) {
+      app.log.warn(error, "Sync proposal facts to DB warning");
+    }
+
+    return reply.send(ok(proposal, "顾问推导架构已就绪"));
+  });
+
+  app.post<{ Params: IdParams }>("/api/projects/:id/consultant-adjust", async (request, reply) => {
+    const parsedBody = consultantAdjustRequestSchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.status(400).send(fail(parsedBody.error.issues[0]?.message ?? "参数无效"));
+    }
+    const { instruction, currentProposal } = parsedBody.data;
+    const project = await findProjectOr404(request.params.id);
+    if (!project) {
+      return reply.status(404).send(fail("未找到项目"));
+    }
+
+    let updatedProposal;
+    try {
+      if (adapter.adjustConsultantStructure) {
+        updatedProposal = await adapter.adjustConsultantStructure({
+          project: {
+            name: project.name,
+            audience: project.audience,
+            purpose: project.purpose,
+            topic: project.topic
+          },
+          currentProposal,
+          instruction
+        });
+      } else {
+        throw new Error("模型适配器未实现 adjustConsultantStructure");
+      }
+    } catch (error) {
+      app.log.error(error, "Consultant adjust failed");
+      return reply.status(502).send(fail(aiFailMessage(error)));
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.fact.deleteMany({
+          where: {
+            projectId: request.params.id,
+            sourceLocation: { in: ["AI顾问核心立论", "AI顾问篇章架构"] }
+          }
+        });
+
+        for (const takeaway of updatedProposal.takeaways) {
+          await tx.fact.create({
+            data: {
+              projectId: request.params.id,
+              category: "建议与判断",
+              content: `【${takeaway.category}：${takeaway.title}】${takeaway.content}`,
+              status: "confirmed",
+              confidence: 0.98,
+              sourceText: takeaway.content,
+              sourceLocation: "AI顾问核心立论",
+              canUseInPpt: true
+            }
+          });
+        }
+
+        for (const chapter of updatedProposal.chapters) {
+          await tx.fact.create({
+            data: {
+              projectId: request.params.id,
+              category: "项目进展",
+              content: `【篇章架构：${chapter.title}】（预计 ${chapter.pageCount}）目标：${chapter.keyGoal}；要点：${chapter.points.join("；")}`,
+              status: "confirmed",
+              confidence: 0.95,
+              sourceText: chapter.points.join("，"),
+              sourceLocation: "AI顾问篇章架构",
+              canUseInPpt: true
+            }
+          });
+        }
+      });
+    } catch (error) {
+      app.log.warn(error, "Sync adjusted proposal facts to DB warning");
+    }
+
+    return reply.send(ok(updatedProposal, "架构调整已生效"));
+  });
+
   app.get<{ Params: IdParams }>("/api/projects/:id/facts", async (request, reply) => {
     const project = await findProjectOr404(request.params.id);
     if (!project) {
@@ -1487,8 +1699,12 @@ export async function projectRoutes(app: FastifyInstance) {
       return reply.status(400).send(fail("请先生成便利贴大纲，再生成策划稿。"));
     }
 
+    const force = ((request.body ?? {}) as { force?: unknown }).force === true;
     // 类 grok-build subagent fan-out：每页一个 Planner worker，有限并发
-    const candidates = detail.slides.filter((slide) => !(slide.isContentLocked && slide.planJson));
+    // 默认增量生成：未锁定的无策划页面才生成；force=true 时重新策划所有未锁定的页面
+    const candidates = force
+      ? detail.slides.filter((slide) => !slide.isContentLocked)
+      : detail.slides.filter((slide) => !slide.planJson && !slide.isContentLocked);
     if (candidates.length === 0) {
       return reply.send(ok(await getProjectSlides(request.params.id), "所有页面策划稿已是最新"));
     }
@@ -1502,7 +1718,7 @@ export async function projectRoutes(app: FastifyInstance) {
     emitProgress(request.params.id, {
       stage: "plan",
       status: "start",
-      message: `批量策划启动（并发 ${concurrency}，共 ${total} 页）…`,
+      message: `批量策划启动（并发 ${concurrency}，待策划 ${total} 页）…`,
       current: 0,
       total
     });
@@ -1517,18 +1733,6 @@ export async function projectRoutes(app: FastifyInstance) {
             perPageBuffer.push(token);
             emitToken(token);
           });
-          // 批量任务避免多页 token 混叠：每页完成后整段 emit 一次
-          if (perPageBuffer.length > 0) {
-            emitProgress(request.params.id, {
-              stage: "plan",
-              status: "progress",
-              message: `「${slide.title}」策划完成`,
-              delta: perPageBuffer.join(""),
-              subStage: slide.title,
-              slideId: slide.id,
-              slideTitle: slide.title
-            });
-          }
           const renderStrategy = resolveNextStrategy(slide, {
             title: plan.title || slide.title,
             recommendedLayout: slide.recommendedLayout,
@@ -1544,6 +1748,23 @@ export async function projectRoutes(app: FastifyInstance) {
               renderStrategy
             }
           );
+          const updatedSlideRecord = await prisma.slide.findUnique({
+            where: { id: slide.id },
+            include: { slideSources: true }
+          });
+          const freshSlide = updatedSlideRecord ? formatSlide(updatedSlideRecord) : null;
+          // 批量任务避免多页 token 混叠：每页完成后整段 emit 一次，携带最新单页数据实现即时回写
+          emitProgress(request.params.id, {
+            stage: "plan",
+            status: "progress",
+            message: `「${slide.title}」策划完成`,
+            delta: perPageBuffer.join(""),
+            subStage: slide.title,
+            slideId: slide.id,
+            slideTitle: slide.title,
+            action: "slide-updated",
+            slide: freshSlide
+          });
           return plan;
         },
         {
@@ -1820,6 +2041,21 @@ export async function projectRoutes(app: FastifyInstance) {
         } else {
           await generateEditableSvgDesign(request.params.id, slide, detail.facts, input.theme, input);
           generatedSvgCount += 1;
+        }
+        const updatedSlideRecord = await prisma.slide.findUnique({
+          where: { id: slide.id },
+          include: { slideSources: true }
+        });
+        if (updatedSlideRecord) {
+          emitProgress(request.params.id, {
+            stage: "design",
+            status: "progress",
+            message: `「${slide.title}」设计完成`,
+            slideId: slide.id,
+            slideTitle: slide.title,
+            action: "slide-updated",
+            slide: formatSlide(updatedSlideRecord)
+          });
         }
       } catch (error) {
         const qualityFailure = resolveSvgGenerationFailure(error);
@@ -2154,24 +2390,39 @@ export async function projectRoutes(app: FastifyInstance) {
       return reply.status(400).send(fail("请先生成大纲"));
     }
 
+    const force = ((request.body ?? {}) as { force?: unknown }).force === true;
+    const candidates = force ? detail.slides : detail.slides.filter((slide) => !slide.searchJson);
+    if (candidates.length === 0) {
+      return reply.send(
+        ok(
+          {
+            slides: await getProjectSlides(request.params.id),
+            failures: [],
+            concurrency: 1
+          },
+          "所有页面检索已是最新"
+        )
+      );
+    }
+
     // LangGraph 风格 fan-out：每页一个检索 worker，有限并发（默认 3）
     const concurrency = resolveSearchConcurrency();
     const researchAdapter = getResearchAdapter();
     const topic = detail.project.topic || detail.project.name;
     const researchSummary = detail.project.researchJson?.summary;
-    const total = detail.slides.length;
+    const total = candidates.length;
     let doneCount = 0;
 
     emitProgress(request.params.id, {
       stage: "search",
       status: "start",
-      message: `全部检索启动（并发 ${concurrency}，共 ${total} 页）`,
+      message: `全部检索启动（并发 ${concurrency}，待检索 ${total} 页）`,
       current: 0,
       total
     });
 
     const mapped = await orchestration.mapPages(
-      detail.slides,
+      candidates,
       async (slide, _index, emitToken) => {
         const perPageBuffer: string[] = [];
         const searchJson = researchAdapter
@@ -2180,20 +2431,25 @@ export async function projectRoutes(app: FastifyInstance) {
               perPageBuffer.push(token);
               emitToken(token);
             });
-        if (perPageBuffer.length > 0) {
-          emitProgress(request.params.id, {
-            stage: "search",
-            status: "progress",
-            message: `「${slide.title}」检索完成`,
-            delta: perPageBuffer.join(""),
-            subStage: slide.title,
-            slideId: slide.id,
-            slideTitle: slide.title
-          });
-        }
         await prisma.slide.update({
           where: { id: slide.id },
           data: { searchJson: JSON.stringify(searchJson), generationStatus: "search-ready" }
+        });
+        const updatedSlideRecord = await prisma.slide.findUnique({
+          where: { id: slide.id },
+          include: { slideSources: true }
+        });
+        const freshSlide = updatedSlideRecord ? formatSlide(updatedSlideRecord) : null;
+        emitProgress(request.params.id, {
+          stage: "search",
+          status: "progress",
+          message: `「${slide.title}」检索完成`,
+          delta: perPageBuffer.join(""),
+          subStage: slide.title,
+          slideId: slide.id,
+          slideTitle: slide.title,
+          action: "slide-updated",
+          slide: freshSlide
         });
         return searchJson;
       },
@@ -2402,6 +2658,21 @@ export async function projectRoutes(app: FastifyInstance) {
             where: { id: slide.id },
             data: { searchJson: JSON.stringify(searchJson), generationStatus: "search-ready" }
           });
+          const freshSearchSlide = await prisma.slide.findUnique({
+            where: { id: slide.id },
+            include: { slideSources: true }
+          });
+          if (freshSearchSlide) {
+            emitProgress(request.params.id, {
+              stage: "search",
+              status: "progress",
+              message: `「${slide.title}」检索完成`,
+              slideId: slide.id,
+              slideTitle: slide.title,
+              action: "slide-updated",
+              slide: formatSlide(freshSearchSlide)
+            });
+          }
         }
       }
       logs.push("按页检索完成");
@@ -2427,6 +2698,21 @@ export async function projectRoutes(app: FastifyInstance) {
               generationStatus: "draft-ready"
             }
           });
+          const freshPlanSlide = await prisma.slide.findUnique({
+            where: { id: slide.id },
+            include: { slideSources: true }
+          });
+          if (freshPlanSlide) {
+            emitProgress(request.params.id, {
+              stage: "plan",
+              status: "progress",
+              message: `「${slide.title}」初稿策划完成`,
+              slideId: slide.id,
+              slideTitle: slide.title,
+              action: "slide-updated",
+              slide: formatSlide(freshPlanSlide)
+            });
+          }
         }
       }
       logs.push("初稿策划完成");
@@ -2438,6 +2724,21 @@ export async function projectRoutes(app: FastifyInstance) {
           if (slide.svgPreview) continue;
           try {
             await generateEditableSvgDesign(request.params.id, slide, facts, theme);
+            const freshDesignSlide = await prisma.slide.findUnique({
+              where: { id: slide.id },
+              include: { slideSources: true }
+            });
+            if (freshDesignSlide) {
+              emitProgress(request.params.id, {
+                stage: "design",
+                status: "progress",
+                message: `「${slide.title}」设计完成`,
+                slideId: slide.id,
+                slideTitle: slide.title,
+                action: "slide-updated",
+                slide: formatSlide(freshDesignSlide)
+              });
+            }
           } catch (error) {
             logs.push(`设计失败：${slide.title} — ${error instanceof Error ? error.message : "未知错误"}`);
           }

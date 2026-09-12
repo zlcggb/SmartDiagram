@@ -9,7 +9,7 @@ import { PptModule } from '@/features/ppt/PptModule'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route element={<AppShell />}>
           {/* 平台首页 */}

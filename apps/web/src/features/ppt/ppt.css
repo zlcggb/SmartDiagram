@@ -56,6 +56,772 @@
   --tw-contain-style:  ;
 }
 
+/* —— 方案 B：单层全能栏（推荐）统一 62–64px 工作区 —— */
+.ppt-root .workspace-header {
+  height: 62px;
+  min-height: 62px;
+  max-height: 62px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  overflow: visible;
+}
+
+.ppt-root .workspace-header__main {
+  width: 100%;
+  max-width: 1800px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0 1.25rem;
+  flex-wrap: nowrap;
+}
+
+.ppt-root .workspace-header__identity {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+}
+
+.ppt-root .workspace-brand {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.ppt-root .workspace-brand__mark {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.58rem;
+  background: #0f172a;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+  transition: transform 0.15s ease;
+}
+
+.ppt-root .workspace-brand:hover .workspace-brand__mark {
+  transform: scale(1.04);
+}
+
+.ppt-root .project-switcher {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ppt-root .project-switcher__trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.22rem 0.45rem;
+  border-radius: 0.6rem;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ppt-root .project-switcher__trigger:hover,
+.ppt-root .project-switcher__trigger.is-open {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+.ppt-root .project-switcher__copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: left;
+}
+
+.ppt-root .project-switcher__eyebrow {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.42);
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+}
+
+.ppt-root .project-switcher__name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.88);
+  line-height: 1.3;
+  max-width: clamp(120px, 14vw, 220px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ppt-root .project-switcher__chevron {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: rgba(0, 0, 0, 0.42);
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.ppt-root .workspace-header__navigation {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.65rem;
+}
+
+.ppt-root .workspace-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.18rem;
+  border-radius: 0.65rem;
+  background: rgba(0, 0, 0, 0.045);
+  flex-shrink: 0;
+}
+
+.ppt-root .workspace-nav__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  height: 1.85rem;
+  padding: 0 0.6rem;
+  border-radius: 0.52rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.55);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.ppt-root .workspace-nav__item:hover {
+  color: rgba(0, 0, 0, 0.88);
+  background: rgba(0, 0, 0, 0.035);
+}
+
+.ppt-root .workspace-nav__item.is-active {
+  background: #0f172a;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+.ppt-root .workspace-studio-toolbar-host {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+}
+
+.ppt-root .studio-command-bar {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  flex-wrap: nowrap;
+}
+
+/* 3. 阶段流程连贯步进 */
+.ppt-root .studio-phase-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+
+.ppt-root .studio-phase-stepper__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.ppt-root .studio-phase-stepper__line {
+  display: inline-block;
+  width: 12px;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.18);
+  margin: 0 0.12rem;
+}
+
+.ppt-root .studio-phase-stepper__btn {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.52);
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.ppt-root .studio-phase-stepper__btn:hover {
+  color: rgba(0, 0, 0, 0.88);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.ppt-root .studio-phase-stepper__btn.is-active {
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.28);
+}
+
+/* 意图阶段顶栏步进器 */
+.ppt-root .intent-phase-stepper {
+  margin-left: 0.35rem;
+}
+
+.ppt-root .intent-phase-stepper__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ppt-root .intent-phase-stepper__btn.is-active {
+  background: #0066cc;
+  box-shadow: 0 1px 4px rgba(0, 102, 204, 0.28);
+}
+
+.ppt-root .intent-phase-stepper__btn.is-done:not(.is-active) {
+  color: #1e293b;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.ppt-root .intent-phase-stepper__btn.is-locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ppt-root .intent-stepper-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ppt-root .studio-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+/* 4. 生成方式切换器 */
+.ppt-root .studio-design-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.12rem;
+  padding: 0.15rem;
+  border-radius: 0.55rem;
+  background: rgba(0, 0, 0, 0.045);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  flex-shrink: 0;
+}
+
+.ppt-root .studio-design-engine__btn {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.5);
+  padding: 0.18rem 0.5rem;
+  border-radius: 0.42rem;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.ppt-root .studio-design-engine__btn:hover:not(:disabled) {
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.ppt-root .studio-design-engine__btn.is-active {
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* 5 & 6. 拆分按钮系统 */
+.ppt-root .studio-split-button {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  border-radius: 0.6rem;
+  flex-shrink: 0;
+}
+
+.ppt-root .studio-split-button--primary .studio-split-button__main {
+  height: 32px;
+  padding: 0 0.75rem;
+  border-radius: 0.6rem 0 0 0.6rem;
+  background: #0f172a;
+  color: #ffffff;
+  border: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.ppt-root .studio-split-button--primary .studio-split-button__main:hover:not(:disabled) {
+  background: #1e293b;
+}
+
+.ppt-root .studio-split-button--primary .studio-split-button__trigger {
+  height: 32px;
+  width: 22px;
+  border-radius: 0 0.6rem 0.6rem 0;
+  background: #0f172a;
+  color: rgba(255, 255, 255, 0.78);
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.ppt-root .studio-split-button--primary .studio-split-button__trigger:hover,
+.ppt-root .studio-split-button--primary .studio-split-button__trigger.is-open {
+  background: #1e293b;
+  color: #ffffff;
+}
+
+.ppt-root .studio-split-button--secondary .studio-split-button__main {
+  height: 32px;
+  padding: 0 0.75rem;
+  border-radius: 0.6rem 0 0 0.6rem;
+  background: #ffffff;
+  color: #1e293b;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-right: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.15s ease;
+}
+
+.ppt-root .studio-split-button--secondary .studio-split-button__main:hover:not(:disabled) {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.ppt-root .studio-split-button--secondary .studio-split-button__trigger {
+  height: 32px;
+  width: 22px;
+  border-radius: 0 0.6rem 0.6rem 0;
+  background: #ffffff;
+  color: #64748b;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.15s ease;
+}
+
+.ppt-root .studio-split-button--secondary .studio-split-button__trigger:hover,
+.ppt-root .studio-split-button--secondary .studio-split-button__trigger.is-open {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.ppt-root .studio-split-button button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 下拉菜单 Popover */
+.ppt-root .studio-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  min-width: 180px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.13), 0 4px 10px rgba(0, 0, 0, 0.04);
+  padding: 0.35rem;
+  z-index: 100;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: studioDropdownIn 0.12s ease-out;
+}
+
+.ppt-root .studio-dropdown-menu--right {
+  left: auto;
+  right: 0;
+}
+
+@keyframes studioDropdownIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ppt-root .studio-dropdown-menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.48rem 0.65rem;
+  border-radius: 0.5rem;
+  border: 0;
+  background: transparent;
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s ease;
+}
+
+.ppt-root .studio-dropdown-menu__item:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.ppt-root .studio-dropdown-menu__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ppt-root .studio-dropdown-menu__divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.07);
+  margin: 0.25rem 0;
+}
+
+/* 7. 更多操作按钮 */
+.ppt-root .studio-more-container {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ppt-root .studio-more-button {
+  height: 32px;
+  width: 32px;
+  border-radius: 0.6rem;
+  background: #ffffff;
+  color: #64748b;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.15s ease;
+}
+
+.ppt-root .studio-more-button:hover,
+.ppt-root .studio-more-button.is-open {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: rgba(0, 0, 0, 0.22);
+}
+
+.ppt-root .workspace-header__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.ppt-root .workspace-usage-pill--compact {
+  height: 30px;
+  padding: 0 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.15s ease;
+}
+
+.ppt-root .workspace-usage-pill--compact:hover {
+  background: #f8fafc;
+  border-color: rgba(0, 0, 0, 0.22);
+}
+
+.ppt-root .workspace-usage-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+  flex-shrink: 0;
+}
+
+.ppt-root .workspace-usage-pill--compact.is-error .workspace-usage-pill__dot {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
+
+.ppt-root .workspace-usage-pill__compact-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.ppt-root .workspace-usage-pill {
+  height: 2.25rem;
+  gap: 0.4rem;
+  padding: 0 0.65rem;
+  border-color: rgba(147, 178, 208, 0.38);
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.ppt-root .workspace-usage-pill__model,
+.ppt-root .workspace-usage-pill__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ppt-root .workspace-usage-pill__model {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.ppt-root .workspace-usage-pill__count svg {
+  color: #10b981;
+}
+
+.ppt-root .workspace-usage-pill__count.is-error,
+.ppt-root .workspace-usage-pill__count.is-error svg {
+  color: #b45309;
+}
+
+.ppt-root .workspace-usage-pill__divider {
+  width: 1px;
+  height: 1rem;
+  background: #d7dee8;
+}
+
+.ppt-root .workspace-focus-toggle {
+  display: inline-flex;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  border: 1px solid rgba(147, 178, 208, 0.42);
+  border-radius: 0.72rem;
+  padding: 0 0.58rem;
+  color: #52657a;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ppt-root .workspace-focus-toggle:hover {
+  border-color: rgba(0, 102, 204, 0.35);
+  color: #005fbf;
+  background: #fff;
+}
+
+.ppt-root .workspace-focus-toggle kbd {
+  color: #8a96a5;
+  font-family: inherit;
+  font-size: 0.57rem;
+  font-weight: 600;
+}
+
+.ppt-root .workspace-header.is-studio-route .workspace-brand__wordmark,
+.ppt-root .workspace-header.is-studio-route .workspace-usage-pill__model,
+.ppt-root .workspace-header.is-studio-route .workspace-usage-pill__divider,
+.ppt-root .workspace-header.is-studio-route .workspace-focus-toggle span,
+.ppt-root .workspace-header.is-studio-route .workspace-focus-toggle kbd {
+  display: none;
+}
+
+.ppt-root .workspace-header.is-studio-route .workspace-usage-pill {
+  min-width: 3.2rem;
+  justify-content: center;
+}
+
+.ppt-root .studio-shell.is-studio-route > main {
+  width: 100%;
+  max-width: 1800px;
+  padding: 0.75rem 1rem 1rem;
+}
+
+@media (min-width: 1024px) {
+  .ppt-root .studio-shell.is-studio-route .studio-columns {
+    height: calc(100dvh - 8rem);
+  }
+}
+
+/* —— 全屏沉浸模式（方案 B 统一适配） —— */
+.ppt-root .workspace-header.is-focus-mode {
+  height: 62px;
+  min-height: 62px;
+  max-height: 62px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.ppt-root .workspace-header.is-focus-mode .workspace-focus-toggle,
+.ppt-root .workspace-focus-toggle.is-active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+}
+
+.ppt-root .workspace-header.is-focus-mode .workspace-focus-toggle:hover {
+  background: #1e293b;
+  color: #ffffff;
+  border-color: #1e293b;
+}
+
+@media (min-width: 1024px) {
+  .ppt-root .studio-shell.is-focus-mode .studio-columns {
+    height: calc(100dvh - 5.5rem);
+  }
+}
+
+@media (max-width: 1380px) {
+  .ppt-root .workspace-header.is-studio-route .project-switcher__trigger {
+    width: clamp(12rem, 19vw, 16rem);
+  }
+
+  .ppt-root .workspace-header.is-studio-route .workspace-nav__item svg {
+    display: none;
+  }
+
+  .ppt-root .workspace-header.is-studio-route .workspace-nav__item,
+  .ppt-root .workspace-header.is-studio-route .studio-command-bar__phases button {
+    padding-inline: 0.5rem;
+  }
+
+  .ppt-root .workspace-header.is-studio-route .studio-toolbar-actions > button,
+  .ppt-root .workspace-header.is-studio-route .studio-more-menu > summary {
+    padding-inline: 0.55rem;
+  }
+
+  .ppt-root .workspace-header.is-studio-route .workspace-busy-state {
+    display: none;
+  }
+}
+
+@media (max-width: 1080px) {
+  .ppt-root .workspace-header.is-studio-route .workspace-header__main {
+    flex-wrap: nowrap;
+    gap: 0.45rem;
+    padding-inline: 0.75rem;
+  }
+
+  .ppt-root .workspace-header.is-studio-route .workspace-nav__item svg {
+    display: none;
+  }
+
+  .ppt-root .workspace-header.is-studio-route .project-switcher__name {
+    max-width: 130px;
+  }
+}
+
+@media (max-width: 640px) {
+  .ppt-root .workspace-header__main {
+    gap: 0.4rem;
+    padding: 0.4rem var(--ppt-mobile-gutter);
+  }
+
+  .ppt-root .workspace-header.is-studio-route .workspace-brand {
+    display: none;
+  }
+
+  .ppt-root .workspace-header.is-studio-route .project-switcher__trigger {
+    width: min(14rem, 63vw);
+    min-height: 2.5rem;
+  }
+
+  .ppt-root .workspace-studio-toolbar-host {
+    min-width: max-content;
+  }
+
+  .ppt-root .studio-command-bar,
+  .ppt-root .studio-toolbar-actions {
+    width: max-content;
+  }
+
+  .ppt-root .studio-command-bar__phases button,
+  .ppt-root .studio-toolbar-actions > button,
+  .ppt-root .studio-more-menu > summary {
+    min-height: 2.5rem;
+  }
+
+  .ppt-root .studio-more-menu__popover {
+    position: fixed;
+    top: calc(var(--mac-menu-bar-height) + 7.3rem);
+    right: var(--ppt-mobile-gutter);
+  }
+
+  .ppt-root .workspace-header.is-focus-mode .workspace-header__identity {
+    flex: 1 1 8rem;
+  }
+
+  .ppt-root .workspace-header.is-focus-mode .project-switcher__trigger {
+    width: 100%;
+  }
+
+  .ppt-root .workspace-header.is-focus-mode .studio-export-action {
+    width: 2.4rem;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .ppt-root .workspace-header.is-focus-mode .studio-export-action svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .ppt-root .studio-shell.is-studio-route > main {
+    padding-top: 0.75rem;
+  }
+}
+
 .ppt-root ::backdrop {
   --tw-border-spacing-x: 0;
   --tw-border-spacing-y: 0;
@@ -2562,9 +3328,31 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 }
 
 .ppt-root .workspace-generate-button {
-  height: 2.65rem;
-  padding-inline: 1rem;
-  border-radius: 0.9rem;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 0.85rem;
+  border-radius: 0.6rem;
+  background: #0f172a;
+  color: #ffffff;
+  border: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+  transition: background 0.15s ease;
+}
+
+.ppt-root .workspace-generate-button:hover:not(:disabled) {
+  background: #1e293b;
+}
+
+.ppt-root .workspace-generate-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .ppt-root .workspace-busy-state {
@@ -3853,6 +4641,37 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   border-radius: 1.35rem;
 }
 
+.ppt-root .brief-compact-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.15rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.ppt-root .brief-compact-status__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.ppt-root .brief-compact-status__title small {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: #64748b;
+}
+
+.ppt-root .brief-compact-status__count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 .ppt-root .brief-dialog-card__title {
   display: flex;
   align-items: center;
@@ -4054,7 +4873,7 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  gap: 1.5rem;
+  gap: 0;
 }
 
 .ppt-root .intent-space__header {
@@ -8119,6 +8938,491 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
   background: rgba(204, 72, 63, 0.07);
 }
 
+/* 顾问工作台专属增强样式 */
+.ppt-root .consultant-workspace-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 1rem 1.15rem;
+}
+
+.ppt-root .consultant-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(147, 177, 207, 0.22);
+}
+
+.ppt-root .consultant-view-switch {
+  display: flex;
+  align-items: center;
+  background: rgba(147, 177, 207, 0.15);
+  padding: 3px;
+  border-radius: 0.65rem;
+  gap: 3px;
+}
+
+.ppt-root .switch-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.65rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  border-radius: 0.5rem;
+  border: 0;
+  color: #5d758d;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.ppt-root .switch-tab-btn.is-active {
+  color: #0066cc;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.ppt-root .consultant-content-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.ppt-root .consultant-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+  gap: 0.75rem;
+}
+
+.ppt-root .proposal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(147, 177, 207, 0.28);
+  border-radius: 0.95rem;
+  padding: 0.85rem;
+}
+
+.ppt-root .proposal-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ppt-root .section-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.45rem;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.ppt-root .section-badge--primary {
+  background: rgba(0, 102, 204, 0.1);
+  color: #0066cc;
+}
+
+.ppt-root .section-badge--secondary {
+  background: rgba(109, 40, 217, 0.1);
+  color: #6d28d9;
+}
+
+.ppt-root .section-badge--accent {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+/* 核心立论卡片列表 */
+.ppt-root .takeaway-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ppt-root .takeaway-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.65rem 0.8rem;
+  background: #ffffff;
+  border: 1px solid rgba(147, 177, 207, 0.22);
+  border-radius: 0.75rem;
+  transition: all 0.18s ease;
+}
+
+.ppt-root .takeaway-item.is-selected {
+  border-color: rgba(0, 102, 204, 0.35);
+  background: rgba(246, 250, 255, 0.85);
+}
+
+.ppt-root .takeaway-checkbox {
+  margin-top: 0.15rem;
+  cursor: pointer;
+}
+
+.ppt-root .takeaway-checkbox input {
+  display: none;
+}
+
+.ppt-root .takeaway-checkbox span {
+  display: grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 0.35rem;
+  border: 1.5px solid rgba(147, 177, 207, 0.6);
+  background: #ffffff;
+  color: transparent;
+  transition: all 0.15s ease;
+}
+
+.ppt-root .takeaway-checkbox input:checked + span {
+  background: #0066cc;
+  border-color: #0066cc;
+  color: #ffffff;
+}
+
+.ppt-root .takeaway-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ppt-root .takeaway-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ppt-root .takeaway-tag {
+  font-size: 0.52rem;
+  font-weight: 700;
+  padding: 0.12rem 0.35rem;
+  border-radius: 0.3rem;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+}
+
+.ppt-root .takeaway-title {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #1e3a5f;
+}
+
+.ppt-root .takeaway-content {
+  margin: 0;
+  font-size: 0.63rem;
+  line-height: 1.55;
+  color: #4b647f;
+}
+
+.ppt-root .takeaway-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.ppt-root .takeaway-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  border: 0;
+  background: transparent;
+  color: #7b8fa3;
+  font-size: 0.54rem;
+  font-weight: 600;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.ppt-root .takeaway-actions button:hover {
+  color: #0066cc;
+  background: rgba(0, 102, 204, 0.06);
+}
+
+.ppt-root .takeaway-actions button.is-danger:hover {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.ppt-root .takeaway-edit-box textarea {
+  width: 100%;
+  border: 1px solid rgba(0, 102, 204, 0.35);
+  border-radius: 0.5rem;
+  padding: 0.45rem;
+  font-size: 0.63rem;
+  color: #1e3a5f;
+  outline: none;
+}
+
+.ppt-root .takeaway-edit-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+
+.ppt-root .btn-text-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.35rem;
+  font-size: 0.55rem;
+  font-weight: 700;
+  border: 0;
+  cursor: pointer;
+  background: rgba(0, 102, 204, 0.1);
+  color: #0066cc;
+}
+
+/* 篇章故事线卡片 */
+.ppt-root .chapter-flow-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.ppt-root .chapter-flow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.7rem;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  border: 1px solid rgba(147, 177, 207, 0.22);
+}
+
+.ppt-root .chapter-flow-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.ppt-root .chapter-index {
+  display: grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background: rgba(109, 40, 217, 0.1);
+  color: #6d28d9;
+  font-size: 0.55rem;
+  font-weight: 800;
+}
+
+.ppt-root .chapter-title {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.ppt-root .chapter-pages-tag {
+  font-size: 0.52rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+  background: rgba(100, 116, 139, 0.08);
+  color: #64748b;
+  font-weight: 600;
+}
+
+.ppt-root .chapter-goal {
+  margin: 0;
+  font-size: 0.58rem;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.ppt-root .chapter-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
+}
+
+.ppt-root .chapter-point-pill {
+  font-size: 0.52rem;
+  color: #64748b;
+  background: rgba(241, 245, 249, 0.85);
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.3rem;
+  line-height: 1.35;
+}
+
+/* 顾问对话与互动区 */
+.ppt-root .consultant-dialogue-section {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(240, 253, 244, 0.4);
+}
+
+.ppt-root .consultant-chat-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 0.4rem 0.2rem;
+}
+
+.ppt-root .chat-bubble-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.ppt-root .chat-bubble-row.is-user {
+  flex-direction: row-reverse;
+}
+
+.ppt-root .chat-avatar {
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  background: #10b981;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.ppt-root .chat-bubble {
+  max-width: 82%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.62rem;
+  line-height: 1.5;
+}
+
+.ppt-root .chat-bubble-row.is-consultant .chat-bubble {
+  background: #ffffff;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #1e293b;
+  border-top-left-radius: 0.15rem;
+}
+
+.ppt-root .chat-bubble-row.is-user .chat-bubble {
+  background: #0066cc;
+  color: #ffffff;
+  border-top-right-radius: 0.15rem;
+}
+
+.ppt-root .chat-bubble p {
+  margin: 0;
+}
+
+.ppt-root .chat-bubble__time {
+  display: block;
+  font-size: 0.5rem;
+  margin-top: 0.2rem;
+  opacity: 0.65;
+}
+
+.ppt-root .chat-bubble.is-loading {
+  background: rgba(255, 255, 255, 0.9);
+  color: #059669;
+  font-style: italic;
+}
+
+.ppt-root .quick-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.ppt-root .quick-actions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ppt-root .quick-action-pill {
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: #ffffff;
+  color: #065f46;
+  font-size: 0.55rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ppt-root .quick-action-pill:hover {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #10b981;
+}
+
+.ppt-root .consultant-chat-input-bar {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.ppt-root .consultant-chat-input-bar input {
+  flex: 1 1 auto;
+  border: 1px solid rgba(147, 177, 207, 0.4);
+  border-radius: 0.65rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.62rem;
+  color: #1e3a5f;
+  background: #ffffff;
+  outline: none;
+}
+
+.ppt-root .consultant-chat-input-bar input:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.12);
+}
+
+.ppt-root .chat-send-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  border-radius: 0.65rem;
+  background: #10b981;
+  color: #ffffff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0 0.85rem;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.ppt-root .chat-send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ppt-root .facts-legacy-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .ppt-root .source-workspace__footer {
   display: flex;
   flex: 0 0 auto;
@@ -8539,17 +9843,14 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
     width: 100%;
     overflow-x: auto;
     overscroll-behavior-x: contain;
-    border-radius: 14px;
+    border-radius: 10px;
     scrollbar-width: none;
   }
 
-  .ppt-root .studio-phase-nav > span {
-    flex: 0 0 auto;
-  }
-
   .ppt-root .studio-phase-nav button {
-    min-height: 42px;
-    padding-inline: 0.75rem;
+    min-height: 38px;
+    border-radius: 7px;
+    padding-inline: 0.875rem;
     white-space: nowrap;
   }
 
@@ -8641,5 +9942,117 @@ Constrain images and videos to the parent width and preserve their intrinsic asp
 
   .ppt-root audio {
     width: 100%;
+  }
+}
+
+/* Cascade anchor: this file is pre-scoped, so structural workspace overrides stay last. */
+.ppt-root .studio-shell .workspace-header__main {
+  width: min(1800px, calc(100% - 2rem));
+  min-height: 4rem;
+  justify-content: flex-start;
+  gap: 0.65rem;
+  padding: 0.45rem 0;
+}
+
+.ppt-root .studio-shell .workspace-header__identity {
+  flex: 0 1 auto;
+  gap: 0.55rem;
+}
+
+.ppt-root .studio-shell .workspace-brand__mark {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.75rem;
+}
+
+.ppt-root .studio-shell .project-switcher__trigger {
+  width: clamp(14rem, 22vw, 21rem);
+  min-width: 0;
+  min-height: 2.75rem;
+  gap: 0.5rem;
+  border-radius: 0.8rem;
+  padding: 0.3rem 0.45rem;
+}
+
+.ppt-root .studio-shell .project-switcher__glyph {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0.62rem;
+}
+
+.ppt-root .studio-shell .project-switcher__eyebrow {
+  font-size: 0.58rem;
+}
+
+.ppt-root .studio-shell .project-switcher__name {
+  font-size: 0.82rem;
+}
+
+.ppt-root .studio-shell .workspace-nav {
+  width: auto;
+  min-width: 0;
+  flex: 0 0 auto;
+  gap: 0.12rem;
+  padding: 0.2rem;
+  border-radius: 0.82rem;
+}
+
+.ppt-root .studio-shell .workspace-nav__item {
+  min-width: 0;
+  min-height: 0;
+  height: 2rem;
+  gap: 0.3rem;
+  border-radius: 0.62rem;
+  padding: 0 0.62rem;
+  font-size: 0.69rem;
+}
+
+.ppt-root .studio-shell .workspace-header__actions {
+  gap: 0.4rem;
+}
+
+.ppt-root .studio-shell .workspace-usage-pill {
+  display: inline-flex;
+  height: 2.25rem;
+  gap: 0.4rem;
+  padding: 0 0.65rem;
+}
+
+@media (max-width: 1080px) {
+  .ppt-root .studio-shell .workspace-header__main {
+    flex-wrap: wrap;
+  }
+
+  .ppt-root .studio-shell .workspace-header__navigation {
+    order: 3;
+    width: 100%;
+    flex-basis: 100%;
+  }
+
+  .ppt-root .studio-shell .workspace-header.is-focus-mode .workspace-header__main {
+    flex-wrap: nowrap;
+  }
+
+  .ppt-root .studio-shell .workspace-header.is-focus-mode .workspace-header__navigation {
+    order: initial;
+    width: auto;
+    flex-basis: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .ppt-root .studio-shell .workspace-header__main {
+    min-height: 0;
+    padding: 0.4rem var(--ppt-mobile-gutter);
+  }
+
+  .ppt-root .studio-shell .workspace-header.is-studio-route .project-switcher__trigger {
+    width: min(14rem, 63vw);
+    min-height: 2.5rem;
+  }
+
+  .ppt-root .studio-shell .workspace-header.is-focus-mode .project-switcher__trigger {
+    width: 100%;
+    min-height: 2.1rem;
   }
 }

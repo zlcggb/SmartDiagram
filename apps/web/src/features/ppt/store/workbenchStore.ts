@@ -81,6 +81,8 @@ export type DeltaChunk = {
   at: string;
   text: string;
   subStage?: string;
+  slideId?: string;
+  slideTitle?: string;
 };
 
 export type ProgressStageState = {
@@ -92,6 +94,8 @@ export type ProgressStageState = {
   delta?: string;
   /** 流式片段列表 */
   deltaChunks: DeltaChunk[];
+  /** 按 slideId 归集的单页专属 delta，彻底防止多页并发时混叠冲突 */
+  slideDeltas?: Record<string, string>;
   /** 阶段内日志 */
   logs: StageLogEntry[];
   /** 是否展开 */
@@ -132,6 +136,8 @@ interface WorkbenchState {
   themeSurfaceId: ThemeSurfaceId;
   exportMode: ExportMode;
   studioPhase: StudioPhase;
+  copilotMessagesBySlide: Record<string, Array<{ role: "user" | "assistant"; text: string; at: string }>>;
+  copilotLoading: boolean;
   agentLogs: AgentLogEntry[];
   /** 流水线步骤进度（由 SSE 推送更新） */
   progressStages: Record<string, ProgressStageState>;
@@ -154,6 +160,8 @@ interface WorkbenchState {
   setThemeSurfaceId: (surfaceId: ThemeSurfaceId | string) => void;
   setExportMode: (mode: ExportMode) => void;
   setStudioPhase: (phase: StudioPhase) => void;
+  sendSlideCopilotInstruction: (slideId: string, instruction: string, action?: string) => Promise<void>;
+  fastForwardSlide: (slideId: string) => Promise<void>;
   pushAgentLog: (message: string, stage?: string) => void;
   clearAgentLogs: () => void;
   setProgressPanelOpen: (open: boolean) => void;
@@ -237,7 +245,7 @@ const commitLatestAiUsage = createLatestAsyncCommit<AiUsageSummary | null>(
 );
 
 function handleProgressEvent(data: PptProgressEvent) {
-  const { stage, status, message, current, total, delta, subStage, clearDelta, timestamp, slideId, slideTitle } = data;
+  const { stage, status, message, current, total, delta, subStage, clearDelta, timestamp, slideId, slideTitle, action, slide } = data;
   const at = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
 
   // API 事件语义是 start/progress/done/error，界面状态统一为 running/done/error。
@@ -249,6 +257,19 @@ function handleProgressEvent(data: PptProgressEvent) {
         : "idle";
 
   useWorkbenchStore.setState((prev) => {
+    // 1. 增量回写：若事件携带单页更新，立即就地替换/追加到 slides 数组中，使缩略图与画布瞬间响应
+    let nextSlides = prev.slides;
+    if (action === "slide-updated" && slide && typeof slide === "object" && "id" in (slide as Record<string, unknown>)) {
+      const incoming = slide as SlideDto;
+      const index = prev.slides.findIndex((s) => s.id === incoming.id);
+      if (index >= 0) {
+        nextSlides = [...prev.slides];
+        nextSlides[index] = { ...nextSlides[index], ...incoming };
+      } else {
+        nextSlides = [...prev.slides, incoming];
+      }
+    }
+
     const pipelineRunning = prev.progressStages.pipeline?.status === "running";
     // 单独执行一个任务时，右侧只保留本次执行；全流程运行时才累计各阶段。
     const isStandaloneStart = status === "start" && clearDelta && stage !== "pipeline" && !pipelineRunning;
@@ -257,16 +278,22 @@ function handleProgressEvent(data: PptProgressEvent) {
     const isStart = status === "start";
     const shouldClear = isStart || clearDelta;
     const deltaChunks = shouldClear ? [] : [...(existing?.deltaChunks ?? [])];
+    const slideDeltas = shouldClear ? {} : { ...(existing?.slideDeltas ?? {}) };
     const logs = shouldClear ? [] : [...(existing?.logs ?? [])];
     let accumulatedDelta = shouldClear ? "" : (existing?.delta ?? "");
 
     if (delta) {
       accumulatedDelta += delta;
+      if (slideId) {
+        slideDeltas[slideId] = (slideDeltas[slideId] ?? "") + delta;
+      }
       deltaChunks.push({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         at,
         text: delta,
-        subStage
+        subStage,
+        slideId,
+        slideTitle
       });
     }
 
@@ -296,6 +323,7 @@ function handleProgressEvent(data: PptProgressEvent) {
       total,
       delta: accumulatedDelta,
       deltaChunks: deltaChunks.slice(-500),
+      slideDeltas,
       logs: logs.slice(-200),
       expanded,
       startedAt: isStart ? timestamp : existing?.startedAt,
@@ -304,6 +332,7 @@ function handleProgressEvent(data: PptProgressEvent) {
     };
 
     return {
+      slides: nextSlides,
       progressStages: next,
       // 用户即使手动折叠过，新任务开始时也要自动展开并展示流。
       progressPanelOpen: isStart ? true : prev.progressPanelOpen
@@ -380,7 +409,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   themeAccentId: "primary",
   themeSurfaceId: "flat",
   exportMode: "standard",
-  studioPhase: "search",
+  studioPhase: "design",
+  copilotMessagesBySlide: {},
+  copilotLoading: false,
   agentLogs: [],
   progressStages: {},
   progressPanelOpen: true,
@@ -475,6 +506,76 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   },
   setExportMode: (exportMode) => set({ exportMode }),
   setStudioPhase: (studioPhase) => set({ studioPhase }),
+  sendSlideCopilotInstruction: async (slideId, instruction, action) => {
+    const project = get().project;
+    if (!project) return;
+    const now = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+    const userMsg = { role: "user" as const, text: instruction, at: now };
+
+    const currentMsgs = get().copilotMessagesBySlide[slideId] ?? [];
+    set({
+      copilotLoading: true,
+      copilotMessagesBySlide: {
+        ...get().copilotMessagesBySlide,
+        [slideId]: [...currentMsgs, userMsg]
+      }
+    });
+
+    try {
+      const result = await api.slideCopilot(project.id, slideId, instruction, action);
+      const aiNow = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+      const aiMsg = {
+        role: "assistant" as const,
+        text: result.replyMessage || "已完成微调修改并更新设计稿。",
+        at: aiNow
+      };
+
+      set({
+        slides: replaceSlide(get().slides, result.slide),
+        selectedSlideId: slideId,
+        studioPhase: "design",
+        copilotMessagesBySlide: {
+          ...get().copilotMessagesBySlide,
+          [slideId]: [...(get().copilotMessagesBySlide[slideId] ?? []), aiMsg]
+        }
+      });
+      get().pushAgentLog(`AI Copilot 已更新「${result.slide.title}」`);
+    } catch (error) {
+      const errorNow = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+      const errorMsg = {
+        role: "assistant" as const,
+        text: `修改失败：${errorMessage(error)}`,
+        at: errorNow
+      };
+      set({
+        error: errorMessage(error),
+        copilotMessagesBySlide: {
+          ...get().copilotMessagesBySlide,
+          [slideId]: [...(get().copilotMessagesBySlide[slideId] ?? []), errorMsg]
+        }
+      });
+    } finally {
+      set({ copilotLoading: false });
+    }
+  },
+  fastForwardSlide: async (slideId) => {
+    const project = get().project;
+    if (!project) return;
+    set({ busy: "正在一键生成本页设计稿…", error: null });
+    try {
+      const result = await api.slideFastForward(project.id, slideId);
+      set({
+        slides: replaceSlide(get().slides, result.slide),
+        selectedSlideId: slideId,
+        studioPhase: "design"
+      });
+      get().pushAgentLog(`一键成稿完成：${result.slide.title}`);
+    } catch (error) {
+      set({ error: errorMessage(error) });
+    } finally {
+      set({ busy: null });
+    }
+  },
   pushAgentLog: (message, stage) => set({ agentLogs: [...get().agentLogs, makeLog(message, stage)].slice(-80) }),
   clearAgentLogs: () => set({ agentLogs: [] }),
   setProgressPanelOpen: (progressPanelOpen) => set({ progressPanelOpen }),
@@ -879,7 +980,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       set({ currentStep: 1, error: "请先创建项目，再进入页面策划。" });
       return;
     }
-    set({ selectedSlideId, currentStep: 5 });
+    const slide = get().slides.find((s) => s.id === selectedSlideId);
+    const nextPhase: StudioPhase = slide?.svgPreview || slide?.irJson ? "design" : (slide?.planJson ? "draft" : "design");
+    set({ selectedSlideId, currentStep: 5, studioPhase: nextPhase });
   },
   resolveRenderStrategy: (slideId) => {
     const slide = get().slides.find((s) => s.id === slideId);

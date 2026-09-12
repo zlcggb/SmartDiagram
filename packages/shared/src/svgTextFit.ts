@@ -144,24 +144,46 @@ function estimatedTextHeight(lineCount: number, fontSize: number) {
  * Converts overflowing single-node SVG text into explicit tspans. data-w and
  * data-h are already part of the generation contract and become real preview
  * constraints here instead of export-only metadata.
+ * Now equipped with deterministic self-healing:
+ * 1. Extends data-w safely for short single-line labels when canvas space allows.
+ * 2. Synchronizes data-h to actual required line height when wrapped into multiple tspans.
  */
 export function fitSvgTextToBounds(svg: string): SvgTextFitResult {
   let adjustedTextCount = 0;
   const fitted = svg.replace(TEXT_TAG_RE, (full, attrs: string, inner: string) => {
-    const dataW = numericAttr(attrs, "data-w");
-    const dataH = numericAttr(attrs, "data-h");
+    let dataW = numericAttr(attrs, "data-w");
+    let dataH = numericAttr(attrs, "data-h");
     const fontSize = numericAttr(attrs, "font-size") ?? 18;
     const x = numericAttr(attrs, "x");
     if (!dataW || !dataH || x === null || dataW <= 0 || dataH <= 0 || fontSize <= 0) return full;
 
     const sourceLines = textLines(inner);
     const hasOverflow =
-      sourceLines.some((line) => estimatedTextWidth(line, fontSize) > dataW) ||
-      estimatedTextHeight(sourceLines.length, fontSize) > dataH;
+      sourceLines.some((line) => estimatedTextWidth(line, fontSize) > dataW * 1.02) ||
+      estimatedTextHeight(sourceLines.length, fontSize) > dataH * 1.02;
     if (!hasOverflow) return full;
 
     const plain = plainText(inner);
     if (!plain) return full;
+
+    const singleLineWidth = estimatedTextWidth(plain, fontSize);
+    const safeRightBound = 1280 - CANVAS_SAFE_MARGIN_X; // 1248
+
+    // 自愈策略 1：对于短标签/单行短文本（< 30 字符），若右侧有足够安全画布空间且超宽幅度在合理范围（<= 48px 或 <= 1.4倍），
+    // 优先适度扩展 data-w 保持优雅单行，避免生硬折行破坏视觉。
+    const anchor = attrs.match(/\btext-anchor=["'](start|middle|end)["']/i)?.[1] ?? "start";
+    const canExpandWidth =
+      plain.length < 30 &&
+      !plain.includes("\n") &&
+      singleLineWidth <= dataW * 1.45 &&
+      (anchor === "start" ? x + singleLineWidth + 6 <= safeRightBound : true);
+
+    if (canExpandWidth) {
+      const healedDataW = Math.ceil(Math.max(dataW, singleLineWidth + 4));
+      const nextAttrs = setNumericAttr(attrs, "data-w", healedDataW);
+      adjustedTextCount += 1;
+      return `<text${nextAttrs}>${escapeXmlText(plain)}</text>`;
+    }
 
     const minimumFontSize = Math.min(fontSize, MIN_AUTO_FIT_FONT_SIZE);
     let fittedFontSize = fontSize;
@@ -172,16 +194,26 @@ export function fitSvgTextToBounds(svg: string): SvgTextFitResult {
       lines = candidateLines;
       if (
         candidateLines.every((line) => estimatedTextWidth(line, candidate) <= dataW * 1.02) &&
-        estimatedTextHeight(candidateLines.length, candidate) <= dataH
+        estimatedTextHeight(candidateLines.length, candidate) <= dataH * 1.02
       ) {
         break;
       }
     }
 
-    const lineHeight = fittedFontSize * 1.28;
-    const nextAttrs = addAutoFitMarker(setNumericAttr(attrs, "font-size", fittedFontSize));
+    // 当文本需要折行时：
+    // 若超高幅度在合理的局部版式微调容差内（不超过 1.8 倍且总高度在安全卡片高度内），
+    // 适度同步 dataH 避免由于折行算法产生的假性溢出；
+    const requiredHeight = Math.ceil(estimatedTextHeight(lines.length, fittedFontSize));
+    let nextAttrs = setNumericAttr(attrs, "font-size", fittedFontSize);
+    const isModerateAdjustment = requiredHeight <= Math.max(dataH * 1.65, dataH + 16) && requiredHeight <= 360;
+    if (requiredHeight > dataH && isModerateAdjustment && plain.length < 50) {
+      nextAttrs = setNumericAttr(nextAttrs, "data-h", requiredHeight);
+      dataH = requiredHeight;
+    }
+    nextAttrs = addAutoFitMarker(nextAttrs);
     adjustedTextCount += 1;
 
+    const lineHeight = fittedFontSize * 1.28;
     if (lines.length === 1) {
       return `<text${nextAttrs}>${escapeXmlText(lines[0] ?? "")}</text>`;
     }
@@ -196,6 +228,70 @@ export function fitSvgTextToBounds(svg: string): SvgTextFitResult {
   });
 
   return { svg: fitted, adjustedTextCount };
+}
+
+/**
+ * 局部微创自愈器（Deterministic Local Auto-Healer）：
+ * 扫描 SVG 中的所有 <text> 节点，就地自动修复：
+ * 1. 缺失或 <= 0 的 data-w/data-h（根据内容自适应计算并补全）
+ * 2. 同一行内容超过 data-w（若有右侧空间则扩展 data-w；否则转为合理折行）
+ * 3. 内容高度超过 data-h（自动将 data-h 调整为包络所有行高的真实安全值）
+ */
+export function autoHealSvgTextBoxes(svg: string): { svg: string; healedCount: number } {
+  let healedCount = 0;
+  const safeRightBound = 1280 - CANVAS_SAFE_MARGIN_X;
+
+  const healedSvg = svg.replace(TEXT_TAG_RE, (full, attrs: string, inner: string) => {
+    let modified = false;
+    let nextAttrs = attrs;
+    let dataW = numericAttr(nextAttrs, "data-w");
+    let dataH = numericAttr(nextAttrs, "data-h");
+    const fontSize = numericAttr(nextAttrs, "font-size") ?? 18;
+    const x = numericAttr(nextAttrs, "x") ?? 0;
+    const lines = textLines(inner);
+    if (lines.length === 0) return full;
+
+    // 1. 补齐缺失或非法尺寸
+    if (dataW === null || dataW <= 0) {
+      const maxLineWidth = Math.max(...lines.map((l) => estimatedTextWidth(l, fontSize)));
+      dataW = Math.ceil(maxLineWidth + 8);
+      nextAttrs = setNumericAttr(nextAttrs, "data-w", dataW);
+      modified = true;
+    }
+
+    if (dataH === null || dataH <= 0) {
+      dataH = Math.ceil(estimatedTextHeight(lines.length, fontSize));
+      nextAttrs = setNumericAttr(nextAttrs, "data-h", dataH);
+      modified = true;
+    }
+
+    // 2. 检查单行溢出，若有右侧画布安全余量，直接扩展 data-w
+    const maxLineWidth = Math.max(...lines.map((l) => estimatedTextWidth(l, fontSize)));
+    if (maxLineWidth > dataW * 1.02) {
+      const neededWidth = Math.ceil(maxLineWidth + 6);
+      if (x + neededWidth <= safeRightBound) {
+        dataW = neededWidth;
+        nextAttrs = setNumericAttr(nextAttrs, "data-w", dataW);
+        modified = true;
+      }
+    }
+
+    // 3. 检查高度溢出，自动将 data-h 扩展至容纳所有行
+    const requiredHeight = Math.ceil(estimatedTextHeight(lines.length, fontSize));
+    if (requiredHeight > dataH * 1.02) {
+      dataH = requiredHeight;
+      nextAttrs = setNumericAttr(nextAttrs, "data-h", dataH);
+      modified = true;
+    }
+
+    if (modified) {
+      healedCount += 1;
+      return `<text${nextAttrs}>${inner}</text>`;
+    }
+    return full;
+  });
+
+  return { svg: healedSvg, healedCount };
 }
 
 /** Quality-gate issues for the text-box contract used by preview and PPT export. */

@@ -35,7 +35,6 @@ export function BriefTab() {
     const list = questions ?? [];
     return list.filter((question) => (answers[question.id] || "").trim()).length;
   }, [answers, questions]);
-  const progress = questions?.length ? Math.round((answeredCount / questions.length) * 100) : 0;
   const canConfirm = Boolean(questions?.length) && answeredCount >= Math.min(3, questions?.length ?? 0);
 
   async function confirmRequirements() {
@@ -50,34 +49,22 @@ export function BriefTab() {
   return (
     <div className="brief-tab">
       <section className="brief-dialog-card">
-        <div className="brief-dialog-card__title">
-          <span><Sparkles className="h-5 w-5" /></span>
-          <div>
-            <h2>顾问正在了解你的汇报</h2>
-            <p>回答越具体，后续大纲越贴近真实场景。</p>
-          </div>
-        </div>
-
-        <div className="brief-progress">
-          <span style={{ width: `${progress}%` }} />
-          <small>{progress}%</small>
+        {/* 轻量顶部状态条：极简占位，直接释放屏幕高度给核心问答列表 */}
+        <div className="brief-compact-status">
+          <span className="brief-compact-status__title">
+            <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+            <span>核心需求诊断</span>
+            <small>· 回答越具体，大纲越贴近真实场景</small>
+          </span>
+          <span className="brief-compact-status__count">
+            已回答 {answeredCount} / {questions?.length ?? 0}
+          </span>
         </div>
 
         {questionSource === "fallback" ? (
           <div className="brief-origin-notice is-fallback">
-            <Info className="h-4 w-4" />
-            <span>
-              <strong>当前是通用问题</strong>
-              <small>AI 未连接或本次生成失败，因此使用了基础问题模板；配置真实模型后可重新生成。</small>
-            </span>
-          </div>
-        ) : questionSource === "ai" ? (
-          <div className="brief-origin-notice">
-            <Sparkles className="h-4 w-4" />
-            <span>
-              <strong>已根据主题生成针对性问题</strong>
-              <small>这些问题由 AI 结合当前主题动态生成。</small>
-            </span>
+            <Info className="h-3.5 w-3.5" />
+            <span>AI 未连接或生成失败，已回退为通用问题模板。</span>
           </div>
         ) : null}
 

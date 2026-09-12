@@ -2,7 +2,7 @@ services:
   db:
     image: pgvector/pgvector:pg16
     container_name: smartdiagram-db
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD:-smartdiagram_secret}
@@ -41,7 +41,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: smartdiagram-redis
-    restart: always
+    restart: unless-stopped
     ports:
       - "${REDIS_PORT:-16379}:6379"
     healthcheck:
@@ -53,7 +53,7 @@ services:
   drawio:
     image: jgraph/drawio:latest
     container_name: smartdiagram-drawio
-    restart: always
+    restart: unless-stopped
     environment:
       - DRAWIO_OFFLINE=true
     ports:
@@ -223,6 +223,7 @@ services:
       - STORAGE_DIR=/data/storage
       - MATERIAL_GATEWAY_URL=http://api-diagram:8000
       - AUTH_SERVICE_URL=http://api-diagram:8000
+      - USAGE_LEDGER_URL=http://api-diagram:8000
       - PPT_INTERNAL_API_SECRET=${PPT_INTERNAL_API_SECRET:?Set PPT_INTERNAL_API_SECRET to a long random value}
       - PPT_GUEST_PROJECT_TTL_SECONDS=${PPT_GUEST_PROJECT_TTL_SECONDS:-86400}
     volumes:

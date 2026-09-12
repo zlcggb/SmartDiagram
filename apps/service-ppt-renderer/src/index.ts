@@ -3,7 +3,7 @@ import { aiRuntimeStatus } from "./lib/ai.js";
 import { checkDatabaseInitialization, databaseUrlForLog } from "./lib/prisma.js";
 
 const app = await buildApp();
-const port = Number(process.env.PORT ?? process.env.API_PORT ?? 4000);
+const port = Number(process.env.API_PORT ?? process.env.PORT ?? 4010);
 const host = process.env.API_HOST ?? (process.env.PORT ? "0.0.0.0" : "127.0.0.1");
 
 try {

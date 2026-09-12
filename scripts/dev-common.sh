@@ -267,7 +267,14 @@ setup_cleanup_trap() {
     trap - SIGINT SIGTERM
     kill -TERM 0 2>/dev/null || kill "${PIDS[@]}" 2>/dev/null || true
     sleep 1
-    echo -e "${GREEN}✅ 全部服务已停止（docker 的 db/redis/drawio 保持运行）${NC}"
+    if [ "${KEEP_DOCKER_RUNNING:-false}" != "true" ]; then
+      echo -e "${CYAN}🐳 正在停止关联容器 (db / redis / drawio)...${NC}"
+      (cd "$ROOT_DIR" && docker compose stop db redis drawio >/dev/null 2>&1) || true
+      docker stop smartdiagram-db smartdiagram-redis smartdiagram-drawio >/dev/null 2>&1 || true
+      echo -e "${GREEN}✅ 全部服务及关联 Docker 容器已停止${NC}"
+    else
+      echo -e "${GREEN}✅ 全部服务已停止（docker 的 db/redis/drawio 保持运行）${NC}"
+    fi
     exit 0
   }
   trap cleanup SIGINT SIGTERM

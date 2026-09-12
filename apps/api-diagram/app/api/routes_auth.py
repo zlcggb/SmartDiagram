@@ -147,7 +147,10 @@ async def login(
             db_user.role = user.role
             preferences = dict(db_user.preferences_json or {})
             preferences["platform_principal_kind"] = "demo"
-            preferences.setdefault("account_tier", "standard")
+            if user.role == "admin":
+                preferences.setdefault("account_tier", "enterprise")
+            else:
+                preferences.setdefault("account_tier", "standard")
             preferences.setdefault("account_kind", "demo")
             db_user.preferences_json = preferences
             db_user.updated_at = utc_now()

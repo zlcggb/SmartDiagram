@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1010" viewBox="0 0 1240 1010" font-family="-apple-system, 'PingFang SC', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowDash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1240" height="1010" fill="#f8fafc"/>
+
+  <text x="620" y="42" text-anchor="middle" font-size="24" font-weight="700" fill="#0f172a">SmartDiagram 系统架构图</text>
+  <text x="620" y="66" text-anchor="middle" font-size="13" fill="#64748b">npm/pnpm monorepo · 一个前端 + 两个后端域 + 网关聚合 · 双数据库 · 唯一主配置 .env</text>
+
+  <!-- 用户层 -->
+  <rect x="520" y="88" width="200" height="52" rx="8" fill="#0f172a"/>
+  <text x="620" y="119" text-anchor="middle" font-size="15" font-weight="600" fill="#ffffff">浏览器</text>
+
+  <!-- 接入层 -->
+  <rect x="150" y="180" width="420" height="86" rx="8" fill="#ffffff" stroke="#3b82f6" stroke-width="1.6"/>
+  <text x="170" y="206" font-size="14" font-weight="700" fill="#1d4ed8">本地开发 · Vite Dev Server :5173</text>
+  <text x="170" y="228" font-size="12" fill="#475569">HMR + proxy 分流</text>
+  <text x="170" y="248" font-size="12" fill="#475569">/api/* → :8000    /ppt-api/* → :4000</text>
+
+  <rect x="670" y="180" width="420" height="86" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="1.6"/>
+  <text x="690" y="206" font-size="14" font-weight="700" fill="#15803d">生产 · nginx gateway :9237</text>
+  <text x="690" y="228" font-size="12" fill="#475569">唯一对外入口（GATEWAY_PORT）</text>
+  <text x="690" y="248" font-size="12" fill="#475569">/ → SPA · /api · /ppt-api · /drawio</text>
+
+  <!-- 前端 -->
+  <rect x="150" y="312" width="940" height="138" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.6"/>
+  <text x="170" y="338" font-size="14" font-weight="700" fill="#1d4ed8">apps/web — 统一 SPA（React 18 + Vite + Tailwind v4 + Zustand）</text>
+  <text x="940" y="338" font-size="11" fill="#64748b">AppShell：macOS 菜单栏 / Spotlight / 设置</text>
+
+  <rect x="170" y="352" width="280" height="80" rx="6" fill="#ffffff" stroke="#93c5fd"/>
+  <text x="185" y="376" font-size="13" font-weight="600" fill="#0f172a">/  首页</text>
+  <text x="185" y="396" font-size="11" fill="#475569">modules/registry.tsx 模块注册表</text>
+  <text x="185" y="414" font-size="11" fill="#475569">新增模块 = 注册 + 路由</text>
+
+  <rect x="470" y="352" width="290" height="80" rx="6" fill="#ffffff" stroke="#93c5fd"/>
+  <text x="485" y="376" font-size="13" font-weight="600" fill="#0f172a">/diagram  图表工作台</text>
+  <text x="485" y="396" font-size="11" fill="#475569">ChatPanel + CanvasPanel（8 类 Canvas）</text>
+  <text x="485" y="414" font-size="11" fill="#475569">chatStore · SSE 流 · 历史/导出</text>
+
+  <rect x="780" y="352" width="290" height="80" rx="6" fill="#ffffff" stroke="#93c5fd"/>
+  <text x="795" y="376" font-size="13" font-weight="600" fill="#0f172a">/ppt  AI 演示文稿</text>
+  <text x="795" y="396" font-size="11" fill="#475569">五步工作流：Intent→Structure→Studio→Exports</text>
+  <text x="795" y="414" font-size="11" fill="#475569">workbenchStore · SlideDesignVersion</text>
+
+  <!-- 后端服务 -->
+  <rect x="80" y="506" width="360" height="168" rx="8" fill="#fff7ed" stroke="#ea580c" stroke-width="1.6"/>
+  <text x="100" y="532" font-size="14" font-weight="700" fill="#c2410c">apps/api-diagram · FastAPI :8000</text>
+  <text x="100" y="554" font-size="12" fill="#475569">POST /api/chat/stream（SSE 主入口）</text>
+  <text x="100" y="574" font-size="12" fill="#475569">LangGraph：orchestrator → router → engine agent</text>
+  <text x="100" y="594" font-size="12" fill="#475569">catalog.py：Task↔Engine（10 种，含 drawio /</text>
+  <text x="100" y="612" font-size="12" fill="#475569">infographic / html_email / web_report_html）</text>
+  <text x="100" y="632" font-size="12" fill="#475569">services：auth · 知识库 · 导出 · 队列 · 计费 · 配额</text>
+  <text x="100" y="656" font-size="11" fill="#9a3412">SQLAlchemy async → smartdiagram 库</text>
+
+  <rect x="480" y="506" width="320" height="168" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.6"/>
+  <text x="500" y="532" font-size="14" font-weight="700" fill="#15803d">apps/api-ppt · Python FastAPI :4000</text>
+  <text x="500" y="554" font-size="12" fill="#475569">PPT 编排域（/ppt-api/*）</text>
+  <text x="500" y="574" font-size="12" fill="#475569">LangGraph 工作流：</text>
+  <text x="500" y="592" font-size="12" fill="#475569">意图 → 结构 → Studio → 导出任务</text>
+  <text x="500" y="612" font-size="12" fill="#475569">HTTP 调用 Node 渲染侧车</text>
+  <text x="500" y="632" font-size="12" fill="#475569">内部认证 → api-diagram</text>
+  <text x="500" y="656" font-size="11" fill="#166534">（PPT_INTERNAL_API_SECRET）</text>
+
+  <rect x="840" y="506" width="320" height="168" rx="8" fill="#faf5ff" stroke="#9333ea" stroke-width="1.6"/>
+  <text x="860" y="532" font-size="14" font-weight="700" fill="#7e22ce">apps/service-ppt-renderer · Node :4010</text>
+  <text x="860" y="554" font-size="12" fill="#475569">Prisma → ppt_agent 库</text>
+  <text x="860" y="574" font-size="12" fill="#475569">PPTX 渲染 · 文件/资料存储</text>
+  <text x="860" y="594" font-size="12" fill="#475569">SlideDesignVersion（每页留最近 5 版）</text>
+  <text x="860" y="614" font-size="12" fill="#475569">媒体：TTS / whisper.cpp 对齐 / 聚焦遮罩</text>
+  <text x="860" y="634" font-size="12" fill="#475569">FFmpeg 视频导出（routes/media.ts）</text>
+
+  <!-- 共享包 -->
+  <rect x="480" y="716" width="680" height="64" rx="8" fill="#ffffff" stroke="#0d9488" stroke-width="1.6"/>
+  <text x="500" y="742" font-size="13" font-weight="700" fill="#0f766e">packages/ 共享 TS 包</text>
+  <text x="500" y="764" font-size="12" fill="#475569">slide-ir（SmartSlide DSL）· shared · agents（designKnowledge / kimiSlides 设计契约）· ppt-renderer</text>
+
+  <!-- 基础设施 -->
+  <rect x="80" y="830" width="300" height="120" rx="8" fill="#ffffff" stroke="#334155" stroke-width="1.6"/>
+  <text x="100" y="856" font-size="13" font-weight="700" fill="#0f172a">PostgreSQL :5432（双库）</text>
+  <rect x="100" y="868" width="126" height="62" rx="5" fill="#fff7ed" stroke="#ea580c"/>
+  <text x="163" y="894" text-anchor="middle" font-size="12" font-weight="600" fill="#c2410c">smartdiagram</text>
+  <text x="163" y="912" text-anchor="middle" font-size="10" fill="#475569">+ pgvector</text>
+  <rect x="234" y="868" width="126" height="62" rx="5" fill="#faf5ff" stroke="#9333ea"/>
+  <text x="297" y="894" text-anchor="middle" font-size="12" font-weight="600" fill="#7e22ce">ppt_agent</text>
+  <text x="297" y="912" text-anchor="middle" font-size="10" fill="#475569">Prisma 迁移</text>
+
+  <rect x="420" y="830" width="180" height="120" rx="8" fill="#ffffff" stroke="#dc2626" stroke-width="1.6"/>
+  <text x="510" y="856" text-anchor="middle" font-size="13" font-weight="700" fill="#b91c1c">Redis :6379</text>
+  <text x="510" y="880" text-anchor="middle" font-size="11" fill="#475569">List 队列 + 分布式锁</text>
+  <text x="510" y="900" text-anchor="middle" font-size="11" fill="#475569">限流 / 缓存</text>
+  <text x="510" y="920" text-anchor="middle" font-size="11" fill="#475569">（企业能力可选）</text>
+
+  <rect x="640" y="830" width="180" height="120" rx="8" fill="#ffffff" stroke="#d97706" stroke-width="1.6"/>
+  <text x="730" y="856" text-anchor="middle" font-size="13" font-weight="700" fill="#b45309">drawio :9022</text>
+  <text x="730" y="880" text-anchor="middle" font-size="11" fill="#475569">Docker sidecar</text>
+  <text x="730" y="900" text-anchor="middle" font-size="11" fill="#475569">前端 iframe 嵌入</text>
+  <text x="730" y="920" text-anchor="middle" font-size="11" fill="#475569">architecture 引擎画布</text>
+
+  <rect x="860" y="830" width="300" height="120" rx="8" fill="#ffffff" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="7 4"/>
+  <text x="880" y="856" font-size="13" font-weight="700" fill="#64748b">smartdiagram-worker（可选 profile）</text>
+  <text x="880" y="880" font-size="11" fill="#475569">run_enterprise_workers.py（npm run worker）</text>
+  <text x="880" y="900" font-size="11" fill="#475569">异步导出 / 知识库等企业异步任务</text>
+  <text x="880" y="920" font-size="11" fill="#475569">deploy.sh --with-worker 才启动</text>
+
+  <!-- 连线 -->
+  <line x1="580" y1="140" x2="400" y2="180" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="660" y1="140" x2="840" y2="180" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <line x1="360" y1="266" x2="360" y2="312" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="880" y1="266" x2="880" y2="312" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <line x1="300" y1="450" x2="300" y2="506" stroke="#ea580c" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="310" y="482" font-size="11" font-weight="600" fill="#c2410c">/api/*（SSE）</text>
+  <line x1="900" y1="450" x2="700" y2="506" stroke="#16a34a" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="820" y="472" font-size="11" font-weight="600" fill="#15803d">/ppt-api/*</text>
+
+  <line x1="800" y1="590" x2="840" y2="590" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="820" y="580" text-anchor="middle" font-size="10" fill="#475569">HTTP</text>
+
+  <line x1="480" y1="640" x2="440" y2="640" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="6 4" marker-end="url(#arrowDash)"/>
+  <text x="460" y="630" text-anchor="middle" font-size="10" fill="#64748b">认证</text>
+
+  <line x1="1000" y1="674" x2="1000" y2="716" stroke="#0d9488" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="640" y1="674" x2="640" y2="716" stroke="#0d9488" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <line x1="200" y1="674" x2="200" y2="830" stroke="#ea580c" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="330" y1="674" x2="470" y2="830" stroke="#dc2626" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <line x1="1000" y1="674" x2="340" y2="824" stroke="#9333ea" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="660" y="700" font-size="11" fill="#7e22ce">DATABASE_URL → ppt_agent</text>
+
+  <line x1="150" y1="400" x2="96" y2="400" stroke="#d97706" stroke-width="1.4" stroke-dasharray="6 4"/>
+  <line x1="96" y1="400" x2="96" y2="890" stroke="#d97706" stroke-width="1.4" stroke-dasharray="6 4"/>
+  <line x1="96" y1="890" x2="640" y2="890" stroke="#d97706" stroke-width="1.4" stroke-dasharray="6 4" marker-end="url(#arrowDash)"/>
+  <text x="106" y="392" font-size="10" fill="#b45309">iframe 嵌入</text>
+
+  <line x1="900" y1="830" x2="560" y2="806" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#arrowDash)"/>
+  <line x1="950" y1="950" x2="360" y2="950" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#arrowDash)"/>
+
+  <!-- 图例 -->
+  <rect x="80" y="970" width="1080" height="30" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+  <line x1="100" y1="985" x2="130" y2="985" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="138" y="989" font-size="11" fill="#475569">同步调用 / proxy 分流</text>
+  <line x1="290" y1="985" x2="320" y2="985" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="6 4" marker-end="url(#arrowDash)"/>
+  <text x="328" y="989" font-size="11" fill="#475569">内部认证 / 嵌入 / 可选链路</text>
+  <rect x="545" y="977" width="14" height="14" rx="3" fill="#fff7ed" stroke="#ea580c"/>
+  <text x="565" y="989" font-size="11" fill="#475569">图表域</text>
+  <rect x="640" y="977" width="14" height="14" rx="3" fill="#f0fdf4" stroke="#16a34a"/>
+  <text x="660" y="989" font-size="11" fill="#475569">PPT 编排</text>
+  <rect x="745" y="977" width="14" height="14" rx="3" fill="#faf5ff" stroke="#9333ea"/>
+  <text x="765" y="989" font-size="11" fill="#475569">PPT 渲染/存储</text>
+  <rect x="885" y="977" width="14" height="14" rx="3" fill="#ffffff" stroke="#94a3b8" stroke-dasharray="4 3"/>
+  <text x="905" y="989" font-size="11" fill="#475569">可选（--with-worker）</text>
+</svg>

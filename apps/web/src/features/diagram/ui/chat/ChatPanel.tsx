@@ -2095,7 +2095,18 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
         }),
         signal: controller.signal,
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const errBody = await res.json();
+          if (errBody?.detail) {
+            errMsg = typeof errBody.detail === 'string' ? errBody.detail : JSON.stringify(errBody.detail);
+          }
+        } catch (e) {
+          // ignore parsing error
+        }
+        throw new Error(errMsg);
+      }
 
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();

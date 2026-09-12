@@ -1,4 +1,5 @@
 import type {
+  ConsultantProposal,
   ExtractedFactDraft,
   ExtractFactsResult,
   FactCategory,
@@ -293,4 +294,120 @@ export class MockGeminiAdapter implements GeminiAdapter {
     const { mockPageSearch } = await import("./studioHelpers.js");
     return mockPageSearch(slide);
   }
+
+  async editSlideWithCopilot(
+    slide: SlideDto,
+    currentPlan: SlidePlanDto | null,
+    instruction: string,
+    _onToken?: (token: string) => void
+  ) {
+    const basePlan = currentPlan || {
+      title: slide.title,
+      pageGoal: slide.slideGoal || "传递核心信息",
+      keyMessage: slide.keyMessage || "结论明确，逻辑递进",
+      layoutType: slide.recommendedLayout || "cards",
+      contentBlocks: [
+        {
+          type: "bullets" as const,
+          title: "核心要点",
+          items: slide.contentPoints?.length ? [...slide.contentPoints] : ["要点一", "要点二"]
+        }
+      ],
+      sourceFactIds: []
+    };
+
+    const updatedPlan = {
+      ...basePlan,
+      keyMessage: `${basePlan.keyMessage} (AI Copilot 优化)`
+    };
+
+    return {
+      plan: updatedPlan,
+      replyMessage: `已根据您的指令「${instruction}」更新本页初稿设计。`,
+      suggestedAction: "生成设计稿"
+    };
+  }
+
+  async proposeConsultantStructure(
+    context: {
+      project: Pick<ProjectDto, "name" | "audience" | "purpose" | "topic" | "reportType" | "pageCount">;
+      sourceText: string;
+      materialTexts?: string[];
+    }
+  ): Promise<ConsultantProposal> {
+    const topic = context.project.topic || context.project.name || "演示汇报";
+    return {
+      takeaways: [
+        {
+          id: "t1",
+          title: `直击痛点：重塑关于 ${topic} 的核心认知`,
+          content: `结合目标受众与当前背景，提炼出切合实际的关键瓶颈与解决切入点。`,
+          category: "核心立论"
+        },
+        {
+          id: "t2",
+          title: "路径突破：以差异化策略取代低效尝试",
+          content: "聚焦高频场景与关键动作，形成具有复利效应的行动闭环。",
+          category: "突破方法"
+        },
+        {
+          id: "t3",
+          title: "落地执行：可量化、低阻力的分步行动指南",
+          content: "提供清晰的阶梯式时间规划与阶段交付物，确保落地执行。",
+          category: "落地策略"
+        }
+      ],
+      chapters: [
+        {
+          id: "c1",
+          title: "第一部分 · 背景透视与现状诊断",
+          keyGoal: "分析核心问题与痛点根因",
+          pageCount: "1~2 页",
+          points: ["现状数据剖析", "为何需要系统性突破"]
+        },
+        {
+          id: "c2",
+          title: "第二部分 · 核心方法论与突破路径",
+          keyGoal: "提供立竿见影的解决体系",
+          pageCount: "2~3 页",
+          points: ["核心打法推导", "对比传统路径优势"]
+        },
+        {
+          id: "c3",
+          title: "第三部分 · 阶梯式实战落地计划",
+          keyGoal: "提供拿来即用的行动路线与自测标准",
+          pageCount: "2 页",
+          points: ["阶段性关键指标", "避坑指南与工具支持"]
+        }
+      ],
+      consultantGreeting: `AI 顾问分析：已根据您提供的主题“${topic}”与背景资料，深度提炼了 3 个核心观点与 3 大章节故事线。`,
+      quickActions: [
+        "强化行业与竞品案例",
+        "精简理论，加大实操比重",
+        "增加分阶段时间规划",
+        "补充风险控制与应对预案"
+      ]
+    };
+  }
+
+  async adjustConsultantStructure(
+    context: {
+      project: Pick<ProjectDto, "name" | "audience" | "purpose" | "topic">;
+      currentProposal: ConsultantProposal;
+      instruction: string;
+    }
+  ): Promise<ConsultantProposal> {
+    const updated = { ...context.currentProposal };
+    return {
+      ...updated,
+      consultantGreeting: `已根据您的指令「${context.instruction}」优化了章节侧重与立论细节。`,
+      quickActions: [
+        "强化定量数据支撑",
+        "增加典型实战场景",
+        "精简整体汇报篇幅",
+        "强化管理层决策要点"
+      ]
+    };
+  }
 }
+

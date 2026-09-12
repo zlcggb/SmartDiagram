@@ -3148,3 +3148,25 @@
     forced-color-adjust: auto;
   }
 }
+
+/* PPT 模块默认全屏沉浸：自动隐藏顶部桌面菜单栏与底部Dock，将工作区从 0 铺满视口 */
+.mac-app-shell[data-area='ppt-project'] .mac-menu-bar,
+.mac-app-shell[data-area='ppt-home'] .mac-menu-bar,
+body.has-ppt-focus-mode .mac-menu-bar {
+  display: none !important;
+}
+
+.mac-app-shell[data-area='ppt-project'] .mac-app-content,
+.mac-app-shell[data-area='ppt-home'] .mac-app-content,
+body.has-ppt-focus-mode .mac-app-content {
+  top: 0 !important;
+  inset: 0 0 0 !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+}
+
+.mac-app-shell[data-area='ppt-project'] .mac-dock,
+.mac-app-shell[data-area='ppt-home'] .mac-dock,
+body.has-ppt-focus-mode .mac-dock {
+  display: none !important;
+}

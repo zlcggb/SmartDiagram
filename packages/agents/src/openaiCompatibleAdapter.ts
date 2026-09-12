@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 import type { Response } from "undici";
 import type {
+  ConsultantProposal,
   ExtractFactsResult,
   FactDto,
   OutlineSlideDraft,
@@ -18,6 +19,11 @@ import {
   buildSpeechScriptPrompt,
   buildSpeechScriptPlanPrompt,
   buildSvgPreviewPrompt,
+  buildConsultantProposePrompt,
+  buildConsultantChatPrompt,
+  consultantProposeSystemPrompt,
+  consultantChatSystemPrompt,
+  consultantProposalSchema,
   extractFactsSystemPrompt,
   outlineSystemPrompt,
   slidePlanSystemPrompt,
@@ -871,4 +877,100 @@ export class OpenAiCompatibleAdapter implements GeminiAdapter {
       return mockPageSearch(slide);
     }
   }
+
+  async editSlideWithCopilot(
+    slide: SlideDto,
+    currentPlan: SlidePlanDto | null,
+    instruction: string,
+    onToken?: (token: string) => void
+  ) {
+    const { buildSlideCopilotPrompt, slideCopilotSystemPrompt } = await import("./prompts.js");
+    const schema = {
+      type: "object",
+      properties: {
+        plan: slidePlanSchema,
+        replyMessage: { type: "string" },
+        suggestedAction: { type: "string" }
+      },
+      required: ["plan", "replyMessage"]
+    };
+
+    try {
+      const result = await this.generateJson<{
+        plan?: SlidePlanDto;
+        replyMessage?: string;
+        suggestedAction?: string;
+      }>(
+        buildSlideCopilotPrompt(slide, currentPlan, instruction),
+        schema,
+        slideCopilotSystemPrompt,
+        { stage: "plan" },
+        onToken
+      );
+
+      const normalized = normalizeSlidePlan(result.plan || currentPlan || {}, slide, new Set<string>());
+      return {
+        plan: normalized,
+        replyMessage: result.replyMessage?.trim() || "已根据您的要求修改初稿并重新生成设计。",
+        suggestedAction: result.suggestedAction?.trim()
+      };
+    } catch (error) {
+      return {
+        plan: currentPlan || {
+          title: slide.title,
+          pageGoal: slide.slideGoal || "",
+          keyMessage: slide.keyMessage || "",
+          layoutType: slide.recommendedLayout || "cards",
+          contentBlocks: [
+            {
+              type: "bullets" as const,
+              title: "核心要点",
+              items: slide.contentPoints?.length ? [...slide.contentPoints] : ["要点一"]
+            }
+          ],
+          sourceFactIds: []
+        },
+        replyMessage: `修改遇到了问题：${error instanceof Error ? error.message : "生成失败"}`
+      };
+    }
+  }
+
+  async proposeConsultantStructure(
+    context: {
+      project: Pick<ProjectDto, "name" | "audience" | "purpose" | "topic" | "reportType" | "pageCount">;
+      sourceText: string;
+      materialTexts?: string[];
+    },
+    onToken?: (token: string) => void
+  ): Promise<ConsultantProposal> {
+    const prompt = buildConsultantProposePrompt(context);
+    const result = await this.generateJson<ConsultantProposal>(
+      prompt,
+      consultantProposalSchema,
+      consultantProposeSystemPrompt,
+      { stage: "outline" },
+      onToken
+    );
+    return result;
+  }
+
+  async adjustConsultantStructure(
+    context: {
+      project: Pick<ProjectDto, "name" | "audience" | "purpose" | "topic">;
+      currentProposal: ConsultantProposal;
+      instruction: string;
+    },
+    onToken?: (token: string) => void
+  ): Promise<ConsultantProposal> {
+    const prompt = buildConsultantChatPrompt(context);
+    const result = await this.generateJson<ConsultantProposal>(
+      prompt,
+      consultantProposalSchema,
+      consultantChatSystemPrompt,
+      { stage: "outline" },
+      onToken
+    );
+    return result;
+  }
 }
+

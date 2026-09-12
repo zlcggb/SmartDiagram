@@ -1161,7 +1161,7 @@ export {
   validateCopyQuality
 } from "./validateCopyQuality.js";
 export type { CopyIssue, CopyValidationResult } from "./validateCopyQuality.js";
-export { fitSvgTextToBounds, getSvgTextBoxIssues } from "./svgTextFit.js";
+export { autoHealSvgTextBoxes, fitSvgTextToBounds, getSvgTextBoxIssues } from "./svgTextFit.js";
 export type { SvgTextFitResult } from "./svgTextFit.js";
 export {
   NarrationAlignmentCueSchema,
@@ -1177,3 +1177,43 @@ export type {
   NarrationFocusTarget,
   SpeechScriptPlan
 } from "./narrationFocus.js";
+
+export const ConsultantTakeawaySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  content: z.string(),
+  category: z.string()
+});
+
+export const ConsultantChapterSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  keyGoal: z.string(),
+  pageCount: z.string(),
+  points: z.array(z.string()).default([])
+});
+
+export const ConsultantProposalSchema = z.object({
+  takeaways: z.array(ConsultantTakeawaySchema).default([]),
+  chapters: z.array(ConsultantChapterSchema).default([]),
+  consultantGreeting: z.string(),
+  quickActions: z.array(z.string()).default([])
+});
+
+export type ConsultantTakeaway = z.infer<typeof ConsultantTakeawaySchema>;
+export type ConsultantChapter = z.infer<typeof ConsultantChapterSchema>;
+export type ConsultantProposal = z.infer<typeof ConsultantProposalSchema>;
+
+export const consultantProposeRequestSchema = z.object({
+  sourceText: z.string().optional(),
+  materialIds: z.array(z.string()).optional()
+});
+
+export const consultantAdjustRequestSchema = z.object({
+  instruction: z.string().min(1, "调整要求不能为空"),
+  currentProposal: ConsultantProposalSchema
+});
+
+export type ConsultantProposeRequest = z.infer<typeof consultantProposeRequestSchema>;
+export type ConsultantAdjustRequest = z.infer<typeof consultantAdjustRequestSchema>;
+

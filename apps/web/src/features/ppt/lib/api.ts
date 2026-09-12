@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   BriefJson,
   BriefQuestion,
+  ConsultantProposal,
   CreateBlankSlideInput,
   CreateFactInput,
   CreateProjectInput,
@@ -353,6 +354,12 @@ export const api = {
   extractFacts(projectId: string, materialIds?: string[]) {
     return request<FactDto[]>(`/api/projects/${projectId}/extract-facts`, json("POST", { materialIds }));
   },
+  proposeConsultantStructure(projectId: string, input?: { sourceText?: string; materialIds?: string[] }) {
+    return request<ConsultantProposal>(`/api/projects/${projectId}/consultant-propose`, json("POST", input ?? {}));
+  },
+  adjustConsultantStructure(projectId: string, input: { instruction: string; currentProposal: ConsultantProposal }) {
+    return request<ConsultantProposal>(`/api/projects/${projectId}/consultant-adjust`, json("POST", input));
+  },
   createFact(projectId: string, input: CreateFactInput) {
     return request<FactDto>(`/api/projects/${projectId}/facts`, json("POST", input));
   },
@@ -428,6 +435,18 @@ export const api = {
     return request<GenerateDesignsResult>(
       `/api/projects/${projectId}/generate-all-designs`,
       json("POST", { theme, force: true, mode, ...options })
+    );
+  },
+  slideCopilot(projectId: string, slideId: string, instruction: string, action?: string) {
+    return request<{ slide: SlideDto; replyMessage: string; plan: SlidePlanDto; suggestedAction?: string }>(
+      `/api/projects/${projectId}/slides/${slideId}/copilot`,
+      json("POST", { instruction, action })
+    );
+  },
+  slideFastForward(projectId: string, slideId: string) {
+    return request<{ slide: SlideDto }>(
+      `/api/projects/${projectId}/slides/${slideId}/fast-forward`,
+      json("POST", {})
     );
   },
   /** mode 为导出策略；draft 模式同时传 draft:true 以兼容旧 API（exportPptxSchema） */

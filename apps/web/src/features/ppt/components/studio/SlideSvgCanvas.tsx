@@ -242,23 +242,22 @@ export function SlideSvgCanvas({
         {selected && !readOnly && (
           <textarea
             ref={textareaRef}
-            className="pointer-events-auto absolute resize-none border border-dashed border-blue-400/80 bg-transparent p-0 outline-none focus:ring-0"
+            className="pointer-events-auto absolute resize-none border-2 border-blue-500 rounded bg-white/95 px-1 py-0.5 shadow-lg outline-none ring-2 ring-blue-400/30 transition text-black"
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
             onKeyDown={handleKeyDown}
             onBlur={commitEdit}
             style={{
-              left: selected.rect.left,
-              top: selected.rect.top,
-              width: selected.rect.width,
-              minHeight: selected.rect.height + selected.rect.fontSize,
+              left: selected.rect.left - 4,
+              top: selected.rect.top - 2,
+              width: Math.max(selected.rect.width + 12, 120),
+              minHeight: selected.rect.height + selected.rect.fontSize + 8,
               fontSize: selected.rect.fontSize,
               fontWeight: selected.fontWeight,
               fontFamily: selected.fontFamily,
-              color: selected.fill !== "inherit" ? selected.fill : "inherit",
+              color: selected.fill !== "inherit" && selected.fill !== "white" ? selected.fill : "#111827",
               textAlign: selected.textAlign,
               lineHeight: selected.lineHeight,
-              background: "transparent",
               overflow: "hidden"
             }}
           />

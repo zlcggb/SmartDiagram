@@ -13,6 +13,8 @@ export interface PptProgressEvent {
   timestamp?: string;
   slideId?: string;
   slideTitle?: string;
+  action?: "slide-updated" | string;
+  slide?: unknown;
 }
 
 interface StreamProjectProgressOptions {

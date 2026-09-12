@@ -72,10 +72,21 @@ def parse_model_pricing(raw: str | dict[str, Any] | None) -> dict[str, dict[str,
 # overrides them, and admin-edited DB rows override both. Keeping them here means
 # a fresh deployment prices the known models sensibly out of the box.
 BUILTIN_MODEL_PRICING: dict[str, dict[str, Any]] = {
+    "gemini-3.8-flash-high": {"input": 5.4, "output": 27.0, "cache": 0.54, "currency": "CNY"},
+    "gemini-3.8-flash": {"input": 5.4, "output": 27.0, "cache": 0.54, "currency": "CNY"},
+    "gemini-3.7-flash-high": {"input": 5.4, "output": 27.0, "cache": 0.54, "currency": "CNY"},
+    "gemini-3.7-flash": {"input": 5.4, "output": 27.0, "cache": 0.54, "currency": "CNY"},
+    "gemini-3.6-flash-high": {"input": 5.4, "output": 27.0, "cache": 0.54, "currency": "CNY"},
+    "gemini-2.5-flash": {"input": 0.54, "output": 2.16, "cache": 0.135, "currency": "CNY"},
+    "gpt-5.6-terra": {"input": 14.4, "output": 86.4, "cache": 1.44, "currency": "CNY"},
+    "gpt-5.6-sol": {"input": 28.8, "output": 144.0, "cache": 2.88, "currency": "CNY"},
+    "gpt-5.6-luna": {"input": 1.44, "output": 8.64, "cache": 0.144, "currency": "CNY"},
+    "gpt-5.4": {"input": 18.0, "output": 90.0, "cache": 1.8, "currency": "CNY"},
+    "gpt-5.4-mini": {"input": 1.8, "output": 9.0, "cache": 0.18, "currency": "CNY"},
     "gpt-5.3-codex-spark": {"input": 18.0, "output": 72.0, "cache": 9.0, "currency": "CNY"},
-    "gpt-5.6-sol": {"input": 18.0, "output": 72.0, "cache": 9.0, "currency": "CNY"},
-    "gpt-5.6-terra": {"input": 18.0, "output": 72.0, "cache": 9.0, "currency": "CNY"},
-    "gemini-3.6-flash-high": {"input": 0.5, "output": 2.0, "cache": 0.125, "currency": "CNY"},
+    "kimi-k2.5": {"input": 4.32, "output": 21.6, "cache": 0.72, "currency": "CNY"},
+    "kimi-k2.7-code-highspeed": {"input": 4.32, "output": 21.6, "cache": 0.72, "currency": "CNY"},
+    "kimi-k3": {"input": 21.6, "output": 108.0, "cache": 2.16, "currency": "CNY"},
 }
 
 

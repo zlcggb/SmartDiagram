@@ -30,6 +30,10 @@ export interface ProgressEvent {
   subStage?: string;
   /** 阶段 start 时是否清空上一阶段累积的流式输出 */
   clearDelta?: boolean;
+  /** 动作类型，例如 slide-updated 用于单页增量回写 */
+  action?: "slide-updated" | string;
+  /** 单页更新时的 slide 数据载荷 */
+  slide?: unknown;
   /** 时间戳 */
   timestamp: string;
 }

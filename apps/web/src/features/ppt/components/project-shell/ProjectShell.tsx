@@ -1,26 +1,35 @@
 import { Link, useLocation, useParams } from "react-router-dom";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
-import { AlertCircle, LoaderCircle, Sparkles, Activity, Cpu } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { AlertCircle, LoaderCircle, Sparkles } from "lucide-react";
 import { AppLogoMark } from "../AppLogo";
 import { useWorkbenchStore } from '@/features/ppt/store/workbenchStore';
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { WorkspaceNav } from "./WorkspaceNav";
+import { WorkspaceFocusToggle } from "./WorkspaceFocusToggle";
 import { TokenDashboardModal } from "../studio/TokenDashboardModal";
 import { startAiUsageAutoRefresh } from "../../lib/usageRefresh";
 import { projectUsageIndicator } from "../../lib/modelUsage";
+import {
+  isWorkspaceFocusShortcut,
+  readWorkspaceFocusMode,
+  WORKSPACE_STUDIO_TOOLBAR_HOST_ID,
+  writeWorkspaceFocusMode
+} from "./workspaceFocusMode";
+import { IntentHeaderStepper } from "./IntentHeaderStepper";
 
 export function ProjectShell({ children }: { children: ReactNode }) {
   const { projectId } = useParams();
   const location = useLocation();
   const isIntentRoute = location.pathname.includes("/intent");
   const isStructureRoute = location.pathname.includes("/structure");
+  const isStudioRoute = location.pathname.includes("/studio");
+  const isDirectorRoute = location.pathname.includes("/director");
   const project = useWorkbenchStore((s) => s.project);
   const busy = useWorkbenchStore((s) => s.busy);
   const error = useWorkbenchStore((s) => s.error);
   const clearError = useWorkbenchStore((s) => s.clearError);
   const aiUsageSummary = useWorkbenchStore((s) => s.aiUsageSummary);
-  const latestSourceText = useWorkbenchStore((s) => s.latestSourceText);
   const runPipeline = useWorkbenchStore((s) => s.runPipeline);
   const refreshAiUsage = useWorkbenchStore((s) => s.refreshAiUsage);
   const progressStages = useWorkbenchStore((s) => s.progressStages);
@@ -28,6 +37,49 @@ export function ProjectShell({ children }: { children: ReactNode }) {
   const setStudioPhase = useWorkbenchStore((s) => s.setStudioPhase);
   const ttsModel = useWorkbenchStore((s) => s.ttsModel);
   const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(() =>
+    typeof window === "undefined" ? false : readWorkspaceFocusMode(window.localStorage)
+  );
+
+  const isStudioFocusMode = Boolean(isStudioRoute && focusMode);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (isStudioFocusMode) {
+      document.body.classList.add("has-ppt-focus-mode");
+    } else {
+      document.body.classList.remove("has-ppt-focus-mode");
+    }
+    return () => {
+      document.body.classList.remove("has-ppt-focus-mode");
+    };
+  }, [isStudioFocusMode]);
+
+  const toggleFocusMode = useCallback(() => {
+    setFocusMode((current) => {
+      const next = !current;
+      if (typeof window !== "undefined") {
+        writeWorkspaceFocusMode(window.localStorage, next);
+        if (next && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else if (!next && document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    function handleFullscreenChange() {
+      if (!document.fullscreenElement && focusMode) {
+        setFocusMode(false);
+        if (typeof window !== "undefined") writeWorkspaceFocusMode(window.localStorage, false);
+      }
+    }
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, [focusMode]);
 
   // 工作室/导演的「当前阶段」由 URL ?phase= 驱动（点标签页只改 URL，不写 store）。
   // 工作室阶段会回填进 store，让其它消费 studioPhase 的地方保持一致。
@@ -48,14 +100,23 @@ export function ProjectShell({ children }: { children: ReactNode }) {
     });
   }, [busy, refreshAiUsage]);
 
+  useEffect(() => {
+    if (!isStudioRoute) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!isWorkspaceFocusShortcut(event)) return;
+      event.preventDefault();
+      toggleFocusMode();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isStudioRoute, toggleFocusMode]);
+
   // chip 跟随「当前模块 / 工作室阶段」切换模型。后端 stageGraph 的 modelRole：
   // 只有「按页设计稿」(design/svg) 用 design 模型（gemini-3.6-flash-high）；
   // 意图/结构/导演/检索/初稿/IR 等都用主模型（gpt-5.3-codex-spark）。
   const runningStageName = Object.entries(progressStages ?? {}).find(
     ([, stage]) => stage?.status === "running",
   )?.[0];
-  const isStudioRoute = location.pathname.includes("/studio");
-  const isDirectorRoute = location.pathname.includes("/director");
   const isDesignContext =
     (isStudioRoute && urlPhase === "design") ||
     (isDirectorRoute && urlPhase === "audio") ||
@@ -66,100 +127,88 @@ export function ProjectShell({ children }: { children: ReactNode }) {
     : aiUsageSummary?.model || aiUsageSummary?.designModel;
   const usageIndicator = projectUsageIndicator(aiUsageSummary);
 
+  const currentModuleSubtitle = isIntentRoute
+    ? "意图"
+    : isStructureRoute
+      ? "结构"
+      : isStudioRoute
+        ? "工作室"
+        : isDirectorRoute
+          ? "导演"
+          : "工作区";
+
   return (
     <div
       className={`studio-shell min-h-screen ${isIntentRoute ? "intent-route" : ""} ${
         isStructureRoute ? "structure-route" : ""
-      }`}
+      } ${isStudioRoute ? "is-studio-route" : ""} ${isStudioFocusMode ? "is-focus-mode" : ""}`}
     >
-      <header className="workspace-header">
+      <header
+        className={`workspace-header ${isStudioRoute ? "is-studio-route" : ""} ${
+          isStudioFocusMode ? "is-focus-mode" : ""
+        }`}
+      >
         <div className="workspace-header__main">
           <div className="workspace-header__identity">
             <Link to="../.." className="workspace-brand" aria-label="返回项目首页" title="返回项目首页">
               <span className="workspace-brand__mark">
                 <AppLogoMark className="h-7 w-7" />
               </span>
-              <span className="workspace-brand__wordmark">PPT Agent</span>
             </Link>
-            <span className="workspace-header__divider" aria-hidden="true" />
-            <ProjectSwitcher project={project} />
+            <ProjectSwitcher project={project} moduleSubtitle={currentModuleSubtitle} />
+          </div>
+
+          <div className="workspace-header__navigation">
+            <WorkspaceNav projectId={projectId} />
+            {isIntentRoute ? <IntentHeaderStepper /> : null}
+            {isStudioRoute ? (
+              <div
+                id={WORKSPACE_STUDIO_TOOLBAR_HOST_ID}
+                className="workspace-studio-toolbar-host"
+                aria-label="工作室快捷操作"
+              />
+            ) : null}
           </div>
 
           <div className="workspace-header__actions">
             <button
               type="button"
-              className="workspace-usage-pill"
+              className={`workspace-usage-pill workspace-usage-pill--compact ${usageIndicator.hasError ? "is-error" : ""}`}
               onClick={() => setDashboardOpen(true)}
-              title={aiUsageSummary?.usageError ?? "查看当前项目的模型调用、Token 与费用明细"}
-              style={{
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "4px 12px",
-                borderRadius: "9999px",
-                border: "1px solid rgba(0,0,0,0.08)",
-                background: "rgba(255,255,255,0.92)",
-                backdropFilter: "blur(8px)",
-                fontSize: "12px",
-                fontWeight: 500,
-                color: "#374151",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-                transition: "all 0.15s ease",
-              }}
+              title={
+                aiUsageSummary?.usageError ??
+                `${displayModel || "AI 模型"} · ${usageIndicator.label} · 点击查看 Token 与费用明细`
+              }
             >
-              <span style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "4px",
-                padding: "2px 8px",
-                borderRadius: "9999px",
-                background: "rgba(59,130,246,0.08)",
-                color: "#1d4ed8",
-                fontWeight: 600,
-                border: "1px solid rgba(59,130,246,0.15)",
-                fontSize: "11px",
-              }}>
-                <Cpu className="h-3.5 w-3.5" style={{ color: "#2563eb" }} />
-                {displayModel || "AI Model"}
-              </span>
-              <span style={{ color: "#d1d5db" }}>|</span>
-              <span style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                color: usageIndicator.hasError ? "#b45309" : "#4b5563",
-              }}>
-                {usageIndicator.hasError
-                  ? <AlertCircle className="h-3.5 w-3.5" style={{ color: "#f59e0b" }} />
-                  : <Activity className="h-3.5 w-3.5" style={{ color: "#10b981" }} />}
-                <span>{usageIndicator.label}</span>
+              {usageIndicator.hasError ? (
+                <AlertCircle className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+              ) : (
+                <span className="workspace-usage-pill__dot" aria-hidden="true" />
+              )}
+              <span className="workspace-usage-pill__compact-label">
+                {usageIndicator.label.replace(/^项目\s*/, "")}
               </span>
             </button>
-            <button
-              type="button"
-              className="primary-button workspace-generate-button"
-              disabled={Boolean(busy) || !projectId}
-              onClick={() => void runPipeline()}
-            >
-              <Sparkles className="h-4 w-4" />
-              全部自动生成
-            </button>
+            {!isStudioRoute ? (
+              <button
+                type="button"
+                className="workspace-generate-button"
+                disabled={Boolean(busy) || !projectId}
+                onClick={() => void runPipeline()}
+                title="全流程自动运行：意图确认、结构大纲、幻灯片设计与媒体出图"
+              >
+                <Sparkles className="h-4 w-4" />
+                全部自动生成
+              </button>
+            ) : null}
             {busy ? (
-              <span className="workspace-busy-state">
+              <span className="workspace-busy-state" aria-live="polite">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
                 {busy}
               </span>
             ) : null}
+            <WorkspaceFocusToggle active={isStudioFocusMode} onToggle={toggleFocusMode} />
           </div>
-        </div>
-
-        <div className="workspace-header__nav-row">
-          <WorkspaceNav projectId={projectId} />
-          <p className="workspace-context">
-            AI 顾问项目{latestSourceText ? " · 已附参考资料" : ""}
-            {project?.topic ? ` · ${project.topic}` : ""}
-          </p>
         </div>
       </header>
 

@@ -2,6 +2,7 @@ import type {
   BriefJson,
   BriefQuestion,
   BriefQuestionSource,
+  ConsultantProposal,
   ExtractFactsResult,
   FactDto,
   OutlineSlideDraft,
@@ -108,4 +109,33 @@ export interface GeminiAdapter {
     context: SpeechScriptContext,
     onToken?: (token: string) => void
   ): Promise<SpeechScriptPlan>;
+  editSlideWithCopilot?(
+    slide: SlideDto,
+    currentPlan: SlidePlanDto | null,
+    instruction: string,
+    onToken?: (token: string) => void
+  ): Promise<SlideCopilotResult>;
+  proposeConsultantStructure?(
+    context: {
+      project: Pick<ProjectDto, "name" | "audience" | "purpose" | "topic" | "reportType" | "pageCount">;
+      sourceText: string;
+      materialTexts?: string[];
+    },
+    onToken?: (token: string) => void
+  ): Promise<ConsultantProposal>;
+  adjustConsultantStructure?(
+    context: {
+      project: Pick<ProjectDto, "name" | "audience" | "purpose" | "topic">;
+      currentProposal: ConsultantProposal;
+      instruction: string;
+    },
+    onToken?: (token: string) => void
+  ): Promise<ConsultantProposal>;
 }
+
+export interface SlideCopilotResult {
+  plan: SlidePlanDto;
+  replyMessage: string;
+  suggestedAction?: string;
+}
+

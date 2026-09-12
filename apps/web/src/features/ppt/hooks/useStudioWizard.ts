@@ -9,7 +9,7 @@ import type { StudioPhase } from '@/features/ppt/store/workbenchStore';
 import { useWorkbenchStore } from '@/features/ppt/store/workbenchStore';
 import { useCountdown } from "./useCountdown";
 
-const WAIT_SECONDS = 5;
+const WAIT_SECONDS = 3;
 
 export type WizardStateKind =
   | "idle"
@@ -108,20 +108,20 @@ export function useStudioWizard(options: UseStudioWizardOptions) {
             assertStageComplete(startSlideId, stage);
             checkAbort(startSlideId);
             if (index < stages.length - 1) {
-              setWizardState({ kind: "waitingAfterSearch", message: "检索完成，可编辑后进入下一步" });
+              setWizardState({ kind: "waitingAfterSearch", message: "素材检索已完成" });
               await waitWithCountdown(startSlideId);
             }
             continue;
           }
 
           if (stage === "draft") {
-            setWizardState({ kind: "runningDraft", message: "正在生成初稿…" });
+            setWizardState({ kind: "runningDraft", message: "正在策划生成初稿…" });
             await flushMetaSave();
             await useWorkbenchStore.getState().generateSlidePlan(startSlideId);
             assertStageComplete(startSlideId, stage);
             checkAbort(startSlideId);
             if (index < stages.length - 1) {
-              setWizardState({ kind: "waitingAfterDraft", message: "初稿完成，可编辑后进入设计" });
+              setWizardState({ kind: "waitingAfterDraft", message: "初稿已排版完成" });
               await waitWithCountdown(startSlideId);
             }
             continue;
