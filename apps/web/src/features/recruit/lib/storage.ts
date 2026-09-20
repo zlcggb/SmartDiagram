@@ -21,6 +21,14 @@ export function parseRecruitRecords(raw: string | null): RecruitCandidateRecord[
 }
 
 function browserStorage(): StorageLike {
+  if (typeof window === 'undefined') {
+    return {
+      getItem() {
+        return null
+      },
+      setItem() {}
+    }
+  }
   return window.localStorage
 }
 

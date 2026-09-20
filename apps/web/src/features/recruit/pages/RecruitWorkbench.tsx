@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { BadgeCheck, BrainCircuit, BriefcaseBusiness, FileUp, Sparkles, UserRoundPen } from 'lucide-react'
 
 import { screenCandidate } from '@/features/recruit/lib/api'
@@ -46,8 +46,8 @@ function generateId(prefix: string) {
 }
 
 export function RecruitWorkbench() {
-  const [records, setRecords] = useState<RecruitCandidateRecord[]>([])
-  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null)
+  const [records, setRecords] = useState<RecruitCandidateRecord[]>(() => recruitStorage.list())
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(() => recruitStorage.list()[0]?.id ?? null)
   const [jdTitle, setJdTitle] = useState(DEFAULT_JD_TITLE)
   const [jdText, setJdText] = useState(DEFAULT_JD_TEXT)
   const [candidateName, setCandidateName] = useState('')
@@ -61,12 +61,6 @@ export function RecruitWorkbench() {
   const [decision, setDecision] = useState('进入下一轮')
   const [interviewScore, setInterviewScore] = useState('')
   const [interviewNotes, setInterviewNotes] = useState('')
-
-  useEffect(() => {
-    const initialRecords = recruitStorage.list()
-    setRecords(initialRecords)
-    setSelectedRecordId(initialRecords[0]?.id ?? null)
-  }, [])
 
   const selectedRecord = useMemo(
     () => records.find((item) => item.id === selectedRecordId) ?? null,
