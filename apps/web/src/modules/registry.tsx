@@ -5,7 +5,7 @@
  * 接入新模块：在这里加一条记录 + 在路由里挂它的组件，无需改动导航与首页。
  */
 import type { LucideIcon } from 'lucide-react';
-import { BrainCircuit, Presentation } from 'lucide-react';
+import { BrainCircuit, Presentation, UsersRound } from 'lucide-react';
 
 export interface ModuleRegistration {
   /** 路由路径（如 /diagram），导航高亮以此为前缀匹配 */
@@ -43,6 +43,21 @@ export const moduleRegistry: ModuleRegistration[] = [
       gradientFrom: '#6366f1',
       gradientTo: '#22d3ee',
       glowColor: 'rgba(99, 102, 241, 0.35)',
+    },
+  },
+  {
+    path: '/recruit',
+    navLabel: 'AI 招聘',
+    title: 'AI 招聘筛选',
+    tagline: 'JD 进，候选人出',
+    description:
+      '独立业务模块：围绕 JD 编辑、简历初筛、候选人打分与面试记录，快速搭建一个可演示的 AI 招聘筛选工作台。',
+    highlights: ['JD 编辑与标准化评分', '简历上传 + AI 初筛', '候选人与面试记录沉淀'],
+    icon: UsersRound,
+    accent: {
+      gradientFrom: '#14b8a6',
+      gradientTo: '#22c55e',
+      glowColor: 'rgba(20, 184, 166, 0.28)',
     },
   },
   {

@@ -9,7 +9,7 @@
 
 | 维度 | 事实 |
 |------|------|
-| **产品** | 统一桌面式 SPA：`/` 首页 · `/diagram` 智能图表 · `/ppt` AI 演示文稿 |
+| **产品** | 统一桌面式 SPA：`/` 首页 · `/diagram` 智能图表 · `/recruit` AI 招聘筛选 · `/ppt` AI 演示文稿 |
 | **形态** | npm/pnpm monorepo，**一个前端 + 两个后端域 + 网关聚合** |
 | **本地** | `npm run dev` → Vite `:5173`，API 由 Vite proxy 分流 |
 | **生产** | `gateway :9237` 唯一入口，nginx 分流 SPA / 图表 API / PPT API / draw.io |
@@ -20,7 +20,7 @@
 
 ## 1. 设计原则（改代码前先理解）
 
-1. **平台 + 业务模块**：`apps/web` 是统一壳；`/diagram` 与 `/ppt` 是平级业务模块，通过 `modules/registry.tsx` 注册，新增模块只加注册 + 路由。
+1. **平台 + 业务模块**：`apps/web` 是统一壳；`/diagram`、`/recruit` 与 `/ppt` 是平级业务模块，通过 `modules/registry.tsx` 注册，新增模块只加注册 + 路由。
 2. **API 前缀隔离**：图表走 `/api/*` → `api-diagram`；PPT 走 `/ppt-api/*` → `api-ppt`（Python 编排）→ `service-ppt-renderer`（Node 渲染侧车）。
 3. **环境变量单源**：根 `.env` 为唯一真相；`apps/*/.env` 仅本机临时覆盖。部署脚本会合并旧 env、校验、自动生成密钥。
 4. **LangGraph 编排**：图表与 PPT 均用 Agent 图；路由按 task/engine 分发，SSE 流式输出 `<design_concept>` + `<code>`。
@@ -35,11 +35,12 @@ SmartDiagram/
 ├── apps/
 │   ├── web/                      # 统一 SPA（React 18 + Vite + Tailwind v4）
 │   │   └── src/
-│   │       ├── app/main.tsx      # 路由入口：/ · /diagram/* · /ppt/*
+│   │       ├── app/main.tsx      # 路由入口：/ · /diagram/* · /recruit/* · /ppt/*
 │   │       ├── modules/registry.tsx   # 模块注册表（导航 + 首页卡片）
 │   │       ├── pages/            # 平台页（home、diagram workspace）
 │   │       ├── features/
 │   │       │   ├── diagram/      # 图表：chatStore、Canvas、ChatPanel
+│   │       │   ├── recruit/      # AI 招聘：JD、简历初筛、面试记录
 │   │       │   └── ppt/          # PPT：五步工作流、workbenchStore、api.ts
 │   │       └── shared/           # AppShell、auth、settings、macOS 桌面 UI
 │   │
@@ -161,6 +162,7 @@ graph TB
 |------|------|------|
 | `/` | `HomePage` | 模块入口卡片 |
 | `/diagram/*` | `DiagramWorkspace` | 图表工作台（画布 + 聊天） |
+| `/recruit/*` | `RecruitModule` | 招聘筛选工作台（JD / 简历 / 面试记录） |
 | `/ppt/*` | `PptModule` | PPT 五步工作流 |
 
 所有路由包在 `AppShell` 内（macOS 风格菜单栏、Spotlight、设置）。
@@ -204,6 +206,15 @@ graph TB
 API 封装：`lib/api.ts`（base = `/ppt-api`）。状态：`store/workbenchStore.ts`。
 Studio 设计稿按页懒加载最近 5 个 `SlideDesignVersion`；版本导航切换会同步
 `activeDesignVersionId` 与 `svgPreview`，因此预览、代码编辑器和导出始终读取同一当前版本。
+
+### 4.5 AI 招聘前端（`features/recruit/`）
+
+| 关注点 | 文件 |
+|--------|------|
+| 模块入口 | `RecruitModule.tsx` |
+| 工作台页面 | `pages/RecruitWorkbench.tsx` |
+| AI 筛选 API | `lib/api.ts` |
+| 本地候选人记录 | `lib/storage.ts` |
 
 ---
 
@@ -326,6 +337,7 @@ PPT 导演视频的矩形聚焦由 `SlideNarration.focusPlanJson` 与 `alignment
 | 改图表聊天/SSE 行为 | `api-diagram/app/api/routes.py` + `agents/orchestrator.py` |
 | 新增/改绘图引擎 | `agents/catalog.py` + `*_agent.py` + `web/.../CanvasPanel.tsx` + 新 Canvas |
 | 改图表 UI/布局 | `features/diagram/ui/` |
+| 改 AI 招聘筛选模块 | `features/recruit/` + `api-diagram/app/api/routes_talent.py` + `services/talent_screening_service.py` |
 | 改登录/权限 | `api-diagram/app/api/routes_auth.py` + `guest_session_service.py` + `identity_service.py` + `web/shared/lib/config/guestSession.ts` |
 | 租户用户管理（本租户） | `routes_admin.py` + `UserManagementPanel.tsx`（admin/owner） |
 | **平台用户中心（跨租户）** | `routes_platform_admin.py` + `PlatformUserCenterWindow.tsx` / `PlatformUserCenterPanel.tsx` / `PlatformQuotaProfilesPanel.tsx`（桌面入口；`PLATFORM_ADMIN_EMAILS`） |

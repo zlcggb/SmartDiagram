@@ -4,7 +4,7 @@
  * Artwork can be vector or raster, while the shared component API prevents the
  * same module from drifting across surfaces and output sizes.
  */
-import { Building2 } from "lucide-react";
+import { Building2, UsersRound } from "lucide-react";
 import smartDiagramHomeIcon from '@/assets/macos-icons/smartdiagram-home.svg';
 import recentFolderIcon from '@/assets/macos-icons/recent-folder-384.png';
 import { PptAgentIconMark, SmartDiagramIconMark } from '@/components/brand/AppIconMarks';
@@ -38,6 +38,19 @@ export function MindmapAppIcon({ size = 60 }: IconProps) {
 
 export function SlidesAppIcon({ size = 60 }: IconProps) {
   return <PptAgentIconMark className="mac-artwork-image" size={size} />;
+}
+
+export function RecruitAppIcon({ size = 60 }: IconProps) {
+  const iconSize = Math.round(size * 0.42);
+  return (
+    <span
+      className="mac-artwork-image mac-artwork-image--platform-admin"
+      style={{ width: size, height: size }}
+      aria-hidden="true"
+    >
+      <UsersRound size={iconSize} strokeWidth={2.1} />
+    </span>
+  );
 }
 
 export function FolderIcon({ size = 60 }: IconProps) {
