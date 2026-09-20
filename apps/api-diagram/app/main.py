@@ -15,6 +15,7 @@ from app.api.routes_knowledge import router as knowledge_router
 from app.api.routes_preferences import router as preferences_router
 from app.api.routes_platform_admin import router as platform_admin_router
 from app.api.routes_pricing import router as pricing_router
+from app.api.routes_recruit import router as recruit_router
 from app.api.routes_talent import router as talent_router
 from app.core.config import settings
 from app.core.logger import logger
@@ -43,6 +44,7 @@ app.include_router(audit_router, prefix=settings.API_PREFIX)
 app.include_router(admin_router, prefix=settings.API_PREFIX)
 app.include_router(platform_admin_router, prefix=settings.API_PREFIX)
 app.include_router(pricing_router, prefix=settings.API_PREFIX)
+app.include_router(recruit_router, prefix=settings.API_PREFIX)
 app.include_router(talent_router, prefix=settings.API_PREFIX)
 
 

@@ -40,7 +40,7 @@ SmartDiagram/
 │   │       ├── pages/            # 平台页（home、diagram workspace）
 │   │       ├── features/
 │   │       │   ├── diagram/      # 图表：chatStore、Canvas、ChatPanel
-│   │       │   ├── recruit/      # AI 招聘：JD、简历初筛、面试记录
+│   │       │   ├── recruit/      # AI 招聘 ATS：岗位、候选人、面试、统计
 │   │       │   └── ppt/          # PPT：五步工作流、workbenchStore、api.ts
 │   │       └── shared/           # AppShell、auth、settings、macOS 桌面 UI
 │   │
@@ -162,7 +162,7 @@ graph TB
 |------|------|------|
 | `/` | `HomePage` | 模块入口卡片 |
 | `/diagram/*` | `DiagramWorkspace` | 图表工作台（画布 + 聊天） |
-| `/recruit/*` | `RecruitModule` | 招聘筛选工作台（JD / 简历 / 面试记录） |
+| `/recruit/*` | `RecruitModule` | 招聘 ATS 工作台（岗位 / 候选人 / 面试 / 统计） |
 | `/ppt/*` | `PptModule` | PPT 五步工作流 |
 
 所有路由包在 `AppShell` 内（macOS 风格菜单栏、Spotlight、设置）。
@@ -211,10 +211,12 @@ Studio 设计稿按页懒加载最近 5 个 `SlideDesignVersion`；版本导航�
 
 | 关注点 | 文件 |
 |--------|------|
-| 模块入口 | `RecruitModule.tsx` |
-| 工作台页面 | `pages/RecruitWorkbench.tsx` |
-| AI 筛选 API | `lib/api.ts` |
-| 本地候选人记录 | `lib/storage.ts` |
+| 模块入口 | `RecruitModule.tsx` + `components/RecruitShell.tsx` |
+| 首页 / Dashboard | `pages/RecruitHomePage.tsx` |
+| 岗位中心 | `pages/RecruitJobsPage.tsx` + `pages/RecruitJobDetailPage.tsx` |
+| 候选人中心 | `pages/RecruitCandidatesPage.tsx` + `pages/RecruitCandidateDetailPage.tsx` |
+| 面试 / 统计 | `pages/RecruitInterviewsPage.tsx` + `pages/RecruitAnalyticsPage.tsx` |
+| API 与状态 | `lib/api.ts` + `store/recruitStore.ts` |
 
 ---
 
@@ -337,7 +339,7 @@ PPT 导演视频的矩形聚焦由 `SlideNarration.focusPlanJson` 与 `alignment
 | 改图表聊天/SSE 行为 | `api-diagram/app/api/routes.py` + `agents/orchestrator.py` |
 | 新增/改绘图引擎 | `agents/catalog.py` + `*_agent.py` + `web/.../CanvasPanel.tsx` + 新 Canvas |
 | 改图表 UI/布局 | `features/diagram/ui/` |
-| 改 AI 招聘筛选模块 | `features/recruit/` + `api-diagram/app/api/routes_talent.py` + `services/talent_screening_service.py` |
+| 改 AI 招聘 ATS 模块 | `features/recruit/` + `api-diagram/app/api/routes_recruit.py` + `services/recruit_service.py` + `models/recruit.py` |
 | 改登录/权限 | `api-diagram/app/api/routes_auth.py` + `guest_session_service.py` + `identity_service.py` + `web/shared/lib/config/guestSession.ts` |
 | 租户用户管理（本租户） | `routes_admin.py` + `UserManagementPanel.tsx`（admin/owner） |
 | **平台用户中心（跨租户）** | `routes_platform_admin.py` + `PlatformUserCenterWindow.tsx` / `PlatformUserCenterPanel.tsx` / `PlatformQuotaProfilesPanel.tsx`（桌面入口；`PLATFORM_ADMIN_EMAILS`） |

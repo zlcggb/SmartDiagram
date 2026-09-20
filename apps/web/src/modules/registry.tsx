@@ -48,11 +48,11 @@ export const moduleRegistry: ModuleRegistration[] = [
   {
     path: '/recruit',
     navLabel: 'AI 招聘',
-    title: 'AI 招聘筛选',
-    tagline: 'JD 进，候选人出',
+    title: 'AI 招聘 ATS',
+    tagline: '岗位到 Offer 的完整闭环',
     description:
-      '独立业务模块：围绕 JD 编辑、简历初筛、候选人打分与面试记录，快速搭建一个可演示的 AI 招聘筛选工作台。',
-    highlights: ['JD 编辑与标准化评分', '简历上传 + AI 初筛', '候选人与面试记录沉淀'],
+      '独立业务模块：围绕岗位中心、候选人档案、AI 初筛、面试记录与统计分析，构建正式可持久化的招聘 ATS 子系统。',
+    highlights: ['岗位与 JD 管理', '候选人档案 + AI 初筛', '面试流程与统计分析'],
     icon: UsersRound,
     accent: {
       gradientFrom: '#14b8a6',
