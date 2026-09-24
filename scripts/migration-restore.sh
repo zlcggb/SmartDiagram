@@ -218,10 +218,16 @@ fi
 # 9. 恢复用户文件卷 (user-volumes.tar.gz)
 if [ -f "$STAGING_DIR/user-volumes.tar.gz" ]; then
     info "正在解压并恢复用户上传文件卷、知识库素材与 PPT 导出文件..."
+    # docker compose run -v uses literal Docker volume names for CLI mounts.
+    # Resolve the effective Compose names so restored files reach the volumes
+    # mounted by the application, including when COMPOSE_PROJECT_NAME differs.
+    PPT_VOLUME_NAME="$(docker compose --profile qdrant config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["volumes"]["pptdata"]["name"])')"
+    KNOWLEDGE_VOLUME_NAME="$(docker compose --profile qdrant config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["volumes"]["knowledgedata"]["name"])')"
+    QDRANT_VOLUME_NAME="$(docker compose --profile qdrant config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["volumes"]["qdrantdata"]["name"])')"
     docker compose run --rm --no-deps --user 0:0 \
-        -v pptdata:/target/pptdata \
-        -v knowledgedata:/target/knowledgedata \
-        -v qdrantdata:/target/qdrantdata \
+        -v "$PPT_VOLUME_NAME":/target/pptdata \
+        -v "$KNOWLEDGE_VOLUME_NAME":/target/knowledgedata \
+        -v "$QDRANT_VOLUME_NAME":/target/qdrantdata \
         -v "$STAGING_DIR":/backup:ro \
         db sh -c "tar -xzf /backup/user-volumes.tar.gz -C /target"
     ok "用户持久化文件卷恢复成功"
