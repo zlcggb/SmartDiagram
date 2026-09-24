@@ -647,6 +647,9 @@ deploy() {
     info "更新并启动所有服务（保留现有命名卷）..."
     compose up -d --remove-orphans
 
+    # Nginx 在启动时解析 Compose 服务名；业务容器重建后必须刷新上游地址。
+    compose up -d --no-deps --force-recreate gateway
+
     verify_deployment
 
     # 构建可能再次推高磁盘使用率；收尾时仍只清理当前 Compose 项目。
