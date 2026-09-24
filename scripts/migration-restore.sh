@@ -127,7 +127,9 @@ if [ "$SKIP_CHECKSUM" = false ] && [ -f "$STAGING_DIR/SHA256SUMS" ]; then
 fi
 
 # 4. 恢复环境变量与密钥配置文件
-if [ -f "$STAGING_DIR/.env" ]; then
+if [ "${SMARTDIAGRAM_HOST_DB:-0}" = "1" ] && [ -f "$ROOT_DIR/.env" ]; then
+    info "使用新服务器现有 .env（包含宿主机 PostgreSQL 连接配置）"
+elif [ -f "$STAGING_DIR/.env" ]; then
     if [ -f "$ROOT_DIR/.env" ]; then
         BACKUP_ENV="$ROOT_DIR/.env.bak_${TIMESTAMP}"
         warn "检测到当前根目录已存在 .env，已备份到: $BACKUP_ENV"
@@ -168,7 +170,7 @@ ok "数据库就绪"
 docker compose up --no-deps ppt-db-init >/dev/null 2>&1 || true
 
 # 6. 恢复角色与权限
-if [ -f "$STAGING_DIR/roles.sql" ]; then
+if [ -f "$STAGING_DIR/roles.sql" ] && [ "${SMARTDIAGRAM_HOST_DB:-0}" != "1" ]; then
     info "恢复数据库角色与权限..."
     # 忽略已存在的角色错误
     docker compose exec -T db psql -U postgres < "$STAGING_DIR/roles.sql" >/dev/null 2>&1 || true
@@ -182,8 +184,12 @@ if [ -f "$STAGING_DIR/smartdiagram.dump" ]; then
         "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO postgres; GRANT ALL ON SCHEMA public TO public; CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null 2>&1 || true
 
     info "正在恢复 SmartDiagram 主数据库 (用户、会话、画布、向量嵌入)..."
+    RESTORE_ROLE_ARGS=()
+    if [ "${SMARTDIAGRAM_HOST_DB:-0}" = "1" ]; then
+        RESTORE_ROLE_ARGS=(--role="${HOST_DB_USER:-smartdiagram_app}")
+    fi
     cat "$STAGING_DIR/smartdiagram.dump" | docker compose exec -T db pg_restore \
-        -U postgres -d smartdiagram --no-owner --no-acl
+        -U postgres -d smartdiagram --no-owner --no-acl "${RESTORE_ROLE_ARGS[@]}"
     ok "主数据库 (smartdiagram) 恢复成功"
 else
     warn "未找到 smartdiagram.dump，跳过主库恢复"
@@ -196,8 +202,12 @@ if [ -f "$STAGING_DIR/ppt_agent.dump" ]; then
         "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO postgres; GRANT ALL ON SCHEMA public TO public;" >/dev/null 2>&1 || true
 
     info "正在恢复 PPT Agent 数据库 (项目、工作台、幻灯片历史)..."
+    RESTORE_ROLE_ARGS=()
+    if [ "${SMARTDIAGRAM_HOST_DB:-0}" = "1" ]; then
+        RESTORE_ROLE_ARGS=(--role="${HOST_DB_USER:-smartdiagram_app}")
+    fi
     cat "$STAGING_DIR/ppt_agent.dump" | docker compose exec -T db pg_restore \
-        -U postgres -d ppt_agent --no-owner --no-acl
+        -U postgres -d ppt_agent --no-owner --no-acl "${RESTORE_ROLE_ARGS[@]}"
     ok "PPT Agent 数据库 (ppt_agent) 恢复成功"
 else
     info "未包含 ppt_agent.dump，跳过 PPT 库恢复"
@@ -206,7 +216,7 @@ fi
 # 9. 恢复用户文件卷 (user-volumes.tar.gz)
 if [ -f "$STAGING_DIR/user-volumes.tar.gz" ]; then
     info "正在解压并恢复用户上传文件卷、知识库素材与 PPT 导出文件..."
-    docker compose run --rm --no-deps \
+    docker compose run --rm --no-deps --user 0:0 \
         -v pptdata:/target/pptdata \
         -v knowledgedata:/target/knowledgedata \
         -v qdrantdata:/target/qdrantdata \

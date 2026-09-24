@@ -223,6 +223,7 @@ services:
       - STORAGE_DIR=/data/storage
       - MATERIAL_GATEWAY_URL=http://api-diagram:8000
       - AUTH_SERVICE_URL=http://api-diagram:8000
+      - USAGE_LEDGER_URL=http://api-diagram:8000
       - PPT_INTERNAL_API_SECRET=${PPT_INTERNAL_API_SECRET:?Set PPT_INTERNAL_API_SECRET to a long random value}
       - PPT_GUEST_PROJECT_TTL_SECONDS=${PPT_GUEST_PROJECT_TTL_SECONDS:-86400}
     volumes:

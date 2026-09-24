@@ -1,0 +1,76 @@
+# Use an existing PostgreSQL server on this Docker host.
+# The db service runs client tools only; it does not start a PostgreSQL server
+# or create a pgdata volume. See docs/HOST_POSTGRES_MIGRATION.md.
+services:
+  db: !override
+    image: postgres:18-alpine
+    container_name: smartdiagram-db-client
+    restart: always
+    user: "${HOST_POSTGRES_UID:?Set HOST_POSTGRES_UID to the host postgres UID}"
+    command: ["sleep", "infinity"]
+    environment:
+      PGHOST: /host-postgres
+      PGPORT: "${HOST_POSTGRES_PORT:-5432}"
+    volumes:
+      - ${HOST_POSTGRES_SOCKET_DIR:-/tmp}:/host-postgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "smartdiagram"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  ppt-db-init: !override
+    image: postgres:18-alpine
+    restart: "no"
+    user: "${HOST_POSTGRES_UID:?Set HOST_POSTGRES_UID to the host postgres UID}"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: /host-postgres
+      PGPORT: "${HOST_POSTGRES_PORT:-5432}"
+      PGUSER: postgres
+      PGDATABASE: postgres
+    volumes:
+      - ${HOST_POSTGRES_SOCKET_DIR:-/tmp}:/host-postgres
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname='ppt_agent'" | grep -q 1; then
+          psql -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ppt_agent OWNER ${HOST_DB_USER:-smartdiagram_app}'
+        fi
+
+  api-diagram:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${HOST_DB_USER:-smartdiagram_app}:${DB_PASSWORD:?Set DB_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/smartdiagram
+      - DIAGRAM_DATABASE_URL=postgresql+asyncpg://${HOST_DB_USER:-smartdiagram_app}:${DB_PASSWORD:?Set DB_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/smartdiagram
+
+  worker:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${HOST_DB_USER:-smartdiagram_app}:${DB_PASSWORD:?Set DB_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/smartdiagram
+      - DIAGRAM_DATABASE_URL=postgresql+asyncpg://${HOST_DB_USER:-smartdiagram_app}:${DB_PASSWORD:?Set DB_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/smartdiagram
+
+  ppt-node-api:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - DATABASE_URL=postgresql://${HOST_DB_USER:-smartdiagram_app}:${DB_PASSWORD:?Set DB_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/ppt_agent?schema=public
+
+  ppt-storage-init:
+    image: alpine:3.20
+
+  backup-volumes:
+    image: alpine:3.20
+
+  legacy-storage-import:
+    image: alpine:3.20
+
+networks:
+  default:
+    name: smartdiagram_hostdb
+    external: true
