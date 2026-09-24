@@ -186,7 +186,9 @@ if [ -f "$STAGING_DIR/smartdiagram.dump" ]; then
     info "正在恢复 SmartDiagram 主数据库 (用户、会话、画布、向量嵌入)..."
     RESTORE_ROLE_ARGS=()
     if [ "${SMARTDIAGRAM_HOST_DB:-0}" = "1" ]; then
-        RESTORE_ROLE_ARGS=(--role="${HOST_DB_USER:-smartdiagram_app}")
+        # public schema and vector extension are created by postgres above;
+        # their source comments cannot be reapplied while acting as the app role.
+        RESTORE_ROLE_ARGS=(--role="${HOST_DB_USER:-smartdiagram_app}" --no-comments)
     fi
     cat "$STAGING_DIR/smartdiagram.dump" | docker compose exec -T db pg_restore \
         -U postgres -d smartdiagram --no-owner --no-acl "${RESTORE_ROLE_ARGS[@]}"
@@ -204,7 +206,7 @@ if [ -f "$STAGING_DIR/ppt_agent.dump" ]; then
     info "正在恢复 PPT Agent 数据库 (项目、工作台、幻灯片历史)..."
     RESTORE_ROLE_ARGS=()
     if [ "${SMARTDIAGRAM_HOST_DB:-0}" = "1" ]; then
-        RESTORE_ROLE_ARGS=(--role="${HOST_DB_USER:-smartdiagram_app}")
+        RESTORE_ROLE_ARGS=(--role="${HOST_DB_USER:-smartdiagram_app}" --no-comments)
     fi
     cat "$STAGING_DIR/ppt_agent.dump" | docker compose exec -T db pg_restore \
         -U postgres -d ppt_agent --no-owner --no-acl "${RESTORE_ROLE_ARGS[@]}"
