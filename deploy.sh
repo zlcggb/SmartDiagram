@@ -480,7 +480,12 @@ backup_data() {
     test -s "$backup_dir/ppt_agent.dump"
 
     info "备份数据库角色和权限..."
-    compose exec -T db pg_dumpall -U postgres --roles-only > "$backup_dir/roles.sql"
+    if [ "${SMARTDIAGRAM_HOST_DB:-0}" = "1" ]; then
+        # The shared host cluster may contain unrelated applications' roles.
+        printf '%s\n' '-- Host-managed PostgreSQL roles are not included in this backup.' > "$backup_dir/roles.sql"
+    else
+        compose exec -T db pg_dumpall -U postgres --roles-only > "$backup_dir/roles.sql"
+    fi
     test -s "$backup_dir/roles.sql"
 
     info "只读归档用户上传、知识库和 PPT 导出文件..."
