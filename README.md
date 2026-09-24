@@ -86,6 +86,7 @@ npm run dev
 npm run dev:gateway   # 接近生产的网关模式 :8080
 npm run db:up         # 只起 db / redis / drawio
 npm run db:prepare    # 双库 migrate
+npm run smoke:recruit # 使用 data/*.pdf 逐份验证招聘上传、解析、评分与数据库回读（需先启动 API）
 npm run design:knowledge -- --topic "AI 销售培训" --page-type cover --theme white-blue --style apple-minimal --format json
 ```
 

@@ -1139,6 +1139,10 @@
   transform: translateY(0);
 }
 
+.mac-dock-stage[data-visible='true'] .mac-dock {
+  pointer-events: auto;
+}
+
 .mac-dock-reveal-zone {
   position: fixed;
   z-index: 1999;
@@ -1167,7 +1171,7 @@
   padding: 9px 12px 6px;
   border: 1px solid rgba(255, 255, 255, 0.68);
   border-radius: 27px;
-  pointer-events: auto;
+  pointer-events: none;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.66), rgba(218, 235, 245, 0.48));
   box-shadow:
@@ -3022,10 +3026,8 @@
     right: max(6px, env(safe-area-inset-right));
     bottom: calc(6px + env(safe-area-inset-bottom));
     left: max(6px, env(safe-area-inset-left));
-    transform: none;
+    transform: translateY(calc(100% - var(--mac-dock-peek-height, 12px) + 6px));
   }
-  .mac-app-shell:not([data-area='desktop']) .mac-dock-stage,
-  .mac-app-shell:not([data-area='desktop']) .mac-dock-reveal-zone { display: none; }
   .mac-dock { gap: 4px; min-height: 62px; max-width: calc(100vw - 24px); padding: 7px 9px 4px; border-radius: 23px; }
   .mac-dock-item { width: 50px; min-height: 55px; }
   .mac-dock-item[data-divider-before='true'] { margin-left: 7px; }
@@ -3149,7 +3151,7 @@
   }
 }
 
-/* PPT 模块默认全屏沉浸：自动隐藏顶部桌面菜单栏与底部Dock，将工作区从 0 铺满视口 */
+/* PPT 模块沉浸模式：自动隐藏顶部桌面菜单栏；底部的 Dock 保持 macOS 风格自动隐藏与触底唤出，仅在专注全屏模式（focus-mode）下完全隐藏 Dock */
 .mac-app-shell[data-area='ppt-project'] .mac-menu-bar,
 .mac-app-shell[data-area='ppt-home'] .mac-menu-bar,
 body.has-ppt-focus-mode .mac-menu-bar {
@@ -3165,8 +3167,6 @@ body.has-ppt-focus-mode .mac-app-content {
   height: 100dvh !important;
 }
 
-.mac-app-shell[data-area='ppt-project'] .mac-dock,
-.mac-app-shell[data-area='ppt-home'] .mac-dock,
 body.has-ppt-focus-mode .mac-dock {
   display: none !important;
 }

@@ -22,9 +22,8 @@ import {
 } from '@/shared/store/auth';
 import { FinderIcon } from '@/shared/ui/macos/MacOSIcons';
 import { useT } from '@/app/i18n';
+import { API_BASE } from '@/shared/lib/config/apiBase';
 import { AuthPasswordField } from './AuthPasswordField';
-
-const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '';
 
 interface LoginScreenProps {
   onLogin: (session: AuthSession) => void;

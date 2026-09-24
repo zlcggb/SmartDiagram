@@ -8,6 +8,7 @@ import { RecruitHomePage } from '@/features/recruit/pages/RecruitHomePage'
 import { RecruitInterviewsPage } from '@/features/recruit/pages/RecruitInterviewsPage'
 import { RecruitJobDetailPage } from '@/features/recruit/pages/RecruitJobDetailPage'
 import { RecruitJobsPage } from '@/features/recruit/pages/RecruitJobsPage'
+import { RecruitScreeningPage } from '@/features/recruit/pages/RecruitScreeningPage'
 
 export function RecruitModule() {
   return (
@@ -15,6 +16,7 @@ export function RecruitModule() {
       <Routes>
         <Route element={<RecruitShell />}>
           <Route index element={<RecruitHomePage />} />
+          <Route path="screen" element={<RecruitScreeningPage />} />
           <Route path="jobs" element={<RecruitJobsPage />} />
           <Route path="jobs/:jobId" element={<RecruitJobDetailPage />} />
           <Route path="candidates" element={<RecruitCandidatesPage />} />

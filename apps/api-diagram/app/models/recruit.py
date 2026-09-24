@@ -79,6 +79,7 @@ class RecruitResume(SQLModel, table=True):
     route_mode: str = Field(default="text", index=True)
     processing_status: str = Field(default="parsed", index=True)
     parsed_text: str = ""
+    profile_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     metadata_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     created_by: str | None = Field(default=None, foreign_key="users.id", index=True)
     created_at: datetime = Field(default_factory=utc_now, index=True)
@@ -96,14 +97,22 @@ class RecruitScreeningResult(SQLModel, table=True):
     job_id: str = Field(foreign_key="recruit_jobs.id", index=True)
     total_score: int = Field(default=0, index=True)
     max_score: int = 100
+    keyword_match_score: float = Field(default=0, index=True)
+    skills_coverage_score: float = Field(default=0, index=True)
+    section_completeness_score: float = Field(default=0, index=True)
+    score_version: str = Field(default="evidence-v2", index=True)
     recommendation: str = Field(default="", index=True)
     evaluation_mode: str = Field(default="ai", index=True)
     overall_summary: str = ""
     matched_signals_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    matched_keywords_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    missing_keywords_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    recommendations_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     strengths_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     risks_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     interview_questions_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     dimension_scores_json: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    report_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     evidence_excerpt: str = ""
     raw_result_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     created_by: str | None = Field(default=None, foreign_key="users.id", index=True)

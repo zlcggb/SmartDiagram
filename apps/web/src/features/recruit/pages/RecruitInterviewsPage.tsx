@@ -1,36 +1,38 @@
 import { useEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { ErrorBanner, RecruitPage, SectionCard } from '@/features/recruit/components/RecruitPrimitives'
 import { useRecruitStore } from '@/features/recruit/store/recruitStore'
 
 export function RecruitInterviewsPage() {
-  const { interviews, error, loadInterviews } = useRecruitStore((state) => ({
+  const { interviews, error, loadInterviews } = useRecruitStore(useShallow((state) => ({
     interviews: state.interviews,
     error: state.error,
     loadInterviews: state.loadInterviews
-  }))
+  })))
 
   useEffect(() => {
     void loadInterviews()
   }, [loadInterviews])
 
   return (
-    <RecruitPage title="面试流程中心" description="统一查看初试、复试、终试等历史记录，便于复盘和协同。">
+    <RecruitPage title="面试" description="集中查看面试进展、面试官结论和需要复核的信号。">
       <ErrorBanner message={error} />
       <SectionCard title="面试记录" description="所有候选人的面试沉淀会汇总到这里。">
-        <div className="space-y-3">
+        <div className="recruit-interview-list">
           {interviews.map((interview) => (
-            <article key={interview.interview_id} className="rounded-3xl border border-white/8 bg-white/5 px-4 py-4">
-              <div className="flex items-center justify-between gap-3">
+            <article key={interview.interview_id} className="recruit-interview-row">
+              <div className="recruit-interview-row__head">
                 <div>
-                  <strong className="text-sm text-white">{interview.candidate_name || '候选人'}</strong>
-                  <p className="mt-1 text-xs text-slate-400">{interview.stage} · {interview.interviewer} · {interview.decision || '待定'}</p>
+                  <strong>{interview.candidate_name || '候选人'}</strong>
+                  <p>{interview.stage} · {interview.interviewer} · {interview.decision || '待定'}</p>
                 </div>
-                <span className="text-sm text-cyan-200">{interview.score ?? '—'} 分</span>
+                <span className="recruit-count">{interview.score ?? '—'} 分</span>
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-300">{interview.notes || interview.summary || '暂无面试备注'}</p>
+              <p>{interview.notes || interview.summary || '暂无面试备注'}</p>
             </article>
           ))}
+          {!interviews.length ? <p className="recruit-empty-state">还没有面试记录。完成候选人的面试后会在这里汇总。</p> : null}
         </div>
       </SectionCard>
     </RecruitPage>

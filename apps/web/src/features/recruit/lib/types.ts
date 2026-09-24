@@ -1,25 +1,142 @@
+export interface RecruitResumeEvidence {
+  label?: string
+  text: string
+  source_locator?: string
+  kind?: string
+}
+
+export interface RecruitEducationRecord {
+  institution: string
+  degree: string
+  major: string
+  years: string
+  evidence: string
+  source_locator: string
+}
+
+export interface RecruitExperienceRecord {
+  company: string
+  title: string
+  years: string
+  evidence: string
+  source_locator: string
+}
+
+export interface RecruitProjectRecord {
+  name: string
+  role: string
+  years: string
+  evidence: string
+  source_locator: string
+  kind?: string
+}
+
+export interface RecruitResumeProfile {
+  full_name: string
+  email: string
+  phone: string
+  current_company: string
+  location: string
+  headline?: string
+  summary?: string
+  education: RecruitEducationRecord[]
+  experience: RecruitExperienceRecord[]
+  projects: RecruitProjectRecord[]
+  competitions?: RecruitProjectRecord[]
+  skills: string[]
+  certifications?: RecruitResumeEvidence[]
+  section_presence?: Record<string, boolean>
+  section_evidence?: Record<string, RecruitResumeEvidence[]>
+}
+
 export interface RecruitDimensionScore {
   key: string
   label: string
   score: number
   max_score: number
+  weight?: number
   reason: string
+  evidence?: RecruitResumeEvidence[]
+  gaps?: string[]
+  matched_signals?: string[]
+}
+
+export interface RecruitScoreBreakdown {
+  keyword_match: number
+  skills_coverage: number
+  section_completeness: number
+}
+
+export interface RecruitScoreComponent {
+  key: string
+  label: string
+  score: number
+  max_score: number
+  weight: number
+  contribution: number
+}
+
+export interface RecruitScoreReport {
+  title: string
+  model: string
+  score_explanation: string
+  component_scores: RecruitScoreComponent[]
+  evidence_coverage: number
+  confidence: number
+  decision: {
+    recommendation: string
+    should_interview: boolean
+    priority: string
+    reason: string
+  }
+  strengths: string[]
+  gaps: string[]
+  risks: string[]
+  interview_focus: string[]
+  dimension_scores: RecruitDimensionScore[]
+  ats_metrics: Array<{ key: string; label: string; score: number; weight: number }>
+  matched_keywords: string[]
+  missing_keywords: string[]
+  evidence_excerpt: string
+  jd_summary: string
+  candidate_name: string
 }
 
 export interface RecruitScreeningSummary {
   screening_id: string
   total_score: number
   max_score: number
+  score_version: string
+  score_breakdown: RecruitScoreBreakdown
   recommendation: string
   overall_summary: string
   evaluation_mode: 'ai' | 'fallback' | string
   matched_signals: string[]
+  matched_keywords: string[]
+  missing_keywords: string[]
+  recommendations: string[]
   strengths: string[]
   risks: string[]
   interview_questions: string[]
   dimension_scores: RecruitDimensionScore[]
   evidence_excerpt: string
+  score_report?: RecruitScoreReport
   created_at: string
+}
+
+export interface RecruitScreeningPreview extends Omit<RecruitScreeningSummary, 'screening_id' | 'created_at'> {
+  candidate_name: string
+  channel: string
+  job_summary: string
+  source_name: string
+  resume_filename: string
+  parsed_blocks: number
+}
+
+export interface RecruitScreeningWorkflowResult {
+  job: RecruitJobSummary
+  candidate: RecruitCandidateSummary
+  screening: RecruitScreeningSummary
 }
 
 export interface RecruitJobSummary {
@@ -42,6 +159,16 @@ export interface RecruitJobSummary {
   updated_at: string
 }
 
+export interface RecruitCandidateProfileSummary {
+  full_name: string
+  headline: string
+  summary: string
+  education: Array<{ title: string; detail: string; years: string }>
+  experience: Array<{ title: string; detail: string; years: string }>
+  projects: Array<{ title: string; detail: string; years: string }>
+  skills: string[]
+}
+
 export interface RecruitCandidateSummary {
   candidate_id: string
   job_id: string
@@ -60,6 +187,7 @@ export interface RecruitCandidateSummary {
   summary: string
   notes: string
   tags: string[]
+  profile_summary: RecruitCandidateProfileSummary | null
   latest_screening: RecruitScreeningSummary | null
   interview_count: number
   created_at: string
@@ -97,7 +225,33 @@ export interface RecruitResumeRecord {
   route_mode: string
   processing_status: string
   parsed_text: string
+  profile: RecruitResumeProfile
   created_at: string
+}
+
+export interface RecruitResumePreview {
+  filename: string
+  mime_type: string
+  content_hash: string
+  profile: {
+    full_name: string
+    email: string
+    phone: string
+    current_company: string
+    location: string
+    headline?: string
+    summary?: string
+    education?: RecruitEducationRecord[]
+    experience?: RecruitExperienceRecord[]
+    projects?: RecruitProjectRecord[]
+    competitions?: RecruitProjectRecord[]
+    skills?: string[]
+    certifications?: RecruitResumeEvidence[]
+    section_presence?: Record<string, boolean>
+    section_evidence?: Record<string, RecruitResumeEvidence[]>
+  }
+  parsed_text: string
+  processing_status: string
 }
 
 export interface RecruitActivityRecord {
@@ -181,6 +335,21 @@ export interface CreateRecruitCandidateInput {
   tags: string
   resume_text: string
   file: File | null
+}
+
+export interface UpdateRecruitCandidateProfileInput {
+  full_name: string
+  email: string
+  phone: string
+  current_company: string
+  location: string
+  source_channel: string
+  portfolio_url: string
+  linkedin_url: string
+  summary: string
+  notes: string
+  tags: string[]
+  profile: RecruitResumeProfile
 }
 
 export interface CreateInterviewInput {

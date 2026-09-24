@@ -15,7 +15,9 @@ from app.services.recruit_service import (
     analytics_summary,
     create_candidate,
     create_job,
+    create_screening_workflow,
     dashboard_summary,
+    ensure_default_ai_job,
     get_candidate_detail,
     get_job_detail,
     list_candidates,
@@ -23,9 +25,11 @@ from app.services.recruit_service import (
     list_jobs,
     recruit_permission_context,
     rerun_candidate_screening,
+    update_candidate_profile,
     update_candidate_stage,
     update_job,
 )
+from app.services.talent_screening_service import compile_resume_text, extract_resume_profile
 
 router = APIRouter(prefix="/recruit", tags=["recruit"])
 
@@ -100,6 +104,84 @@ async def post_job(
         _raise_recruit_error(exc)
 
 
+@router.post("/jobs/default-ai")
+async def post_default_ai_job(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    permission_context = recruit_permission_context(dict(request.headers))
+    try:
+        return await ensure_default_ai_job(session, permission_context)
+    except (PermissionError, ValueError) as exc:
+        await session.rollback()
+        _raise_recruit_error(exc)
+
+
+@router.post("/resume-preview")
+async def post_resume_preview(
+    request: Request,
+    file: UploadFile = File(...),
+):
+    parsed_document, source_name, source_mime_type, source_hash, staged = await _parsed_upload(file)
+    try:
+        parsed_text = compile_resume_text(parsed_document)
+        if not parsed_text:
+            raise HTTPException(status_code=422, detail="resume_text_required")
+        return {
+            "filename": source_name,
+            "mime_type": source_mime_type,
+            "content_hash": source_hash,
+            "profile": extract_resume_profile(parsed_text),
+            "parsed_text": parsed_text,
+            "processing_status": (parsed_document or {}).get("metadata", {}).get("processing_status", "parsed"),
+        }
+    finally:
+        if staged is not None and staged.path.exists():
+            staged.path.unlink(missing_ok=True)
+
+
+@router.post("/workbench")
+async def post_screening_workbench(
+    request: Request,
+    file: UploadFile | None = File(default=None),
+    jd_title: str = Form(...),
+    jd_text: str = Form(...),
+    candidate_name: str = Form(...),
+    email: str | None = Form(default=None),
+    source_channel: str | None = Form(default=None),
+    resume_text: str | None = Form(default=None),
+    priority: str | None = Form(default=None),
+    session: AsyncSession = Depends(get_session),
+):
+    body = {
+        "jd_title": jd_title,
+        "jd_text": jd_text,
+        "candidate_name": candidate_name,
+        "email": email,
+        "source_channel": source_channel,
+        "resume_text": resume_text,
+        "priority": priority,
+    }
+    permission_context = recruit_permission_context(dict(request.headers), body)
+    parsed_document, source_name, source_mime_type, source_hash, staged = await _parsed_upload(file)
+    try:
+        return await create_screening_workflow(
+            session,
+            permission_context,
+            body=body,
+            parsed_document=parsed_document,
+            source_name=source_name,
+            source_mime_type=source_mime_type,
+            source_hash=source_hash,
+        )
+    except (PermissionError, ValueError) as exc:
+        await session.rollback()
+        _raise_recruit_error(exc)
+    finally:
+        if staged is not None and staged.path.exists():
+            staged.path.unlink(missing_ok=True)
+
+
 @router.get("/jobs/{job_id}")
 async def get_job(
     job_id: str,
@@ -145,7 +227,7 @@ async def post_candidate(
     request: Request,
     file: UploadFile | None = File(default=None),
     job_id: str = Form(...),
-    full_name: str = Form(...),
+    full_name: str | None = Form(default=None),
     email: str | None = Form(default=None),
     phone: str | None = Form(default=None),
     current_company: str | None = Form(default=None),
@@ -204,6 +286,21 @@ async def get_candidate(
     try:
         return await get_candidate_detail(session, permission_context, candidate_id)
     except (PermissionError, ValueError) as exc:
+        _raise_recruit_error(exc)
+
+
+@router.patch("/candidates/{candidate_id}")
+async def patch_candidate(
+    candidate_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    body = await request.json()
+    permission_context = recruit_permission_context(dict(request.headers), body)
+    try:
+        return await update_candidate_profile(session, permission_context, candidate_id, body)
+    except (PermissionError, ValueError) as exc:
+        await session.rollback()
         _raise_recruit_error(exc)
 
 

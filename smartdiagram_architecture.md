@@ -9,7 +9,7 @@
 
 | 维度 | 事实 |
 |------|------|
-| **产品** | 统一桌面式 SPA：`/` 首页 · `/diagram` 智能图表 · `/recruit` AI 招聘筛选 · `/ppt` AI 演示文稿 |
+| **产品** | 统一桌面式 SPA：`/` 首页 · `/diagram` 智能图表 · `/recruit` AI 招聘筛选（AI 找人才 / ATS） · `/ppt` AI 演示文稿 |
 | **形态** | npm/pnpm monorepo，**一个前端 + 两个后端域 + 网关聚合** |
 | **本地** | `npm run dev` → Vite `:5173`，API 由 Vite proxy 分流 |
 | **生产** | `gateway :9237` 唯一入口，nginx 分流 SPA / 图表 API / PPT API / draw.io |
@@ -162,7 +162,7 @@ graph TB
 |------|------|------|
 | `/` | `HomePage` | 模块入口卡片 |
 | `/diagram/*` | `DiagramWorkspace` | 图表工作台（画布 + 聊天） |
-| `/recruit/*` | `RecruitModule` | 招聘 ATS 工作台（岗位 / 候选人 / 面试 / 统计） |
+| `/recruit/*` | `RecruitModule` | 招聘工作台（AI 找人才初筛 / 岗位 / 候选人 / 面试 / 统计） |
 | `/ppt/*` | `PptModule` | PPT 五步工作流 |
 
 所有路由包在 `AppShell` 内（macOS 风格菜单栏、Spotlight、设置）。
@@ -213,10 +213,13 @@ Studio 设计稿按页懒加载最近 5 个 `SlideDesignVersion`；版本导航�
 |--------|------|
 | 模块入口 | `RecruitModule.tsx` + `components/RecruitShell.tsx` |
 | 首页 / Dashboard | `pages/RecruitHomePage.tsx` |
+| AI 找人才 | `pages/RecruitScreeningPage.tsx` + `recruit.css`（JD 编辑、PDF 上传、GSAP 入场/评分动效、面试机会与问题集） |
 | 岗位中心 | `pages/RecruitJobsPage.tsx` + `pages/RecruitJobDetailPage.tsx` |
-| 候选人中心 | `pages/RecruitCandidatesPage.tsx` + `pages/RecruitCandidateDetailPage.tsx` |
+| 候选人中心 | `pages/RecruitCandidatesPage.tsx` + `pages/RecruitCandidateDetailPage.tsx`（PDF-first、首个岗位默认选中、岗位自动初始化、简历字段预识别） |
 | 面试 / 统计 | `pages/RecruitInterviewsPage.tsx` + `pages/RecruitAnalyticsPage.tsx` |
 | API 与状态 | `lib/api.ts` + `store/recruitStore.ts` |
+
+招聘页面使用独立的 `recruit` 外壳上下文：`RecruitShell` 不再渲染额外窗口标题栏，AppShell 的 Dock 在招聘工作台中自动隐藏并保留底部唤出边缘。
 
 ---
 
@@ -339,7 +342,7 @@ PPT 导演视频的矩形聚焦由 `SlideNarration.focusPlanJson` 与 `alignment
 | 改图表聊天/SSE 行为 | `api-diagram/app/api/routes.py` + `agents/orchestrator.py` |
 | 新增/改绘图引擎 | `agents/catalog.py` + `*_agent.py` + `web/.../CanvasPanel.tsx` + 新 Canvas |
 | 改图表 UI/布局 | `features/diagram/ui/` |
-| 改 AI 招聘 ATS 模块 | `features/recruit/` + `api-diagram/app/api/routes_recruit.py` + `services/recruit_service.py` + `models/recruit.py` |
+| 改 AI 招聘 / ATS 模块 | `features/recruit/` + `api-diagram/app/api/routes_talent.py` / `routes_recruit.py` + `services/ats_scoring_service.py` / `talent_screening_service.py` / `recruit_service.py` + `models/recruit.py` + `sql/*.sql` |
 | 改登录/权限 | `api-diagram/app/api/routes_auth.py` + `guest_session_service.py` + `identity_service.py` + `web/shared/lib/config/guestSession.ts` |
 | 租户用户管理（本租户） | `routes_admin.py` + `UserManagementPanel.tsx`（admin/owner） |
 | **平台用户中心（跨租户）** | `routes_platform_admin.py` + `PlatformUserCenterWindow.tsx` / `PlatformUserCenterPanel.tsx` / `PlatformQuotaProfilesPanel.tsx`（桌面入口；`PLATFORM_ADMIN_EMAILS`） |

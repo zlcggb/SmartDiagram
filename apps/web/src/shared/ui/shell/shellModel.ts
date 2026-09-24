@@ -1,4 +1,4 @@
-export type ShellArea = "desktop" | "diagram" | "ppt-home" | "ppt-project";
+export type ShellArea = "desktop" | "diagram" | "recruit" | "ppt-home" | "ppt-project";
 
 export type ShellAction =
   | "open-about"
@@ -347,6 +347,14 @@ export function parseShellContext(pathname: string): ShellContext {
     return {
       area: "diagram",
       appName: "思维导图",
+      projectId: null,
+      pathname: normalizedPathname
+    };
+  }
+  if (normalizedPathname === "/recruit" || normalizedPathname.startsWith("/recruit/")) {
+    return {
+      area: "recruit",
+      appName: "AI 招聘",
       projectId: null,
       pathname: normalizedPathname
     };

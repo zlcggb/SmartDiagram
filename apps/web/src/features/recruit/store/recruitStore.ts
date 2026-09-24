@@ -12,6 +12,7 @@ import {
   fetchRecruitJobDetail,
   fetchRecruitJobs,
   rerunRecruitScreening,
+  updateRecruitCandidateProfile,
   updateRecruitCandidateStage,
   updateRecruitJob,
 } from '@/features/recruit/lib/api'
@@ -26,6 +27,7 @@ import type {
   RecruitInterviewRecord,
   RecruitJobDetail,
   RecruitJobSummary,
+  UpdateRecruitCandidateProfileInput,
 } from '@/features/recruit/lib/types'
 
 interface RecruitStoreState {
@@ -49,6 +51,7 @@ interface RecruitStoreState {
   loadCandidates: (params?: { job_id?: string; stage?: string; query?: string }) => Promise<void>
   createCandidate: (input: CreateRecruitCandidateInput) => Promise<RecruitCandidateSummary>
   loadCandidateDetail: (candidateId: string) => Promise<void>
+  updateCandidateProfile: (candidateId: string, input: UpdateRecruitCandidateProfileInput) => Promise<void>
   moveCandidateStage: (candidateId: string, stage: string, status?: string) => Promise<void>
   addInterview: (candidateId: string, input: CreateInterviewInput) => Promise<void>
   rerunScreening: (candidateId: string, resumeText: string, file: File | null) => Promise<void>
@@ -126,6 +129,13 @@ export const useRecruitStore = create<RecruitStoreState>((set, get) => ({
   loadCandidateDetail: async (candidateId) => {
     const candidateDetail = await runAction(set, () => fetchRecruitCandidateDetail(candidateId))
     set({ candidateDetail })
+  },
+
+  updateCandidateProfile: async (candidateId, input) => {
+    await runAction(set, () => updateRecruitCandidateProfile(candidateId, input))
+    await get().loadCandidateDetail(candidateId)
+    const jobId = get().candidateDetail?.candidate.job_id
+    await get().loadCandidates(jobId ? { job_id: jobId } : undefined)
   },
 
   moveCandidateStage: async (candidateId, stage, status) => {

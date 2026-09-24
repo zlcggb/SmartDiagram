@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env?.DEV ? 'http://localhost:8000' : '';
+import { API_BASE } from './apiBase.ts';
 
 export type AuthRole = 'member' | 'admin' | 'owner';
 

@@ -213,6 +213,10 @@ prepare_ppt_stack() {
   run_with_root_env bash -c "cd \"$ROOT_DIR\" && $PNPM exec tsx prisma/apply-migrations.ts" \
     && echo -e "${GREEN}   ✅ PPT Agent 数据库就绪${NC}"
 
+  echo -e "${CYAN}📦 构建 PPT 内部公共包...${NC}"
+  (cd "$ROOT_DIR" && $PNPM --filter "@ppt-agent/slide-ir" --filter "@ppt-agent/shared" --filter "@ppt-agent/ppt-renderer" --filter "@ppt-agent/agents" run build --silent) \
+    && echo -e "${GREEN}   ✅ PPT 内部公共包构建就绪${NC}"
+
   (cd "$PPT_API_DIR" && uv sync --quiet) \
     && echo -e "${GREEN}   ✅ PPT Python 依赖${NC}"
 }

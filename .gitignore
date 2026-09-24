@@ -21,6 +21,8 @@ htmlcov/
 .env
 .env.local
 .env.bak*
+# Local resume samples used by smoke:recruit may contain personal information.
+/data/*.pdf
 backend/.env
 smartdiagram-migration-bundle-*.tar.gz
 prisma/dev.db

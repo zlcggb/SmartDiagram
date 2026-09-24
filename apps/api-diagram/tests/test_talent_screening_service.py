@@ -21,6 +21,17 @@ def test_compile_resume_text_merges_manual_and_parsed_blocks():
     assert "销售支持系统" in combined
 
 
+def test_compile_resume_text_does_not_duplicate_previewed_pdf_text():
+    parsed = {
+        "blocks": [
+            {"source_locator": "pdf:page=1", "text": "Ada React AI"},
+        ]
+    }
+    previewed = compile_resume_text(parsed)
+
+    assert compile_resume_text(parsed, previewed) == previewed
+
+
 def test_fallback_screening_scores_candidate_and_recommends_bucket():
     result = build_fallback_screening(
         candidate_name="Ada",

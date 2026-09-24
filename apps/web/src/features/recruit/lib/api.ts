@@ -10,23 +10,107 @@ import type {
   RecruitInterviewRecord,
   RecruitJobDetail,
   RecruitJobSummary,
+  RecruitResumePreview,
+  RecruitScreeningPreview,
   RecruitScreeningSummary,
+  RecruitScreeningWorkflowResult,
+  UpdateRecruitCandidateProfileInput,
 } from './types'
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (response.ok) return response.json() as Promise<T>
   let message = '请求失败'
+  const responseText = await response.text()
   try {
-    const body = await response.json()
-    message = typeof body.detail === 'string' ? body.detail : body.detail?.message || message
+    const body = JSON.parse(responseText) as {
+      detail?: string | { message?: string } | Array<{ loc?: unknown[]; msg?: string }>
+    }
+    if (typeof body.detail === 'string') {
+      message = body.detail
+    } else if (body.detail && !Array.isArray(body.detail) && typeof body.detail === 'object' && body.detail.message) {
+      message = body.detail.message
+    } else if (Array.isArray(body.detail)) {
+      message = body.detail
+        .map((item: { loc?: unknown[]; msg?: string }) => {
+          const location = Array.isArray(item.loc) ? item.loc.slice(-1)[0] : ''
+          return location && item.msg ? `${String(location)}：${item.msg}` : item.msg
+        })
+        .filter(Boolean)
+        .join('；') || message
+    }
   } catch {
-    message = await response.text() || message
+    message = responseText || message
   }
   throw new Error(message)
 }
 
+export interface ScreenRecruitCandidateInput {
+  candidateName: string
+  channel: string
+  jdText: string
+  resumeText: string
+  file: File | null
+}
+
+export async function screenRecruitCandidate(input: ScreenRecruitCandidateInput): Promise<RecruitScreeningPreview> {
+  const formData = new FormData()
+  formData.append('candidate_name', input.candidateName)
+  formData.append('channel', input.channel)
+  formData.append('jd_text', input.jdText)
+  formData.append('resume_text', input.resumeText)
+  if (input.file) formData.append('file', input.file)
+  return parseResponse<RecruitScreeningPreview>(await fetch(`${API_BASE}/api/talent/screen`, {
+    method: 'POST',
+    headers: enterpriseHeaders(false),
+    body: formData,
+  }))
+}
+
+export async function persistRecruitScreening(input: {
+  jdTitle: string
+  jdText: string
+  candidateName: string
+  candidateEmail: string
+  channel: string
+  resumeText: string
+  file: File | null
+  priority: string
+}): Promise<RecruitScreeningWorkflowResult> {
+  const formData = new FormData()
+  formData.append('jd_title', input.jdTitle)
+  formData.append('jd_text', input.jdText)
+  formData.append('candidate_name', input.candidateName)
+  formData.append('email', input.candidateEmail)
+  formData.append('source_channel', input.channel)
+  formData.append('resume_text', input.resumeText)
+  formData.append('priority', input.priority)
+  if (input.file) formData.append('file', input.file)
+  return parseResponse<RecruitScreeningWorkflowResult>(await fetch(`${API_BASE}/api/recruit/workbench`, {
+    method: 'POST',
+    headers: enterpriseHeaders(false),
+    body: formData,
+  }))
+}
+
 export async function fetchRecruitDashboard(): Promise<RecruitDashboard> {
   return parseResponse<RecruitDashboard>(await fetch(`${API_BASE}/api/recruit/dashboard`, { headers: enterpriseHeaders(false) }))
+}
+
+export async function ensureRecruitDefaultJob(): Promise<RecruitJobSummary> {
+  return parseResponse<RecruitJobSummary>(await fetch(`${API_BASE}/api/recruit/jobs/default-ai`, {
+    method: 'POST',
+    headers: enterpriseHeaders(false),
+  }))
+}
+
+export async function previewRecruitResume(file: File): Promise<RecruitResumePreview> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return parseResponse<RecruitResumePreview>(await fetch(`${API_BASE}/api/recruit/resume-preview`, {
+    method: 'POST',
+    headers: enterpriseHeaders(false),
+    body: formData,
+  }))
 }
 
 export async function fetchRecruitJobs(): Promise<RecruitJobSummary[]> {
@@ -99,6 +183,17 @@ export async function createRecruitCandidate(input: CreateRecruitCandidateInput)
 export async function fetchRecruitCandidateDetail(candidateId: string): Promise<RecruitCandidateDetail> {
   return parseResponse<RecruitCandidateDetail>(await fetch(`${API_BASE}/api/recruit/candidates/${encodeURIComponent(candidateId)}`, {
     headers: enterpriseHeaders(false)
+  }))
+}
+
+export async function updateRecruitCandidateProfile(
+  candidateId: string,
+  input: UpdateRecruitCandidateProfileInput,
+): Promise<RecruitCandidateSummary> {
+  return parseResponse<RecruitCandidateSummary>(await fetch(`${API_BASE}/api/recruit/candidates/${encodeURIComponent(candidateId)}`, {
+    method: 'PATCH',
+    headers: enterpriseHeaders(),
+    body: JSON.stringify(input),
   }))
 }
 

@@ -887,9 +887,11 @@ function AppShell() {
   const dockAlwaysVisible = isDesktop && !dockAutoHide;
   const MenuBarArtwork = context.area === "diagram"
     ? MODULE_ICONS["/diagram"]
-    : context.area === "ppt-home" || context.area === "ppt-project"
-      ? MODULE_ICONS["/ppt"]
-      : FinderIcon;
+    : context.area === "recruit"
+      ? MODULE_ICONS["/recruit"]
+      : context.area === "ppt-home" || context.area === "ppt-project"
+        ? MODULE_ICONS["/ppt"]
+        : FinderIcon;
   const menuBarArtworkSize = isDesktop ? 22 : 18;
 
   return (

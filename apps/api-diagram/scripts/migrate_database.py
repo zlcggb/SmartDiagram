@@ -1,9 +1,9 @@
 """Apply the SmartDiagram database's non-destructive schema bootstrap.
 
 The application currently uses SQLModel metadata rather than Alembic.  This
-command deliberately performs only ``CREATE TABLE IF NOT EXISTS`` style work:
-it creates tables that are missing and verifies that every mapped table is
-visible afterwards.  It never drops tables, columns, or rows.
+command deliberately performs only additive schema work: it creates tables
+that are missing, applies checked-in SQL migrations, and verifies that every
+mapped table is visible afterwards.  It never drops tables, columns, or rows.
 
 Future changes to existing columns must be shipped as explicit, reviewed
 incremental migrations before this command is extended to run them.
@@ -21,6 +21,52 @@ from sqlalchemy import inspect, text
 
 from app.core.db import engine, import_model_modules
 
+SQL_MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "sql"
+
+
+def _sql_statements(source: str) -> list[str]:
+    source_without_comments = "\n".join(
+        line for line in source.splitlines() if not line.strip().startswith("--")
+    )
+    return [
+        statement.strip()
+        for statement in source_without_comments.split(";")
+        if statement.strip()
+    ]
+
+
+async def _apply_sql_migrations(connection) -> None:
+    await connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS smartdiagram_schema_migrations (
+                migration_name VARCHAR(255) PRIMARY KEY,
+                applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    for migration_path in sorted(SQL_MIGRATIONS_DIR.glob("*.sql")):
+        migration_name = migration_path.name
+        applied = await connection.execute(
+            text(
+                "SELECT 1 FROM smartdiagram_schema_migrations "
+                "WHERE migration_name = :migration_name"
+            ),
+            {"migration_name": migration_name},
+        )
+        if applied.first() is not None:
+            continue
+        for statement in _sql_statements(migration_path.read_text(encoding="utf-8")):
+            await connection.execute(text(statement))
+        await connection.execute(
+            text(
+                "INSERT INTO smartdiagram_schema_migrations (migration_name) "
+                "VALUES (:migration_name)"
+            ),
+            {"migration_name": migration_name},
+        )
+
 
 async def migrate() -> None:
     import_model_modules()
@@ -35,6 +81,7 @@ async def migrate() -> None:
             )
 
         await connection.run_sync(SQLModel.metadata.create_all)
+        await _apply_sql_migrations(connection)
 
     async with engine.connect() as connection:
         table_names = set(await connection.run_sync(lambda sync: inspect(sync).get_table_names()))

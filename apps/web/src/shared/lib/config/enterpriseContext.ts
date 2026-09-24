@@ -1,7 +1,7 @@
 import { readAuthSession } from './auth.ts';
 import { guestAuthorizationHeader, readGuestSession } from './guestSession.ts';
 
-export const API_BASE = import.meta.env?.DEV ? 'http://localhost:8000' : '';
+export { API_BASE } from './apiBase.ts';
 
 export const GUEST_ENTERPRISE_CONTEXT = {
   tenantId: 'guest-pool',

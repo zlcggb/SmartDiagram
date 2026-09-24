@@ -10,7 +10,7 @@ import {
   windowControlAvailability
 } from "./shellModel.ts";
 
-test("识别桌面、绘图、PPT 首页和 PPT 项目上下文", () => {
+test("识别桌面、绘图、招聘和 PPT 上下文", () => {
   assert.deepEqual(parseShellContext("/"), {
     area: "desktop",
     appName: "桌面",
@@ -18,6 +18,12 @@ test("识别桌面、绘图、PPT 首页和 PPT 项目上下文", () => {
     pathname: "/"
   });
   assert.equal(parseShellContext("/diagram").area, "diagram");
+  assert.deepEqual(parseShellContext("/recruit/candidates"), {
+    area: "recruit",
+    appName: "AI 招聘",
+    projectId: null,
+    pathname: "/recruit/candidates"
+  });
   assert.equal(parseShellContext("/ppt").area, "ppt-home");
   assert.deepEqual(parseShellContext("/ppt/p/project-1/studio"), {
     area: "ppt-project",
@@ -58,7 +64,7 @@ test("桌面菜单只包含可执行命令或分隔符", () => {
 });
 
 test("标准编辑与窗口菜单在不同模块保持稳定且都有真实命令", () => {
-  for (const pathname of ["/", "/diagram", "/ppt", "/ppt/p/p-1/studio"]) {
+  for (const pathname of ["/", "/diagram", "/recruit", "/ppt", "/ppt/p/p-1/studio"]) {
     const menus = buildShellMenus(parseShellContext(pathname), {
       authenticated: true,
       fullscreen: false

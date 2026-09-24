@@ -16,10 +16,22 @@ class Settings:
     API_PREFIX: str = "/api"
 
     # CORS
-    CORS_ORIGINS: list[str] = [
+    _DEFAULT_CORS_ORIGINS = [
         "http://localhost:5173",
         "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
     ]
+    CORS_ORIGINS: list[str] = list(
+        dict.fromkeys(
+            _DEFAULT_CORS_ORIGINS
+            + [
+                origin.strip().rstrip("/")
+                for origin in os.getenv("CORS_ORIGINS", "").split(",")
+                if origin.strip()
+            ]
+        )
+    )
 
     # LLM - OpenAI compatible
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")

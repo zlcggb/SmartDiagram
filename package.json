@@ -28,6 +28,7 @@
         "smoke:knowledge": "cd apps/api-diagram && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/smoke_knowledge_permissions.py --require-db",
         "smoke:runtime": "cd apps/api-diagram && uv run python scripts/smoke_runtime_guards.py",
         "smoke:office": "cd apps/api-diagram && uv run python scripts/smoke_office_artifacts.py",
+        "smoke:recruit": "cd apps/api-diagram && uv run python scripts/smoke_recruit_screening.py",
         "smoke:budget": "cd apps/api-diagram && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/smoke_tenant_budget.py --require-db",
         "smoke:ops": "cd apps/api-diagram && DATABASE_URL=postgresql+asyncpg://postgres:smartdiagram_secret@localhost:5432/smartdiagram uv run python scripts/smoke_ops_metrics.py --require-db",
         "worker:once": "bash scripts/worker-local.sh",

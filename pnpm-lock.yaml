@@ -96,6 +96,9 @@ importers:
       echarts:
         specifier: ^6.0.0
         version: 6.1.0
+      gsap:
+        specifier: ^3.15.0
+        version: 3.15.0
       html-to-image:
         specifier: ^1.11.11
         version: 1.11.13
@@ -2501,6 +2504,9 @@ packages:
 
   graphlib@2.1.8:
     resolution: {integrity: sha512-jcLLfkpoVGmH7/InMC/1hIvOPSUh38oJtGhvrOFGzioE1DZ+0YW16RgmOJhHiuWTvGiJQ9Z1Ik43JvkRPRvE+A==}
+
+  gsap@3.15.0:
+    resolution: {integrity: sha512-dMW4CWBTUK1AEEDeZc1g4xpPGIrSf9fJF960qbTZmN/QwZIWY5wgliS6JWl9/25fpTGJrMRtSjGtOmPnfjZB+A==}
 
   hachure-fill@0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
@@ -6364,6 +6370,8 @@ snapshots:
   graphlib@2.1.8:
     dependencies:
       lodash: 4.18.1
+
+  gsap@3.15.0: {}
 
   hachure-fill@0.5.2: {}
 
