@@ -33,7 +33,7 @@ cd "$ROOT_DIR"
 BACKUP_ROOT="${BACKUP_ROOT:-$ROOT_DIR/backups}"
 LAST_BACKUP_DIR=""
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
-DEPLOY_MIN_FREE_GB="${DEPLOY_MIN_FREE_GB:-1}"
+DEPLOY_MIN_FREE_GB="${DEPLOY_MIN_FREE_GB:-3}"
 DEPLOY_BUILD_PARALLEL_LIMIT="${DEPLOY_BUILD_PARALLEL_LIMIT:-1}"
 PROFILE_ARGS=()
 PAUSED_SERVICES=()
@@ -829,10 +829,15 @@ for arg in "$@"; do
             exit 0
             ;;
         *)
-            warn "未知参数: $arg"
+            error "未知参数: $arg"
             ;;
     esac
 done
+
+if [ "${SMARTDIAGRAM_HOST_DB:-0}" != "1" ] && \
+   [ -n "${HOST_POSTGRES_UID:-$(dotenv_value HOST_POSTGRES_UID)}" ]; then
+    error "检测到宿主机 PostgreSQL 配置，请使用 ./host-db.sh deploy [选项]"
+fi
 
 # Compose 会在执行任何子命令前校验必填变量，因此密钥必须
 # 在 check_docker 和主动作分发之前就完成初始化。

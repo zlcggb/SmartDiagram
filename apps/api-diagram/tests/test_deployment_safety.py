@@ -118,6 +118,36 @@ def test_deploy_bootstraps_ppt_secret_before_compose_actions() -> None:
     assert bootstrap_at < dispatch_at
 
 
+def test_deploy_rejects_unknown_flag_before_starting() -> None:
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "deploy.sh"), "--with-worker" + chr(0x200B)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "未知参数" in result.stdout
+
+
+def test_deploy_requires_host_database_wrapper_when_configured() -> None:
+    environment = os.environ.copy()
+    environment["HOST_POSTGRES_UID"] = "12345"
+    environment.pop("SMARTDIAGRAM_HOST_DB", None)
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "deploy.sh"), "--status"],
+        cwd=REPO_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "./host-db.sh deploy" in result.stdout
+
+
 def test_local_dev_bootstraps_ppt_secret_before_compose_actions() -> None:
     script = (REPO_ROOT / "dev.sh").read_text(encoding="utf-8")
     common = (REPO_ROOT / "scripts" / "dev-common.sh").read_text(encoding="utf-8")
@@ -193,7 +223,7 @@ def test_deploy_defaults_to_strictly_sequential_service_builds() -> None:
     assert 'compose build "${build_args[@]}" "$service"' in script
 
 
-def test_deploy_defaults_to_five_gibibytes_of_free_disk_headroom() -> None:
+def test_deploy_defaults_to_three_gibibytes_of_free_disk_headroom() -> None:
     script = (REPO_ROOT / "deploy.sh").read_text(encoding="utf-8")
 
     assert 'DEPLOY_MIN_FREE_GB="${DEPLOY_MIN_FREE_GB:-3}"' in script

@@ -55,7 +55,7 @@ host part of those URLs inside containers with `host.docker.internal`.
    row counts and user-file checksums with the source snapshot before changing
    the public reverse proxy or DNS.
 
-For later updates, run `./host-db.sh deploy --with-worker`. Its backup includes
+For later updates, run `./host-db.sh deploy --update --with-worker`. Its backup includes
 both application databases and user-file volumes. It intentionally omits
 cluster-wide role definitions from the shared host PostgreSQL server.
 

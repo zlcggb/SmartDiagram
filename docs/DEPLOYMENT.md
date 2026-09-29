@@ -65,11 +65,12 @@
 
 ## 部署命令怎么选
 
-`deploy.sh` **仍然是生产部署的唯一入口**，你之前用的 `--with-worker` **继续有效**。
+使用容器数据库时运行 `deploy.sh`；复用宿主机 PostgreSQL 时运行 `host-db.sh deploy`。`--with-worker` 在两种模式下都有效。
 
 | 场景 | 命令 |
 |------|------|
 | **服务器日常更新（最推荐）** | `./deploy.sh --update --with-worker` |
+| 宿主机 PostgreSQL 日常更新 | `./host-db.sh deploy --update --with-worker` |
 | 代码已 `git pull`，只部署 | `./deploy.sh --with-worker` |
 | 首次部署 | `./deploy.sh --with-worker` |
 | 国内 / 宝塔，先验镜像 | `./deploy.sh --check-mirror` |

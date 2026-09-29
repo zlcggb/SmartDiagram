@@ -14,10 +14,10 @@ SmartDiagram 在一个桌面式 SPA 中集成 **图表 AI** 与 **PPT Agent**：
 | **检查环境变量**                      | `npm run env:validate`                                                                             |
 | **检查 PPT 设计知识库**               | `npm run design:knowledge -- --list`                                                               |
 | **服务器首次部署**                    | 见下方[首次部署](#-服务器首次部署)                                                                    |
-| **服务器一键更新**                    | `./deploy.sh --update --with-worker`                                                               |
+| **服务器一键更新（容器数据库）**      | `./deploy.sh --update --with-worker`                                                               |
 | **合并旧版 env 文件**                 | `npm run env:merge-legacy`                                                                         |
 | **详细部署文档**                      | [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) · [docs/SERVER_DEPLOYMENT.md](./docs/SERVER_DEPLOYMENT.md) |
-| **复用服务器 PostgreSQL**            | [docs/HOST_POSTGRES_MIGRATION.md](./docs/HOST_POSTGRES_MIGRATION.md) |
+| **复用服务器 PostgreSQL 更新**       | `./host-db.sh deploy --update --with-worker` · [说明](./docs/HOST_POSTGRES_MIGRATION.md) |
 | **架构 A 文档（AI/开发 onboarding）** | [AGENTS.md](./AGENTS.md) → [smartdiagram_architecture.md](./smartdiagram_architecture.md)             |
 
 ---
