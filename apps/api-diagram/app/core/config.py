@@ -109,6 +109,8 @@ class Settings:
     GUEST_AI_MAX_USES: int = int(os.getenv("GUEST_AI_MAX_USES", "5"))
     GUEST_AI_MAX_USES_PER_IP: int = int(os.getenv("GUEST_AI_MAX_USES_PER_IP", "20"))
     GUEST_AI_WINDOW_SECONDS: int = int(os.getenv("GUEST_AI_WINDOW_SECONDS", "86400"))
+    # Resume lab: persist guest drafts to the DB (local testing); otherwise guests keep drafts in the browser.
+    RESUME_LAB_GUEST_PERSIST: bool = os.getenv("RESUME_LAB_GUEST_PERSIST", "false").lower() == "true"
     API_ORIGIN_CHECK_ENABLED: bool = os.getenv("API_ORIGIN_CHECK_ENABLED", "false").lower() == "true"
 
     # Database（优先 DIAGRAM_DATABASE_URL，避免与 PPT 的 DATABASE_URL 冲突）

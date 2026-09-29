@@ -22,6 +22,7 @@ class RecruitJob(SQLModel, table=True):
     department: str = Field(default="", index=True)
     location: str = Field(default="", index=True)
     employment_type: str = Field(default="full-time", index=True)
+    recruitment_type: str = Field(default="unspecified", index=True)
     status: str = Field(default="draft", index=True)
     hiring_manager: str = ""
     recruiter: str = ""
@@ -186,3 +187,47 @@ class RecruitMetric(SQLModel, table=True):
     dimension_value: str = Field(default="", index=True)
     metric_value: float = 0
     measured_at: datetime = Field(default_factory=utc_now, index=True)
+
+
+class RecruitSearchConversation(SQLModel, table=True):
+    __tablename__ = "recruit_search_conversations"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    tenant_id: str = Field(foreign_key="tenants.id", index=True)
+    owner_id: str = Field(index=True)
+    title: str = ""
+    jd_title: str = ""
+    jd_text: str = ""
+    source_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    turns_json: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    status: str = Field(default="analyzing", index=True)
+    revision: int = 1
+    created_at: datetime = Field(default_factory=utc_now, index=True)
+    updated_at: datetime = Field(default_factory=utc_now, index=True)
+
+
+class RecruitResumeDraft(SQLModel, table=True):
+    __tablename__ = "recruit_resume_drafts"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    tenant_id: str = Field(foreign_key="tenants.id", index=True)
+    owner_id: str = Field(index=True)
+    candidate_id: str | None = Field(default=None, foreign_key="recruit_candidates.id", index=True)
+    job_id: str | None = Field(default=None, foreign_key="recruit_jobs.id", index=True)
+    title: str = ""
+    document_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    messages_json: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    scores_json: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    revision: int = 1
+    created_at: datetime = Field(default_factory=utc_now, index=True)
+    updated_at: datetime = Field(default_factory=utc_now, index=True)
+
+
+class RecruitSetting(SQLModel, table=True):
+    __tablename__ = "recruit_settings"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    tenant_id: str = Field(foreign_key="tenants.id", index=True, unique=True)
+    settings_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    updated_by: str | None = Field(default=None, foreign_key="users.id", index=True)
+    updated_at: datetime = Field(default_factory=utc_now, index=True)

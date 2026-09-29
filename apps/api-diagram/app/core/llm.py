@@ -106,6 +106,36 @@ def create_llm(
     )
 
 
+_MODEL_CATALOG_CACHE: dict[str, object] = {"at": 0.0, "models": []}
+_MODEL_CATALOG_TTL_SECONDS = 300
+
+
+async def list_available_models() -> dict:
+    """Default model + models exposed by the configured OpenAI-compatible `/models` endpoint."""
+
+    import time
+
+    import httpx
+
+    default = os.getenv("TALENT_EVAL_MODEL") or settings.MODEL_ID
+    configured = [default, settings.MODEL_ID, *AGENT_MODEL_ROUTING.values()]
+    if time.monotonic() - float(_MODEL_CATALOG_CACHE["at"]) > _MODEL_CATALOG_TTL_SECONDS:
+        remote: list[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=6) as client:
+                response = await client.get(
+                    f"{settings.OPENAI_BASE_URL.rstrip('/')}/models",
+                    headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"} if settings.OPENAI_API_KEY else {},
+                )
+                response.raise_for_status()
+                remote = [str(item.get("id")) for item in response.json().get("data") or [] if item.get("id")]
+        except Exception:
+            remote = []
+        _MODEL_CATALOG_CACHE.update({"at": time.monotonic(), "models": sorted(set(remote))})
+    models = list(dict.fromkeys([m for m in configured if m] + list(_MODEL_CATALOG_CACHE["models"])))
+    return {"default": default, "models": models}
+
+
 def create_llm_from_state(state: dict, temperature: float = 0.3) -> BaseChatModel:
     """Create an LLM from AgentState's model_config, falling back to defaults."""
     config = state.get("model_config") or {}

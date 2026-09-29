@@ -7,10 +7,11 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from app.services.file_parser_service import (
     DocumentParseError,
     UnsupportedDocumentTypeError,
-    parse_file,
 )
 from app.services.material_gateway_service import MaterialValidationError, stage_material_upload
 from app.services.permission_service import build_permission_context
+from app.services.resume_extraction_service import extract_resume_document
+from app.services.talent_rubric_service import generate_rubric, parse_rubric_json
 from app.services.talent_screening_service import compile_resume_text, normalize_text, screen_candidate_profile
 
 router = APIRouter(prefix="/talent", tags=["talent"])
@@ -35,11 +36,28 @@ def _permission_body(
     }
 
 
+@router.post("/rubric")
+async def build_rubric(request: Request):
+    """Turn a JD into a weighted, evidence-checkable scorecard (cached per JD)."""
+
+    body = await request.json()
+    build_permission_context(
+        _permission_body(request, None, None, None, None, None, None)
+    )
+    jd_text = normalize_text(str(body.get("jd_text") or ""))
+    if not jd_text:
+        raise HTTPException(status_code=422, detail="jd_text_required")
+    jd_title = normalize_text(str(body.get("jd_title") or ""))
+    return await generate_rubric(jd_title, jd_text[:12_000], use_cache=not body.get("refresh"))
+
+
 @router.post("/screen")
 async def screen_resume(
     request: Request,
     file: UploadFile | None = File(default=None),
     jd_text: str = Form(...),
+    jd_title: str | None = Form(default=None),
+    rubric_json: str | None = Form(default=None),
     resume_text: str | None = Form(default=None),
     candidate_name: str | None = Form(default=None),
     channel: str | None = Form(default=None),
@@ -76,10 +94,11 @@ async def screen_resume(
 
             source_name = staged.safe_filename
             try:
-                parsed_document = parse_file(
+                parsed_document = await extract_resume_document(
                     staged.path,
                     mime_type=staged.mime_type,
                     filename=staged.safe_filename,
+                    allow_ocr=not normalize_text(resume_text),
                 )
             except UnsupportedDocumentTypeError as exc:
                 raise HTTPException(status_code=415, detail=str(exc)) from exc
@@ -89,11 +108,18 @@ async def screen_resume(
         if not combined_resume_text:
             raise HTTPException(status_code=422, detail="resume_text_required")
 
+        normalized_title = normalize_text(jd_title)
+        extraction = ((parsed_document or {}).get("metadata") or {}).get("extraction") or {}
+        if extraction.get("method") in (None, "none"):
+            extraction = {"method": "manual", "char_count": len(combined_resume_text), "ocr_pages": [], "warnings": []}
         result = await screen_candidate_profile(
             candidate_name=normalize_text(candidate_name) or "候选人",
             jd_text=normalized_jd,
             resume_text=combined_resume_text,
             source_name=source_name,
+            rubric=parse_rubric_json(rubric_json, jd_title=normalized_title, jd_text=normalized_jd),
+            jd_title=normalized_title,
+            extraction=extraction,
         )
         return {
             **result,

@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import { useId, type SVGProps } from "react";
 
 export type AppIconMarkProps = SVGProps<SVGSVGElement> & {
   size?: number;
@@ -46,6 +46,54 @@ export function SmartDiagramIconMark({
         <path d="m2.3 2.3 7.286 7.286" />
         <circle cx="11" cy="11" r="2" fill="#FFFFFF" />
       </g>
+    </svg>
+  );
+}
+
+/** Shared AI Recruit mark: a resume card under an AI-sparkle magnifier on a teal tile. */
+export function RecruitIconMark({
+  size,
+  width,
+  height,
+  ...props
+}: AppIconMarkProps) {
+  const uid = useId().replace(/:/g, "");
+  const bgId = `recruit-bg-${uid}`;
+  const glossId = `recruit-gloss-${uid}`;
+  return (
+    <svg
+      viewBox="0 0 120 120"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      width={width ?? size}
+      height={height ?? size}
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+    >
+      <defs>
+        <linearGradient id={bgId} x1="14" y1="8" x2="106" y2="116" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#34D8C0" />
+          <stop offset="1" stopColor="#0B8F7F" />
+        </linearGradient>
+        <linearGradient id={glossId} x1="60" y1="4" x2="60" y2="62" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FFFFFF" stopOpacity="0.28" />
+          <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <rect x="4" y="4" width="112" height="112" rx="27" fill={`url(#${bgId})`} />
+      <rect x="4" y="4" width="112" height="112" rx="27" fill={`url(#${glossId})`} />
+      <rect x="28" y="27" width="54" height="70" rx="11" fill="#064E47" fillOpacity="0.22" />
+      <rect x="28" y="23" width="54" height="70" rx="11" fill="#FFFFFF" />
+      <circle cx="45" cy="42" r="8" fill="#14B8A6" />
+      <path d="M32 62c0-7 5.8-11 13-11s13 4 13 11z" fill="#14B8A6" fillOpacity="0.55" />
+      <rect x="62" y="37" width="12" height="4.5" rx="2.25" fill="#CBD5E1" />
+      <rect x="62" y="46" width="8" height="4.5" rx="2.25" fill="#E2E8F0" />
+      <rect x="35" y="71" width="22" height="5" rx="2.5" fill="#CBD5E1" />
+      <rect x="35" y="80" width="14" height="5" rx="2.5" fill="#E2E8F0" />
+      <path d="M91.5 91.5 100 100" stroke="#0F5F57" strokeWidth="9" strokeLinecap="round" />
+      <circle cx="80" cy="80" r="16" fill="#F0FDFA" stroke="#0F5F57" strokeWidth="6" />
+      <path d="M80 70.5l2.5 7 7 2.5-7 2.5-2.5 7-2.5-7-7-2.5 7-2.5z" fill="#F59E0B" />
     </svg>
   );
 }

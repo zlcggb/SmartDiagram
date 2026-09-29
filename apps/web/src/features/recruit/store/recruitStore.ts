@@ -11,7 +11,8 @@ import {
   fetchRecruitInterviews,
   fetchRecruitJobDetail,
   fetchRecruitJobs,
-  rerunRecruitScreening,
+  streamRecruitCandidate,
+  streamRecruitScreening,
   updateRecruitCandidateProfile,
   updateRecruitCandidateStage,
   updateRecruitJob,
@@ -22,6 +23,7 @@ import type {
   CreateRecruitJobInput,
   RecruitAnalytics,
   RecruitCandidateDetail,
+  RecruitCandidateStreamEvent,
   RecruitCandidateSummary,
   RecruitDashboard,
   RecruitInterviewRecord,
@@ -50,11 +52,21 @@ interface RecruitStoreState {
   updateJob: (jobId: string, input: Partial<CreateRecruitJobInput> & { status?: string }) => Promise<RecruitJobSummary>
   loadCandidates: (params?: { job_id?: string; stage?: string; query?: string }) => Promise<void>
   createCandidate: (input: CreateRecruitCandidateInput) => Promise<RecruitCandidateSummary>
+  createCandidateStream: (
+    input: CreateRecruitCandidateInput,
+    onEvent: (event: RecruitCandidateStreamEvent) => void,
+    signal?: AbortSignal,
+  ) => Promise<RecruitCandidateSummary>
   loadCandidateDetail: (candidateId: string) => Promise<void>
   updateCandidateProfile: (candidateId: string, input: UpdateRecruitCandidateProfileInput) => Promise<void>
   moveCandidateStage: (candidateId: string, stage: string, status?: string) => Promise<void>
   addInterview: (candidateId: string, input: CreateInterviewInput) => Promise<void>
-  rerunScreening: (candidateId: string, resumeText: string, file: File | null) => Promise<void>
+  rerunScreening: (
+    candidateId: string,
+    input: { resumeText: string; file: File | null; model?: string },
+    onEvent: (event: RecruitCandidateStreamEvent) => void,
+    signal?: AbortSignal,
+  ) => Promise<void>
   loadInterviews: () => Promise<void>
   loadAnalytics: () => Promise<void>
 }
@@ -69,6 +81,20 @@ async function runAction<T>(set: (partial: Partial<RecruitStoreState>) => void, 
     set({ loading: false, error: error instanceof Error ? error.message : '请求失败' })
     throw error
   }
+}
+
+// 候选人维度变更后统一失效依赖它的所有视图数据：
+// 候选人列表、岗位详情里的候选人队列、首页 dashboard 卡片。
+// 这是“详情页改了、外面不更新”的闭环关键。
+async function invalidateCandidateViews(store: RecruitStoreState, jobId: string | undefined) {
+  const refreshes: Promise<void>[] = [store.loadCandidates(jobId ? { job_id: jobId } : undefined)]
+  if (jobId && store.jobDetail?.job.job_id === jobId) {
+    refreshes.push(store.loadJobDetail(jobId))
+  }
+  if (store.dashboard) {
+    refreshes.push(store.loadDashboard())
+  }
+  await Promise.all(refreshes)
 }
 
 export const useRecruitStore = create<RecruitStoreState>((set, get) => ({
@@ -126,22 +152,28 @@ export const useRecruitStore = create<RecruitStoreState>((set, get) => ({
     return candidate
   },
 
+  createCandidateStream: async (input, onEvent, signal) => {
+    const candidate = await runAction(set, () => streamRecruitCandidate(input, onEvent, signal))
+    set({ candidates: [candidate, ...get().candidates] })
+    return candidate
+  },
+
   loadCandidateDetail: async (candidateId) => {
     const candidateDetail = await runAction(set, () => fetchRecruitCandidateDetail(candidateId))
     set({ candidateDetail })
   },
 
   updateCandidateProfile: async (candidateId, input) => {
-    await runAction(set, () => updateRecruitCandidateProfile(candidateId, input))
+    // PATCH 返回的 summary 直接带 job_id，比刷新后的 candidateDetail 更可靠
+    const updated = await runAction(set, () => updateRecruitCandidateProfile(candidateId, input))
     await get().loadCandidateDetail(candidateId)
-    const jobId = get().candidateDetail?.candidate.job_id
-    await get().loadCandidates(jobId ? { job_id: jobId } : undefined)
+    await invalidateCandidateViews(get(), updated?.job_id ?? get().candidateDetail?.candidate.job_id)
   },
 
   moveCandidateStage: async (candidateId, stage, status) => {
     await runAction(set, () => updateRecruitCandidateStage(candidateId, stage, status))
     await get().loadCandidateDetail(candidateId)
-    await get().loadCandidates()
+    await invalidateCandidateViews(get(), get().candidateDetail?.candidate.job_id)
   },
 
   addInterview: async (candidateId, input) => {
@@ -150,10 +182,10 @@ export const useRecruitStore = create<RecruitStoreState>((set, get) => ({
     await get().loadInterviews()
   },
 
-  rerunScreening: async (candidateId, resumeText, file) => {
-    await runAction(set, () => rerunRecruitScreening(candidateId, resumeText, file))
+  rerunScreening: async (candidateId, input, onEvent, signal) => {
+    await runAction(set, () => streamRecruitScreening(candidateId, input, onEvent, signal))
     await get().loadCandidateDetail(candidateId)
-    await get().loadCandidates()
+    await invalidateCandidateViews(get(), get().candidateDetail?.candidate.job_id)
   },
 
   loadInterviews: async () => {

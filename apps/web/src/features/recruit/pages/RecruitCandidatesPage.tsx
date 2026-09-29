@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { PencilLine, Search, UserPlus, UsersRound } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 
-import { ErrorBanner, RecruitPage, ScoreBadge, SectionCard } from '@/features/recruit/components/RecruitPrimitives'
+import { AnalysisProgress, ModelPicker, ResumeDropZone } from '@/features/recruit/components/RecruitAnalysisStream'
+import { ErrorBanner, RecruitDialog, RecruitPage, SectionCard } from '@/features/recruit/components/RecruitPrimitives'
+import { Avatar, EmptyState, ScoreRing, StageChip } from '@/features/recruit/components/RecruitUI'
+import { applyStreamEvent, EMPTY_RUN, streamErrorMessage, type AnalysisRun } from '@/features/recruit/lib/analysisStream'
 import { ensureRecruitDefaultJob, previewRecruitResume } from '@/features/recruit/lib/api'
 import type { CreateRecruitCandidateInput } from '@/features/recruit/lib/types'
 import { useRecruitStore } from '@/features/recruit/store/recruitStore'
@@ -25,20 +29,28 @@ const DEFAULT_CANDIDATE: CreateRecruitCandidateInput = {
 }
 
 export function RecruitCandidatesPage() {
-  const { clearError, jobs, candidates, error, loadJobs, loadCandidates, createCandidate, loading } = useRecruitStore(useShallow((state) => ({
+  const navigate = useNavigate()
+  const { clearError, jobs, candidates, error, loadJobs, loadCandidates, createCandidateStream, loading } = useRecruitStore(useShallow((state) => ({
     clearError: state.clearError,
     jobs: state.jobs,
     candidates: state.candidates,
     error: state.error,
     loadJobs: state.loadJobs,
     loadCandidates: state.loadCandidates,
-    createCandidate: state.createCandidate,
+    createCandidateStream: state.createCandidateStream,
     loading: state.loading
   })))
   const [form, setForm] = useState<CreateRecruitCandidateInput>(DEFAULT_CANDIDATE)
   const [query, setQuery] = useState('')
   const [formError, setFormError] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [resumePreviewFailed, setResumePreviewFailed] = useState(false)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [run, setRun] = useState<AnalysisRun | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const previewRequestIdRef = useRef(0)
+
+  useEffect(() => () => abortRef.current?.abort(), [])
 
   useEffect(() => {
     let cancelled = false
@@ -61,13 +73,21 @@ export function RecruitCandidatesPage() {
   }, [loadCandidates, loadJobs])
 
   function handleResumeFile(file: File | null) {
-    setForm((current) => ({ ...current, file }))
+    const requestId = ++previewRequestIdRef.current
+    setForm((current) => file
+      ? { ...current, file, full_name: '', email: '', phone: '', current_company: '', location: '', resume_text: '' }
+      : { ...current, file: null })
     setFormError('')
-    if (!file) return
+    setResumePreviewFailed(false)
+    if (!file) {
+      setPreviewLoading(false)
+      return
+    }
 
     setPreviewLoading(true)
     void previewRecruitResume(file)
       .then((preview) => {
+        if (requestId !== previewRequestIdRef.current) return
         setForm((current) => ({
           ...current,
           file,
@@ -80,9 +100,19 @@ export function RecruitCandidatesPage() {
         }))
       })
       .catch((previewError) => {
+        if (requestId !== previewRequestIdRef.current) return
+        setResumePreviewFailed(true)
         setFormError(previewError instanceof Error ? previewError.message : '简历解析失败，请继续手动补充')
       })
-      .finally(() => setPreviewLoading(false))
+      .finally(() => {
+        if (requestId === previewRequestIdRef.current) setPreviewLoading(false)
+      })
+  }
+
+  function closeDialog() {
+    abortRef.current?.abort()
+    setRun(null)
+    setIsCreateOpen(false)
   }
 
   const visibleCandidates = useMemo(() => {
@@ -106,16 +136,24 @@ export function RecruitCandidatesPage() {
   const selectedJobId = form.job_id || jobs[0]?.job_id || ''
 
   return (
-    <RecruitPage title="候选人" description="上传 PDF 简历后自动识别档案、完成评分，并进入岗位流程。">
+    <RecruitPage title="候选人" eyebrow="Talent · 人才库" description="上传简历后自动识别档案、完成评分，并进入岗位流程。" actions={<button type="button" className="recruit-button recruit-button--primary" onClick={() => setIsCreateOpen(true)}><UserPlus size={15} />新增候选人</button>}>
       <ErrorBanner message={error} />
-      <div className="recruit-workspace-grid">
-        <SectionCard title="新增候选人" description="PDF 优先；识别到的信息可在候选人档案中再修正。">
+      {isCreateOpen ? (
+        <RecruitDialog title="新增候选人" description="支持 PDF / Word / 图片；识别到的信息可在档案中再修正。" onClose={closeDialog}>
           <form
             className="recruit-form"
             onSubmit={(event) => {
               event.preventDefault()
               setFormError('')
               clearError()
+              if (previewLoading) {
+                setFormError('请等待简历质量校验完成。')
+                return
+              }
+              if (form.file && resumePreviewFailed && !form.resume_text.trim()) {
+                setFormError('简历自动识别未通过质量校验，请核对并手动输入简历正文后再保存。')
+                return
+              }
               if (!selectedJobId) {
                 setFormError('请先选择一个岗位。')
                 return
@@ -128,23 +166,28 @@ export function RecruitCandidatesPage() {
                 setFormError('手动录入模式需要填写姓名和简历正文；也可以直接上传 PDF 自动识别。')
                 return
               }
-              void createCandidate({ ...form, job_id: selectedJobId }).then((candidate) => {
+              const controller = new AbortController()
+              abortRef.current = controller
+              setRun(EMPTY_RUN)
+              void createCandidateStream({ ...form, job_id: selectedJobId, model: form.model?.trim() }, (streamEvent) => setRun((current) => applyStreamEvent(current, streamEvent)), controller.signal).then((candidate) => {
                 setForm(DEFAULT_CANDIDATE)
-                window.location.href = `/recruit/candidates/${candidate.candidate_id}`
-              }).catch(() => undefined)
+                setRun(null)
+                setIsCreateOpen(false)
+                navigate(`/recruit/candidates/${candidate.candidate_id}`)
+              }).catch((streamError: unknown) => {
+                if (controller.signal.aborted) return
+                setFormError(streamErrorMessage(streamError))
+                clearError()
+              })
             }}
           >
-            <label className="recruit-upload-zone">
-              <span className="recruit-upload-zone__head">
-                <span>
-                  <strong>上传简历 PDF</strong>
-                  <span>上传 PDF → 选择岗位 → 自动识别信息并开始 AI 初筛</span>
-                </span>
-                {previewLoading ? <span className="recruit-upload-zone__status">正在识别…</span> : null}
-              </span>
-              <input type="file" accept=".pdf,application/pdf,.docx,.txt,.md" onChange={(event) => handleResumeFile(event.target.files?.[0] ?? null)} />
-              <span className="recruit-upload-zone__caption">{form.file ? `已选择：${form.file.name}` : 'PDF 会自动识别姓名、邮箱、电话和简历正文。'}</span>
-            </label>
+            <ResumeDropZone
+              file={form.file}
+              loading={previewLoading}
+              caption="会自动识别姓名、邮箱、电话和简历正文；扫描件与图片走 AI OCR。"
+              onFile={handleResumeFile}
+              onReject={setFormError}
+            />
             <label className="recruit-field">
               <span>投递岗位</span>
               <select required value={selectedJobId} onChange={(event) => setForm({ ...form, job_id: event.target.value })}>
@@ -152,6 +195,7 @@ export function RecruitCandidatesPage() {
               {jobs.map((job) => <option key={job.job_id} value={job.job_id}>{job.title}</option>)}
               </select>
             </label>
+            <ModelPicker id="recruit-model-options" value={form.model ?? ''} onChange={(model) => setForm({ ...form, model })} />
             {jobs.length === 0 ? <p className="recruit-inline-note">正在准备默认 AI 岗位，请稍候…</p> : null}
 
             <details className="recruit-disclosure">
@@ -167,34 +211,46 @@ export function RecruitCandidatesPage() {
             </details>
 
             <details className="recruit-disclosure">
-              <summary>手动输入简历正文（没有 PDF 时使用）</summary>
+              <summary>人工核对简历正文（自动识别未通过时使用）</summary>
               <div className="recruit-disclosure__content">
                 <textarea value={form.resume_text} onChange={(event) => setForm({ ...form, resume_text: event.target.value })} rows={8} placeholder="粘贴简历正文、项目经历和作品信息。" />
               </div>
             </details>
 
             <input value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="标签，逗号分隔" />
-            <button type="submit" disabled={loading || jobs.length === 0} className="recruit-button recruit-button--primary">{loading ? '保存中…' : '保存候选人并触发 AI 初筛'}</button>
+            {run ? <AnalysisProgress run={run} /> : null}
+            <button type="submit" disabled={loading || previewLoading || jobs.length === 0} className="recruit-button recruit-button--primary recruit-button--wide">{loading ? 'AI 分析中…' : '保存候选人并触发 AI 初筛'}</button>
             {formError ? <p className="recruit-form-error">{formError}</p> : null}
           </form>
-        </SectionCard>
+        </RecruitDialog>
+      ) : null}
 
-        <SectionCard title="候选人列表" description="按决策信息浏览候选人，而不是被联系方式淹没。">
+        <SectionCard
+          title="候选人列表"
+          description="按决策信息浏览候选人，而不是被联系方式淹没。"
+          icon={<UsersRound size={15} />}
+          aside={<span className="rx-count-pill">{visibleCandidates.length} 人</span>}
+        >
           <div className="recruit-list-toolbar">
+            <Search size={15} aria-hidden="true" />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索姓名、技能、公司或岗位" />
           </div>
           <div className="recruit-candidate-list">
-            {visibleCandidates.map((candidate) => (
-              <article key={candidate.candidate_id} className="recruit-candidate-row">
+            {visibleCandidates.map((candidate, index) => (
+              <article key={candidate.candidate_id} className="recruit-candidate-row rx-spot" style={{ ['--i' as string]: index }}>
                 <Link to={`/recruit/candidates/${candidate.candidate_id}`} className="recruit-candidate-row__main">
                   <div className="recruit-candidate-row__header">
+                    <Avatar name={candidate.profile_summary?.full_name || candidate.full_name} size={42} />
                     <div>
                       <strong>{candidate.profile_summary?.full_name || candidate.full_name || '未命名候选人'}</strong>
                       <p>{candidate.profile_summary?.headline || candidate.current_company || candidate.location || '待补充候选人定位'}</p>
                     </div>
-                    <ScoreBadge
+                    <StageChip stage={candidate.current_stage} />
+                    <ScoreRing
                       score={candidate.latest_screening?.total_score}
-                      maxScore={candidate.latest_screening?.max_score}
+                      max={candidate.latest_screening?.max_score}
+                      size={50}
+                      stroke={4}
                     />
                   </div>
 
@@ -216,14 +272,15 @@ export function RecruitCandidatesPage() {
                   </p>
                 </Link>
                 <Link to={`/recruit/candidates/${candidate.candidate_id}?edit=profile`} className="recruit-candidate-row__edit">
-                  编辑档案
+                  <PencilLine size={13} />编辑档案
                 </Link>
               </article>
             ))}
-            {!visibleCandidates.length ? <p className="recruit-empty-state">没有符合当前条件的候选人。</p> : null}
+            {!visibleCandidates.length && !loading ? (
+              <EmptyState icon={<UsersRound size={20} />} title="没有匹配的候选人" hint={query ? '换个关键词试试。' : '点击右上角新增候选人，上传第一份简历。'} />
+            ) : null}
           </div>
         </SectionCard>
-      </div>
     </RecruitPage>
   )
 }

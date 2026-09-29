@@ -105,9 +105,11 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    from app.services.html_pdf_service import shutdown_pdf_renderer
     from app.services.usage_rollup_scheduler import stop_usage_rollup_scheduler
 
     await stop_usage_rollup_scheduler()
+    await shutdown_pdf_renderer()
 
 
 @app.get("/")

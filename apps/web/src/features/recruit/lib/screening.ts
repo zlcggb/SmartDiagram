@@ -14,8 +14,19 @@ export function getInterviewOpportunity(
   screening: Pick<RecruitScreeningSummary, 'total_score' | 'recommendation'>
 ): InterviewOpportunity {
   const recommendation = screening.recommendation.toLowerCase()
+  const byRecommendation: InterviewOpportunityLevel | null = recommendation.includes('进入面试')
+    ? 'high'
+    : recommendation.includes('人工复核')
+      ? 'review'
+      : recommendation.includes('人才库')
+        ? 'pool'
+        : recommendation.includes('暂不')
+          ? 'low'
+          : null
+  const score = screening.total_score
+  const level = byRecommendation ?? (score >= 80 ? 'high' : score >= 70 ? 'review' : score >= 60 ? 'pool' : 'low')
 
-  if (screening.total_score >= 85 || recommendation.includes('进入面试')) {
+  if (level === 'high') {
     return {
       level: 'high',
       label: '建议安排面试',
@@ -25,7 +36,7 @@ export function getInterviewOpportunity(
     }
   }
 
-  if (screening.total_score >= 70 || recommendation.includes('人工复核')) {
+  if (level === 'review') {
     return {
       level: 'review',
       label: '复核后安排面试',
@@ -35,7 +46,7 @@ export function getInterviewOpportunity(
     }
   }
 
-  if (screening.total_score >= 60 || recommendation.includes('人才库')) {
+  if (level === 'pool') {
     return {
       level: 'pool',
       label: '暂不优先面试',

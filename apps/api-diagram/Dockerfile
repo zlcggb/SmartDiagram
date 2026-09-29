@@ -18,7 +18,13 @@ FROM ${UV_PYTHON_IMAGE}
 WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH" PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Headless Chromium + CJK fonts for recruit report PDF export.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-noto-cjk \
+    && playwright install --with-deps --only-shell chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 

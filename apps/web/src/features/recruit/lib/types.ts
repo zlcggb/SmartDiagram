@@ -76,7 +76,160 @@ export interface RecruitScoreComponent {
   contribution: number
 }
 
-export interface RecruitScoreReport {
+export type RecruitRubricCategory = 'core' | 'potential' | 'bonus'
+
+export interface RecruitRubricRequirement {
+  key: string
+  label: string
+  description: string
+  category: RecruitRubricCategory
+  weight: number
+  signals: string[]
+  excellent: string
+  interview_probe: string
+}
+
+export interface RecruitRubricKnockout {
+  key: string
+  label: string
+  kind: 'degree' | 'graduation_year' | 'custom' | string
+  params: Record<string, unknown>
+}
+
+export interface RecruitRubric {
+  version: string
+  fingerprint: string
+  source: 'ai' | 'fallback' | 'custom' | string
+  role_title: string
+  role_level: 'campus' | 'junior' | 'mid' | 'senior' | string
+  role_summary: string
+  knockouts: RecruitRubricKnockout[]
+  requirements: RecruitRubricRequirement[]
+}
+
+export interface RecruitExtractionInfo {
+  method: 'text' | 'ocr' | 'mixed' | 'none' | 'manual' | string
+  char_count: number
+  ocr_pages: number[]
+  page_count?: number
+  quality?: 'good' | 'fair' | 'poor' | string
+  verified?: boolean
+  unresolved_pages?: number[]
+  warnings: string[]
+}
+
+export interface RecruitEvidenceQuote {
+  text: string
+  verified: boolean
+  source_locator: string
+}
+
+export interface RecruitRequirementResult {
+  key: string
+  label: string
+  description: string
+  category: RecruitRubricCategory
+  category_label: string
+  weight: number
+  level: number
+  level_label: string
+  points: number
+  max_points: number
+  counted: boolean
+  evidence: RecruitEvidenceQuote[]
+  rationale: string
+  gap: string
+  source: 'ai' | 'rule' | string
+  adjusted: boolean
+}
+
+export interface RecruitKnockoutResult {
+  key: string
+  label: string
+  status: 'pass' | 'fail' | 'unknown'
+  evidence: string
+  note: string
+}
+
+export interface RecruitCategoryResult {
+  key: RecruitRubricCategory
+  label: string
+  earned: number
+  possible: number
+  score: number
+  max_score: number
+  ratio: number
+  rule: string
+}
+
+export interface RecruitCandidateSnapshot {
+  name: string
+  school: string
+  degree: string
+  major: string
+  graduation: string
+  school_level?: string
+  school_tags?: string[]
+  links: string[]
+  internship_count: number
+  project_count: number
+  skill_groups: Record<string, string[]>
+  timeline: Array<{ period: string; org: string; role: string; type: string }>
+}
+
+export interface RecruitInterviewPlanItem {
+  target_key: string
+  question: string
+  purpose: string
+  good_signals: string[]
+  red_signals: string[]
+}
+
+export interface RecruitScoreReportV3Fields {
+  total_score: number
+  uncapped_score: number
+  capped: boolean
+  tier: { grade: 'A' | 'B' | 'C' | 'D' | string; label: string; recommendation: string; priority: string }
+  confidence_factors: Array<{ label: string; value: number }>
+  summary: string
+  rubric: {
+    role_title: string
+    role_level: string
+    role_level_label: string
+    role_summary: string
+    source: string
+    fingerprint: string
+  }
+  level_scale: Array<{ level: number; label: string; anchor: string }>
+  knockouts: RecruitKnockoutResult[]
+  education_facts?: RecruitEducationFact[]
+  categories: RecruitCategoryResult[]
+  requirements: RecruitRequirementResult[]
+  candidate: RecruitCandidateSnapshot
+  highlights: string[]
+  concerns: string[]
+  red_flags: Array<{ type: string; detail: string }>
+  evidence_quality: {
+    quantified_results: number
+    action_lines: number
+    verifiable_links: string[]
+    verified_ratio: number
+    specificity: 'high' | 'medium' | 'low' | string
+    note: string
+  }
+  interview_plan: RecruitInterviewPlanItem[]
+  ats_reference: {
+    keyword_match: number
+    skills_coverage: number
+    section_completeness: number
+    matched_keywords: string[]
+    missing_keywords: string[]
+  }
+  extraction: Partial<RecruitExtractionInfo>
+  evaluation_mode: string
+}
+
+export interface RecruitScoreReport extends Partial<RecruitScoreReportV3Fields> {
   title: string
   model: string
   score_explanation: string
@@ -121,7 +274,47 @@ export interface RecruitScreeningSummary {
   dimension_scores: RecruitDimensionScore[]
   evidence_excerpt: string
   score_report?: RecruitScoreReport
+  ai_usage?: RecruitAiUsage | null
   created_at: string
+}
+
+export type RecruitModelRole = 'screening' | 'rubric' | 'ocr'
+
+export interface RecruitAiUsageCall {
+  role: RecruitModelRole | string
+  model: string
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  estimated: boolean
+}
+
+export interface RecruitAiUsage {
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  estimated: boolean
+  calls: RecruitAiUsageCall[]
+}
+
+export interface RecruitAiSettings {
+  models: Record<RecruitModelRole, string>
+  fallbacks: Record<RecruitModelRole, string>
+  catalog: string[]
+}
+
+export interface RecruitUsageReport {
+  totals: { analyses: number; input_tokens: number; output_tokens: number; total_tokens: number }
+  by_model: Array<{ model: string; calls: number; input_tokens: number; output_tokens: number; total_tokens: number }>
+  records: Array<{
+    activity_id: string
+    candidate_id: string | null
+    job_id: string | null
+    candidate_name: string
+    score: number | null
+    usage: RecruitAiUsage
+    created_at: string
+  }>
 }
 
 export interface RecruitScreeningPreview extends Omit<RecruitScreeningSummary, 'screening_id' | 'created_at'> {
@@ -131,6 +324,7 @@ export interface RecruitScreeningPreview extends Omit<RecruitScreeningSummary, '
   source_name: string
   resume_filename: string
   parsed_blocks: number
+  rubric?: RecruitRubric
 }
 
 export interface RecruitScreeningWorkflowResult {
@@ -139,12 +333,15 @@ export interface RecruitScreeningWorkflowResult {
   screening: RecruitScreeningSummary
 }
 
+export type RecruitmentType = 'campus' | 'experienced' | 'unspecified'
+
 export interface RecruitJobSummary {
   job_id: string
   title: string
   department: string
   location: string
   employment_type: string
+  recruitment_type: RecruitmentType
   status: string
   hiring_manager: string
   recruiter: string
@@ -252,6 +449,7 @@ export interface RecruitResumePreview {
   }
   parsed_text: string
   processing_status: string
+  extraction?: RecruitExtractionInfo
 }
 
 export interface RecruitActivityRecord {
@@ -310,6 +508,7 @@ export interface CreateRecruitJobInput {
   department: string
   location: string
   employment_type: string
+  recruitment_type: RecruitmentType
   status: string
   hiring_manager: string
   recruiter: string
@@ -335,7 +534,28 @@ export interface CreateRecruitCandidateInput {
   tags: string
   resume_text: string
   file: File | null
+  model?: string
 }
+
+export interface RecruitEducationFact {
+  school: string
+  school_level: string
+  school_tags: string[]
+  school_source: string
+  degree: string
+  degree_rank: number
+  degree_source: string
+  start_year: number | null
+  graduation_year: number | null
+  graduation_source: string
+}
+
+export type RecruitCandidateStreamEvent =
+  | { type: 'step'; key: string; status: 'running' | 'done' | 'error'; label: string }
+  | { type: 'tool'; name: string; output: RecruitEducationFact[] }
+  | { type: 'token'; text: string }
+  | { type: 'done'; candidate?: RecruitCandidateSummary; screening?: RecruitScreeningSummary }
+  | { type: 'error'; message: string }
 
 export interface UpdateRecruitCandidateProfileInput {
   full_name: string

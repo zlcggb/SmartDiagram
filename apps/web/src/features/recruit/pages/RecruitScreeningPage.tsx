@@ -1,28 +1,65 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
-import { BrainCircuit, CalendarClock, FileUp, Sparkles } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { BrainCircuit, FileUp, FileSearch, ListChecks, RefreshCw, ScanText, Sparkles, Target } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import { ErrorBanner, RecruitPage, ScoreBadge, SectionCard } from '@/features/recruit/components/RecruitPrimitives'
+import { ErrorBanner, RecruitPage, SectionCard } from '@/features/recruit/components/RecruitPrimitives'
 import { RecruitScoreReport } from '@/features/recruit/components/RecruitScoreReport'
-import { persistRecruitScreening, previewRecruitResume, screenRecruitCandidate } from '@/features/recruit/lib/api'
+import { AiLoader, ScoreRing } from '@/features/recruit/components/RecruitUI'
+import { fetchRecruitRubric, persistRecruitScreening, previewRecruitResume, screenRecruitCandidate } from '@/features/recruit/lib/api'
+import { prefersReducedMotion } from '@/features/recruit/lib/motion'
 import { getInterviewOpportunity } from '@/features/recruit/lib/screening'
-import type { RecruitScreeningPreview } from '@/features/recruit/lib/types'
+import { RecruitTalentSearchPage } from '@/features/recruit/pages/RecruitTalentSearchPage'
+import type {
+  RecruitExtractionInfo,
+  RecruitRubric,
+  RecruitRubricCategory,
+  RecruitScreeningPreview,
+} from '@/features/recruit/lib/types'
 
-const DEFAULT_JD_TITLE = 'AI 应用产品工程师（业务系统方向）'
-const DEFAULT_JD_TEXT = `我们希望招聘一位偏应用落地的 AI 人才，能够理解销售、客服、运营或生产等业务流程，快速完成需求澄清、原型设计和 demo 交付。
+const DEFAULT_JD_TITLE = 'AI 解决方案工程师（业务系统方向）· 校招'
+const DEFAULT_JD_TEXT = `岗位定位
+我们是一家 LED 制造企业，正在用 AI 改造销售、客服、运营与生产协同的核心业务流程。这个岗位面向应届生同学——不要求你经验丰富，但要求你动手能力强、对 AI 应用落地有热情。
 
-核心要求：
-1. 熟悉前端或全栈开发，能独立做出可演示的业务系统页面
-2. 会用 AI 编程工具、Prompt、Agent、RAG 或自动化工作流
-3. 理解 CRM、销售支持、客服、运营、生产管理等业务系统
-4. 能把需求拆解为 MVP，有业务思维和 demo 验证意识
-5. 有个人网站、Github、Side Project 或自主创建经历加分
+你将做什么
+1. 参与销售、客服、运营等业务场景的需求调研，把业务痛点拆解成可落地的小方案，快速做出原型验证；
+2. 在导师指导下，逐步独立完成 AI 应用的全栈开发：前端页面、后端服务、数据接口，覆盖从需求到上线的完整流程；
+3. 围绕销售前端场景（如 CRM、客户跟进、报价支持、订单协同等）落地 AI 能力，比如智能问数、AI 陪练、智能工程化配置等；
+4. 使用大模型相关技术解决实际业务问题：Prompt 工程、RAG、Agent、自动化工作流，有项目经验即可，不强求精通；
+5. 深度使用 AI 编程工具（Cursor / Claude Code / Codex 等）提升开发效率，和团队一起探索 AI 时代新的开发方式。
 
-优先关注：
-- 做过企业内部系统、运营后台、销售前台或生产协同系统
-- 独立负责过从需求到上线的完整交付
-- 能把 AI 与真实业务流程结合，而不只是做聊天机器人`
+我们希望你是
+1. 本科及以上学历（2027 届应届生），计算机、软件工程、自动化等相关理工科专业优先，但更看重实际作品，专业不限；
+2. 掌握至少一门编程语言和一个前端框架（Vue / React），独立完成过完整的项目（课程设计、个人项目、实习项目均可）；
+3. 有业务好奇心，愿意去理解销售、客服、运营是怎么工作的，能听懂业务语言、把需求翻译成技术方案；
+4. 自驱力强、沟通顺畅，遇到问题能主动查、主动问、主动试。
+
+加分项（满足任意一条都很亮眼）
+1. 实习中接触过 CRM、ERP、运营后台等企业系统，或对制造业数字化感兴趣；
+2. 参加过黑客松、创新创业比赛，或有校园项目独立交付经历。
+
+我们提供
+- 导师带教：入职配备资深导师，前 6 个月有清晰的成长计划；
+- 真实落地场景：你做的系统被销售、客服、运营团队每天使用；
+- AI 原生工作方式：团队全面使用 AI 编程工具；
+- base 深圳宝安：双休不加班，提供人才房等。`
+
+const CATEGORY_ORDER: Array<{ key: RecruitRubricCategory; label: string; hint: string }> = [
+  { key: 'core', label: '核心能力', hint: '逐项累加' },
+  { key: 'potential', label: '潜力与素质', hint: '逐项累加' },
+  { key: 'bonus', label: '加分项', hint: '任一满足即计分，取最高' },
+]
+const EXTRACTION_LABELS: Record<string, string> = {
+  text: '文本直读',
+  ocr: 'AI OCR 识别',
+  mixed: '文本 + OCR',
+  none: '未提取到文字',
+}
+const QUALITY_LABELS: Record<string, string> = { good: '完整', fair: '一般', poor: '偏少' }
+
+type Phase = 'idle' | 'rubric' | 'evaluating'
+
+const jdKey = (title: string, text: string) => `${title.trim()}\n${text.trim()}`
 
 const OPPORTUNITY_STYLES = {
   high: 'recruit-screening-opportunity--high',
@@ -32,10 +69,13 @@ const OPPORTUNITY_STYLES = {
 } as const
 
 export function RecruitScreeningPage() {
+  const [params] = useSearchParams()
+  return params.get('mode') === 'single' ? <RecruitSingleScreeningPage /> : <RecruitTalentSearchPage />
+}
+
+function RecruitSingleScreeningPage() {
   const navigate = useNavigate()
-  const motionScopeRef = useRef<HTMLDivElement>(null)
   const resultRef = useRef<HTMLDivElement>(null)
-  const scoreValueRef = useRef<HTMLElement>(null)
   const [jdTitle, setJdTitle] = useState(DEFAULT_JD_TITLE)
   const [jdText, setJdText] = useState(DEFAULT_JD_TEXT)
   const [candidateName, setCandidateName] = useState('')
@@ -46,73 +86,87 @@ export function RecruitScreeningPage() {
   const [screening, setScreening] = useState<RecruitScreeningPreview | null>(null)
   const [screeningError, setScreeningError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [phase, setPhase] = useState<Phase>('idle')
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [extraction, setExtraction] = useState<RecruitExtractionInfo | null>(null)
+  const [rubric, setRubric] = useState<RecruitRubric | null>(null)
+  const [rubricFor, setRubricFor] = useState('')
+  const [rubricLoading, setRubricLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
+
+  const rubricStale = Boolean(rubric) && rubricFor !== jdKey(jdTitle, jdText)
+  const weightTotal = useMemo(
+    () => (rubric?.requirements || []).filter((item) => item.category !== 'bonus').reduce((sum, item) => sum + item.weight, 0),
+    [rubric],
+  )
+
+  const loadRubric = useCallback(async (title: string, text: string, refresh = false) => {
+    setRubricLoading(true)
+    try {
+      const next = await fetchRecruitRubric({ jdTitle: title.trim(), jdText: text.trim(), refresh })
+      setRubric(next)
+      setRubricFor(jdKey(title, text))
+      return next
+    } finally {
+      setRubricLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    // Prefetch the default role's scorecard so the first evaluation skips rubric generation.
+    let cancelled = false
+    fetchRecruitRubric({ jdTitle: DEFAULT_JD_TITLE, jdText: DEFAULT_JD_TEXT })
+      .then((next) => {
+        if (cancelled) return
+        setRubric((current) => current ?? next)
+        setRubricFor((current) => current || jdKey(DEFAULT_JD_TITLE, DEFAULT_JD_TEXT))
+      })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [])
 
   const opportunity = useMemo(
     () => screening ? getInterviewOpportunity(screening) : null,
     [screening],
   )
 
-  useLayoutEffect(() => {
-    if (!motionScopeRef.current) return
-    const context = gsap.context(() => {
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-      const revealItems = gsap.utils.toArray<HTMLElement>('[data-recruit-reveal]')
-      gsap.fromTo(
-        revealItems,
-        { autoAlpha: 0, y: 18 },
-        { autoAlpha: 1, y: 0, duration: 0.65, stagger: 0.07, ease: 'power3.out' },
-      )
-    }, motionScopeRef)
-    return () => context.revert()
-  }, [])
-
   useEffect(() => {
-    if (!screening || !resultRef.current) return
-    const scoreTarget = scoreValueRef.current
-    const barElements = gsap.utils.toArray<HTMLElement>('[data-score-bar]', resultRef.current)
+    const scope = resultRef.current
+    if (!screening || !scope || prefersReducedMotion()) return
     const context = gsap.context(() => {
-      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      if (reducedMotion) {
-        if (scoreTarget) scoreTarget.textContent = String(screening.total_score)
-        barElements.forEach((element) => {
-          element.style.width = element.dataset.scoreWidth || '0%'
-        })
-        return
-      }
-
-      const scoreProxy = { value: 0 }
-      gsap.to(scoreProxy, {
-        value: screening.total_score,
-        duration: 0.9,
-        ease: 'power3.out',
-        onUpdate: () => {
-          if (scoreTarget) scoreTarget.textContent = String(Math.round(scoreProxy.value))
-        },
-      })
       gsap.fromTo(
-        barElements,
-        { width: '0%' },
-        {
-          width: (index) => barElements[index]?.dataset.scoreWidth || '0%',
-          duration: 0.8,
-          stagger: 0.08,
-          ease: 'power2.out',
-        },
+        scope.querySelectorAll('.recruit-screening-report > *, .recruit-score-report > *'),
+        { autoAlpha: 0, y: 16 },
+        { autoAlpha: 1, y: 0, duration: 0.55, stagger: 0.05, ease: 'power3.out', clearProps: 'transform' },
       )
-      gsap.fromTo(
-        resultRef.current,
-        { autoAlpha: 0, y: 10 },
-        { autoAlpha: 1, y: 0, duration: 0.45, ease: 'power2.out' },
-      )
-    }, resultRef)
+    }, scope)
     return () => context.revert()
   }, [screening])
 
   function markDirty() {
     setIsDirty(true)
+  }
+
+  function updateWeight(key: string, value: number) {
+    setRubric((current) => current ? {
+      ...current,
+      source: 'custom',
+      requirements: current.requirements.map((item) => item.key === key
+        ? { ...item, weight: Math.max(0, Math.min(60, Math.round(value) || 0)) }
+        : item),
+    } : current)
+    markDirty()
+  }
+
+  async function handleRubricRefresh() {
+    setScreeningError('')
+    try {
+      await loadRubric(jdTitle, jdText, true)
+      markDirty()
+    } catch (error) {
+      setScreeningError(error instanceof Error ? error.message : '评分细则生成失败')
+    }
   }
 
   async function handleScreeningSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -124,16 +178,24 @@ export function RecruitScreeningPage() {
       return
     }
     if (!resumeText.trim() && !selectedFile) {
-      setScreeningError('请粘贴简历文本或上传 PDF 简历。')
+      setScreeningError('请上传简历文件或粘贴简历正文。')
       return
     }
 
     setSubmitting(true)
     try {
+      let activeRubric = rubric
+      if (!activeRubric || rubricStale) {
+        setPhase('rubric')
+        activeRubric = await loadRubric(jdTitle, jdText)
+      }
+      setPhase('evaluating')
       const result = await screenRecruitCandidate({
         candidateName: candidateName.trim() || '候选人',
         channel: channel.trim(),
+        jdTitle: jdTitle.trim(),
         jdText: jdText.trim(),
+        rubric: activeRubric,
         resumeText: resumeText.trim(),
         file: selectedFile,
       })
@@ -143,6 +205,7 @@ export function RecruitScreeningPage() {
       setScreeningError(error instanceof Error ? error.message : '简历筛选失败')
     } finally {
       setSubmitting(false)
+      setPhase('idle')
     }
   }
 
@@ -150,14 +213,16 @@ export function RecruitScreeningPage() {
     setSelectedFile(file)
     markDirty()
     setScreeningError('')
+    setExtraction(null)
     if (!file) return
 
     setPreviewLoading(true)
     void previewRecruitResume(file)
       .then((preview) => {
-        setCandidateName((current) => current.trim() || preview.profile.full_name)
-        setCandidateEmail((current) => current.trim() || preview.profile.email)
-        setResumeText((current) => current.trim() || preview.parsed_text)
+        setCandidateName(preview.profile.full_name || '')
+        setCandidateEmail(preview.profile.email || '')
+        setResumeText(preview.parsed_text)
+        setExtraction(preview.extraction ?? null)
       })
       .catch((error) => {
         setScreeningError(error instanceof Error ? error.message : '简历解析失败，可继续手动填写')
@@ -185,6 +250,7 @@ export function RecruitScreeningPage() {
         resumeText: resumeText.trim(),
         file: selectedFile,
         priority,
+        rubric: screening.rubric ?? rubric,
       })
       navigate(`/recruit/candidates/${result.candidate.candidate_id}`)
     } catch (error) {
@@ -195,24 +261,28 @@ export function RecruitScreeningPage() {
   }
 
   return (
-    <div ref={motionScopeRef} className="contents">
-      <RecruitPage
+    <RecruitPage
         title="AI 找人才"
-        description="先确定岗位，再上传一份 PDF 简历；系统会输出可核查的评分与面试建议。"
-        actions={<Link className="recruit-button" to="/recruit/candidates">查看人才库</Link>}
+        eyebrow="Screen · 人岗匹配"
+        description="上传 PDF / Word / 图片简历，按岗位评分卡逐项比对证据，输出可核查的匹配报告与面试计划。"
+        actions={<Link className="recruit-button" to="/recruit/screen">从人才库找人</Link>}
       >
       <ErrorBanner message={screeningError} />
 
       <div className="recruit-screening-grid">
         <form onSubmit={handleScreeningSubmit} className="recruit-screening-form">
-          <SectionCard title="2. 岗位与 JD（可选调整）" description="默认 AI 岗位已可直接使用；需要时再改成你自己的岗位和业务场景。">
+          <SectionCard
+            title="岗位与评分卡"
+            description="JD 会被转成带权重的评分卡（硬性门槛 / 核心能力 / 潜力 / 加分项），同一岗位的所有候选人用同一把尺子。"
+            icon={<b className="rx-step">02</b>}
+          >
             <div className="recruit-form">
               <label className="recruit-field">
                 <span>岗位名称</span>
                 <input
                   value={jdTitle}
                   onChange={(event) => { setJdTitle(event.target.value); markDirty() }}
-                  placeholder="例如：AI 应用产品工程师"
+                  placeholder="例如：AI 解决方案工程师"
                 />
               </label>
               <label className="recruit-field">
@@ -220,27 +290,106 @@ export function RecruitScreeningPage() {
                 <textarea
                   value={jdText}
                   onChange={(event) => { setJdText(event.target.value); markDirty() }}
-                  rows={15}
+                  rows={12}
                   placeholder="职责、硬性要求、加分项、业务场景和交付目标"
                 />
               </label>
-              <div className="recruit-insight-note">
-                <div>
-                  <Sparkles size={16} />
-                  评分会重点验证
+              <div className="recruit-rubric">
+                <div className="recruit-rubric__head">
+                  <div>
+                    <strong><ListChecks size={15} />评分细则</strong>
+                    <span>
+                      {rubricLoading
+                        ? <AiLoader label="AI 正在根据 JD 生成评分卡" />
+                        : rubric
+                          ? `${rubric.source === 'ai' ? 'AI 生成' : rubric.source === 'custom' ? '已手动调整' : '规则解析'} · ${rubric.requirements.length} 项 · 核心+潜力权重合计 ${weightTotal}（按比例换算为百分制）`
+                          : '尚未生成，评分时会自动生成'}
+                    </span>
+                  </div>
+                  <button type="button" className="recruit-button" disabled={rubricLoading || submitting} onClick={() => void handleRubricRefresh()}>
+                    <RefreshCw size={14} />{rubric ? '重新生成' : '生成'}
+                  </button>
                 </div>
-                <p>
-                  AI 应用实践、前端 / 全栈交付、业务系统经验、需求理解、作品自驱和沟通协作。
-                </p>
+                {rubricStale ? <p className="recruit-inline-note">JD 已修改，开始评分时会按新 JD 重新生成评分卡（手动调整的权重将被覆盖）。</p> : null}
+                {rubric && rubric.knockouts.length > 0 ? (
+                  <div className="recruit-rubric__knockouts">
+                    <span>硬性门槛</span>
+                    {rubric.knockouts.map((item) => <em key={item.key}>{item.label}</em>)}
+                  </div>
+                ) : null}
+                {rubric ? CATEGORY_ORDER.map((category) => {
+                  const items = rubric.requirements.filter((item) => item.category === category.key)
+                  if (items.length === 0) return null
+                  return (
+                    <div key={category.key} className="recruit-rubric__group">
+                      <p>{category.label}<span>{category.hint}</span></p>
+                      {items.map((item) => (
+                        <div key={item.key} className="recruit-rubric__item">
+                          <div className="min-w-0" title={item.description}>
+                            <strong>{item.label}</strong>
+                            <span>{item.description}</span>
+                          </div>
+                          <label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={60}
+                              value={item.weight}
+                              aria-label={`${item.label} 权重`}
+                              onChange={(event) => updateWeight(item.key, Number(event.target.value))}
+                            />
+                            <span>权重</span>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                }) : null}
               </div>
             </div>
           </SectionCard>
 
-          <SectionCard title="1. 上传简历 PDF" description="上传后自动识别候选人；选择默认岗位即可直接评分。">
+          <SectionCard
+            title="上传简历"
+            description="支持 PDF、Word（.docx）、图片；扫描件和图片会自动 AI OCR 提取文字。"
+            icon={<b className="rx-step">01</b>}
+          >
             <div className="recruit-form">
+              <label className="recruit-upload-zone">
+                <span className="recruit-upload-zone__head">
+                  <span className="recruit-upload-zone__icon" aria-hidden="true"><FileUp size={18} /></span>
+                  <span>
+                    <strong>拖入或选择简历文件</strong>
+                    <span>PDF / DOCX / PNG / JPG / WEBP / TXT，最大 15MB。</span>
+                  </span>
+                  {previewLoading ? <AiLoader label="提取文字中" /> : null}
+                </span>
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf,.docx,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,.txt,.md"
+                  onChange={(event) => handleResumeFile(event.target.files?.[0] ?? null)}
+                />
+                <span className="recruit-upload-zone__caption">
+                  {selectedFile ? `已选择：${selectedFile.name}` : '上传后自动识别姓名与正文；联系方式只用于去重，不参与评分。'}
+                </span>
+              </label>
+              {extraction ? (
+                <div className={`recruit-extraction recruit-extraction--${extraction.quality || 'good'}`}>
+                  <ScanText size={15} />
+                  <div>
+                    <strong>
+                      {EXTRACTION_LABELS[extraction.method] || extraction.method}
+                      {extraction.ocr_pages.length > 0 ? ` · OCR ${extraction.ocr_pages.length} 页` : ''}
+                      {` · ${extraction.char_count} 字`}
+                      {extraction.quality ? ` · 信息量${QUALITY_LABELS[extraction.quality] || extraction.quality}` : ''}
+                    </strong>
+                    {extraction.warnings.map((warning) => <span key={warning}>{warning}</span>)}
+                  </div>
+                </div>
+              ) : null}
               <div className="recruit-field-grid">
                 <label className="recruit-field">
-                  <span>候选人姓名（PDF 可自动识别）</span>
+                  <span>候选人姓名（自动识别）</span>
                   <input
                     value={candidateName}
                     onChange={(event) => { setCandidateName(event.target.value); markDirty() }}
@@ -265,67 +414,79 @@ export function RecruitScreeningPage() {
                   placeholder="主动投递 / 猎头 / 内推"
                 />
               </label>
-              <label className="recruit-upload-zone">
-                <span className="recruit-upload-zone__head">
-                  <span>
-                    <strong><FileUp size={17} />选择 PDF 简历</strong>
-                    <span>优先使用原始 PDF，识别信息后即可直接开始评分。</span>
-                  </span>
-                  {previewLoading ? <span className="recruit-upload-zone__status">正在识别简历…</span> : null}
-                </span>
-                <input
-                  type="file"
-                  accept=".pdf,application/pdf,.docx,.txt,.md"
-                  onChange={(event) => handleResumeFile(event.target.files?.[0] ?? null)}
-                />
-                <span className="recruit-upload-zone__caption">
-                  {selectedFile ? `已选择：${selectedFile.name}，识别到姓名后可直接评分` : '上传 PDF 后会自动识别姓名和简历正文；邮箱、电话只用于联系。'}
-                </span>
-              </label>
               <label className="recruit-field">
-                <span>简历正文（可选）</span>
+                <span>简历正文（自动填充，可校对或补充作品链接）</span>
                 <textarea
                   value={resumeText}
                   onChange={(event) => { setResumeText(event.target.value); markDirty() }}
                   rows={7}
-                  placeholder="如果 PDF 是扫描件，建议在这里粘贴 OCR 文本、项目经历或作品链接。"
+                  placeholder="也可以直接粘贴简历文本。"
                 />
               </label>
               <button
                 type="submit"
-                disabled={submitting}
-                className="recruit-button recruit-button--primary recruit-button--wide"
+                disabled={submitting || previewLoading}
+                className="rx-glow rx-glow--block"
               >
-                <BrainCircuit size={17} />
-                {submitting ? 'AI 评分中…' : '开始评分并判断面试机会'}
+                <span>
+                  {submitting ? <AiLoader label={phase === 'rubric' ? '正在生成评分卡' : 'AI 正在逐项评估'} /> : <><BrainCircuit size={17} />开始评估并生成报告</>}
+                </span>
               </button>
             </div>
           </SectionCard>
         </form>
 
         <div className="recruit-screening-result">
-          <SectionCard title="3. 评分与面试判断" description="结果只作为招聘辅助，最终决定由招聘负责人确认。">
+          <SectionCard
+            title="人岗匹配报告"
+            description="结果只作为招聘辅助，最终决定由招聘负责人确认。"
+            icon={<b className="rx-step">03</b>}
+            className="recruit-panel--report"
+          >
             <div ref={resultRef}>
-            {!screening || !opportunity ? (
-              <div className="recruit-screening-empty">
-                <p><CalendarClock size={17} />完成一次评分后，这里会显示：</p>
+            {submitting ? (
+              <div className="rx-scan">
+                <div className="rx-scan__doc" aria-hidden="true">
+                  {Array.from({ length: 9 }, (_, index) => <i key={index} style={{ width: `${55 + ((index * 37) % 40)}%` }} />)}
+                  <span className="rx-scan__beam" />
+                </div>
+                <ol className="recruit-progress-steps">
+                  <li className="is-done">提取简历文字{extraction ? `（${EXTRACTION_LABELS[extraction.method] || extraction.method}）` : ''}</li>
+                  <li className={phase === 'rubric' ? 'is-active' : 'is-done'}>载入岗位评分卡</li>
+                  <li className={phase === 'evaluating' ? 'is-active' : ''}>AI 逐项对照证据评级（0-4 行为锚定）</li>
+                  <li>核验引用原文 · 计算得分 · 生成面试计划</li>
+                </ol>
+              </div>
+            ) : !screening || !opportunity ? (
+              <div className="rx-report-empty">
+                <div className="rx-report-empty__art" aria-hidden="true">
+                  <span><FileSearch size={22} /></span>
+                  <span><Target size={22} /></span>
+                  <span><Sparkles size={22} /></span>
+                </div>
+                <strong>报告将在这里生成</strong>
                 <ul>
-                  <li>• 总分和六个维度的匹配证据</li>
-                  <li>• 是否值得安排面试，以及面试优先级</li>
-                  <li>• 本候选人最应该追问的面试问题</li>
+                  <li><b>01</b>硬性门槛核验与 A / B / C / D 评级</li>
+                  <li><b>02</b>每项要求的等级、权重、得分与原文证据</li>
+                  <li><b>03</b>候选人画像、亮点 / 差距 / 风险与置信度</li>
+                  <li><b>04</b>针对薄弱项与亮点核实的结构化面试计划</li>
                 </ul>
               </div>
             ) : (
               <div className="recruit-screening-report">
                 <div className="recruit-screening-decision">
                   <div className="recruit-screening-score">
-                    <p>AI 匹配分</p>
+                    <ScoreRing
+                      score={screening.total_score}
+                      max={screening.max_score}
+                      size={108}
+                      stroke={8}
+                      caption={screening.score_report?.tier ? `${screening.score_report.tier.grade} · ${screening.score_report.tier.label}` : '分'}
+                    />
                     <div>
-                      <strong ref={scoreValueRef}>0</strong>
-                      <span>/ {screening.max_score} 分</span>
+                      <p>人岗匹配分</p>
+                      <small>{screening.evaluation_mode === 'ai' ? 'AI 逐项评估 · 证据已核验' : '规则兜底评估（AI 不可用）'}</small>
                     </div>
-                    <ScoreBadge score={screening.total_score} maxScore={screening.max_score} />
-                    <small>{screening.evaluation_mode === 'ai' ? 'AI 结构化评分' : '规则兜底评分'}</small>
                   </div>
                   <div className={`recruit-screening-opportunity ${OPPORTUNITY_STYLES[opportunity.level]}`}>
                     <p>面试机会</p>
@@ -334,105 +495,12 @@ export function RecruitScreeningPage() {
                   </div>
                 </div>
 
-                <p className="recruit-screening-summary">{screening.overall_summary}</p>
-
                 <RecruitScoreReport
                   report={screening.score_report}
                   totalScore={screening.total_score}
                   maxScore={screening.max_score}
+                  showTotal={false}
                 />
-
-                <div className="recruit-screening-dimensions">
-                  {screening.dimension_scores.map((item) => {
-                    const percent = item.max_score ? Math.round((item.score / item.max_score) * 100) : 0
-                    return (
-                      <div key={item.key}>
-                        <div className="recruit-screening-dimensions__head">
-                          <span>{item.label}</span>
-                          <strong>{item.score} / {item.max_score}</strong>
-                        </div>
-                        <div className="recruit-progress">
-                          <div data-score-bar data-score-width={`${percent}%`} style={{ width: '0%' }} />
-                        </div>
-                        <p>{item.reason}</p>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                <div className="recruit-ats-metrics">
-                  {Object.entries({
-                    keyword_match: '关键词匹配',
-                    skills_coverage: '技能覆盖',
-                    section_completeness: '结构完整',
-                  }).map(([key, label]) => {
-                    const value = screening.score_breakdown[key as keyof typeof screening.score_breakdown] || 0
-                    return (
-                      <div key={key} className="recruit-ats-metric">
-                        <div>
-                          <span>{label}</span>
-                          <strong>{Math.round(value)}%</strong>
-                        </div>
-                        <div className="recruit-ats-metric__bar">
-                          <span data-score-bar data-score-width={`${value}%`} style={{ width: '0%' }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                <div className="recruit-keywords">
-                  <div>
-                    <p>命中关键词</p>
-                    <div>
-                      {screening.matched_keywords.length > 0
-                        ? screening.matched_keywords.map((keyword) => <span key={keyword} className="recruit-chip">{keyword}</span>)
-                        : <span className="recruit-muted">暂无直接命中关键词</span>}
-                    </div>
-                  </div>
-                  <div>
-                    <p>缺失关键词</p>
-                    <div>
-                      {screening.missing_keywords.length > 0
-                        ? screening.missing_keywords.slice(0, 10).map((keyword) => <span key={keyword} className="recruit-chip recruit-chip--missing">{keyword}</span>)
-                        : <span className="recruit-muted">没有明显缺失关键词</span>}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="recruit-screening-note">
-                  <p>评分建议</p>
-                  <ul>
-                    {screening.recommendations.map((item) => <li key={item}>• {item}</li>)}
-                  </ul>
-                </div>
-
-                <div className="recruit-screening-signals">
-                  <div className="recruit-screening-signal recruit-screening-signal--positive">
-                    <p>匹配亮点</p>
-                    <ul>
-                      {screening.strengths.map((item) => <li key={item}>• {item}</li>)}
-                    </ul>
-                  </div>
-                  <div className="recruit-screening-signal recruit-screening-signal--warning">
-                    <p>需要验证</p>
-                    <ul>
-                      {screening.risks.map((item) => <li key={item}>• {item}</li>)}
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="recruit-interview-focus">
-                  <p>面试应该问什么</p>
-                  <ul>
-                    {screening.interview_questions.map((item) => <li key={item}>• {item}</li>)}
-                  </ul>
-                </div>
-
-                <div className="recruit-evidence-excerpt">
-                  <p>简历证据</p>
-                  <div>{screening.evidence_excerpt || '未提取到可引用的简历片段。'}</div>
-                </div>
 
                 <div className="recruit-screening-save">
                   <div>
@@ -457,7 +525,6 @@ export function RecruitScreeningPage() {
           </SectionCard>
         </div>
       </div>
-      </RecruitPage>
-    </div>
+    </RecruitPage>
   )
 }

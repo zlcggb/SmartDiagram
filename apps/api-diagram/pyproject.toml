@@ -26,4 +26,6 @@ dependencies = [
     "langchain-google-vertexai>=2.0.0",
     "langchain-google-genai>=4.2.2",
     "redis>=5.0.0",
+    "pypdfium2>=4.30",
+    "playwright>=1.63.0",
 ]

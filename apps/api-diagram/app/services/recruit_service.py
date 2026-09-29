@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections import Counter
 from datetime import datetime
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from sqlalchemy import delete, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.common import utc_now
+from app.services.ats_scoring_service import extract_keywords
 from app.models.recruit import (
     RecruitActivity,
     RecruitCandidate,
@@ -23,6 +26,9 @@ from app.models.recruit import (
 from app.services.access_control_service import can_access_project, ensure_project_membership, ensure_team_membership
 from app.services.audit_service import ensure_principals
 from app.services.permission_service import build_permission_context
+from app.services.recruit_ai_usage import usage_summary
+from app.services.talent_evaluation_service import TIERS
+from app.services.talent_rubric_service import generate_rubric, parse_rubric_json
 from app.services.talent_screening_service import (
     build_fallback_screening,
     compile_resume_text,
@@ -58,6 +64,23 @@ DEFAULT_AI_JOB_BODY = {
     ),
     "tags": "AI,AI人才,业务系统",
 }
+RECRUITMENT_TYPE_VALUES = {"campus", "experienced", "unspecified"}
+STRONG_MATCH_SCORE = TIERS[0][0]
+INTERVIEW_MATCH_SCORE = TIERS[1][0]
+
+
+async def _job_rubric(job: RecruitJob) -> dict[str, Any]:
+    """Reuse the job's stored scorecard so every candidate is scored on the same rubric."""
+
+    jd_text = _body_text(job.description, job.requirements)
+    stored = (job.metadata_json or {}).get("rubric")
+    if isinstance(stored, dict):
+        rubric = parse_rubric_json(json.dumps(stored, ensure_ascii=False), jd_title=job.title, jd_text=jd_text)
+        if rubric:
+            return rubric
+    rubric = await generate_rubric(job.title, jd_text)
+    job.metadata_json = {**(job.metadata_json or {}), "rubric": rubric}
+    return rubric
 
 
 def _context_value(permission_context: dict[str, Any], key: str) -> str | None:
@@ -86,6 +109,17 @@ def _tags(value: Any) -> list[str]:
         if text and text not in result:
             result.append(text)
     return result
+
+
+def _name_from_filename(filename: str) -> str:
+    """从简历文件名兜底提取姓名，如「肖雨航_解决方案.pdf」→「肖雨航」。"""
+    stem = re.sub(r"\.[A-Za-z0-9]+$", "", normalize_text(filename))
+    first_segment = re.split(r"[_\-—–\s]+", stem, maxsplit=1)[0]
+    match = re.fullmatch(r"[\u4e00-\u9fff]{2,4}", first_segment)
+    if match:
+        return first_segment
+    match_en = re.fullmatch(r"[A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,2}", first_segment)
+    return first_segment if match_en else ""
 
 
 def _body_text(primary: str | None, secondary: str | None = None) -> str:
@@ -204,6 +238,7 @@ def serialize_job(job: RecruitJob, *, candidate_count: int = 0) -> dict[str, Any
         "department": job.department,
         "location": job.location,
         "employment_type": job.employment_type,
+        "recruitment_type": job.recruitment_type,
         "status": job.status,
         "hiring_manager": job.hiring_manager,
         "recruiter": job.recruiter,
@@ -245,6 +280,7 @@ def serialize_screening(row: RecruitScreeningResult | None) -> dict[str, Any] | 
         "dimension_scores": row.dimension_scores_json or [],
         "score_report": row.report_json or (row.raw_result_json or {}).get("score_report") or {},
         "evidence_excerpt": row.evidence_excerpt,
+        "ai_usage": (row.raw_result_json or {}).get("ai_usage"),
         "created_at": row.created_at.isoformat(),
     }
 
@@ -449,6 +485,8 @@ async def update_job(session: AsyncSession, permission_context: dict[str, Any], 
     for field in fields:
         if field in body:
             setattr(job, field, normalize_text(str(body.get(field) or "")))
+    if "recruitment_type" in body:
+        job.recruitment_type = _normalize_recruitment_type(body.get("recruitment_type"))
     if "headcount" in body:
         job.headcount = max(1, int(body.get("headcount") or 1))
     if "tags" in body:
@@ -548,6 +586,161 @@ async def list_candidates(
     }
 
 
+async def match_candidates(
+    session: AsyncSession,
+    permission_context: dict[str, Any],
+    body: dict[str, Any],
+    progress: Any = None,
+) -> dict[str, Any]:
+    async def report(event: dict[str, Any]) -> None:
+        if progress is not None:
+            await progress(event)
+
+    jd_title = normalize_text(str(body.get("jd_title") or ""))
+    jd_text = normalize_text(str(body.get("jd_text") or ""))
+    if not jd_text:
+        raise ValueError("jd_text_required")
+
+    rubric = parse_rubric_json(
+        json.dumps(body.get("rubric"), ensure_ascii=False) if body.get("rubric") else None,
+        jd_title=jd_title,
+        jd_text=jd_text,
+    ) or await generate_rubric(jd_title, jd_text[:12_000])
+    await report({
+        "node": "resume_scan",
+        "status": "started",
+        "message": "正在读取人才库简历",
+        "detail": "按当前组织权限检查候选人档案，并读取每位候选人最新的可解析简历。",
+    })
+    statement = select(RecruitCandidate).where(RecruitCandidate.tenant_id == permission_context["tenant_id"])
+    if permission_context.get("project_id"):
+        statement = statement.where(RecruitCandidate.project_id == permission_context["project_id"])
+    candidates = (await session.execute(statement)).scalars().all()
+    accessible = []
+    for candidate in candidates:
+        try:
+            await _ensure_read_access(session, permission_context, candidate.project_id)
+        except PermissionError:
+            continue
+        accessible.append(candidate)
+    resumes = []
+    if accessible:
+        resumes = (
+            await session.execute(
+                select(RecruitResume)
+                .where(
+                    RecruitResume.tenant_id == permission_context["tenant_id"],
+                    RecruitResume.candidate_id.in_([candidate.id for candidate in accessible]),
+                )
+                .order_by(desc(RecruitResume.created_at))
+            )
+        ).scalars().all()
+    latest_resumes = {}
+    for resume in resumes:
+        if resume.parsed_text:
+            latest_resumes.setdefault(resume.candidate_id, resume)
+
+    await report({
+        "node": "resume_scan",
+        "status": "completed",
+        "message": "简历读取完成",
+        "detail": f"检查 {len(accessible)} 份候选人档案，其中 {len(latest_resumes)} 份有可解析简历。",
+        "data": {"candidate_count": len(accessible), "readable_resume_count": len(latest_resumes)},
+    })
+    await report({
+        "node": "keyword_retrieval",
+        "status": "started",
+        "message": "正在按岗位信号检索",
+        "detail": "从 JD 和评分标准提取关键词，对可解析简历进行命中计数与预排序。",
+    })
+    keywords = extract_keywords(f"{jd_title}\n{jd_text}")
+    for requirement in rubric.get("requirements", []):
+        keywords.extend(normalize_text(str(signal)).lower() for signal in requirement.get("signals", []))
+    terms = set(filter(None, keywords))
+    ranked = []
+    for candidate in accessible:
+        resume = latest_resumes.get(candidate.id)
+        if resume is not None:
+            keyword_hits = sum(term in resume.parsed_text.lower() for term in terms)
+            ranked.append((candidate, resume, keyword_hits))
+    ranked.sort(key=lambda item: item[2], reverse=True)
+    evaluation_candidates = ranked[:8]
+    await report({
+        "node": "keyword_retrieval",
+        "status": "completed",
+        "message": "关键词召回完成",
+        "detail": f"{len(ranked)} 份简历进入候选范围，按关键词命中数预排序，取前 {len(evaluation_candidates)} 份进入逐份评估。",
+        "data": {
+            "keyword_count": len(terms),
+            "keyword_terms": sorted(terms)[:12],
+            "recalled_count": len(ranked),
+            "selected_for_evaluation": len(evaluation_candidates),
+        },
+    })
+    await report({
+        "node": "evaluation",
+        "status": "started",
+        "message": "开始逐份评估",
+        "detail": f"按关键词预排序评估前 {len(evaluation_candidates)} 份简历。",
+        "data": {"evaluation_total": len(evaluation_candidates)},
+    })
+    matches = []
+    for index, (candidate, resume, keyword_hits) in enumerate(evaluation_candidates, start=1):
+        await report({
+            "node": "evaluation",
+            "status": "progress",
+            "message": f"正在评估 {candidate.full_name or '未命名候选人'}",
+            "detail": f"第 {index} / {len(evaluation_candidates)} 份，关键词命中 {keyword_hits} 项。",
+            "data": {
+                "evaluation_status": "evaluating",
+                "candidate_name": candidate.full_name or "未命名候选人",
+                "candidate_index": index,
+                "evaluation_total": len(evaluation_candidates),
+                "keyword_hits": keyword_hits,
+            },
+        })
+        screening = await screen_candidate_profile(
+            candidate_name=candidate.full_name,
+            jd_title=jd_title,
+            jd_text=jd_text,
+            resume_text=resume.parsed_text,
+            rubric=rubric,
+            source_name=resume.filename,
+        )
+        matches.append({"candidate": serialize_candidate(candidate), "screening": screening})
+        await report({
+            "node": "evaluation",
+            "status": "progress",
+            "message": f"{candidate.full_name or '未命名候选人'}评估完成",
+            "detail": f"当前得分 {screening['total_score']} / {screening.get('max_score') or 100}。",
+            "data": {
+                "evaluation_status": "completed",
+                "candidate_name": candidate.full_name or "未命名候选人",
+                "candidate_index": index,
+                "evaluation_total": len(evaluation_candidates),
+                "keyword_hits": keyword_hits,
+                "score": screening["total_score"],
+                "max_score": screening.get("max_score") or 100,
+                "evaluation_mode": screening.get("evaluation_mode"),
+            },
+        })
+    await report({
+        "node": "evaluation",
+        "status": "completed",
+        "message": "逐份评估完成",
+        "detail": f"已完成 {len(matches)} 份简历评估。",
+        "data": {"evaluation_total": len(evaluation_candidates), "evaluated_count": len(matches)},
+    })
+    await report({
+        "node": "ranking",
+        "status": "started",
+        "message": "正在汇总评估得分",
+        "detail": "按人岗评估总分重新排序，而非沿用关键词预排序。",
+    })
+    matches.sort(key=lambda item: item["screening"]["total_score"], reverse=True)
+    return {"matches": matches, "total": len(ranked), "evaluated": len(matches)}
+
+
 async def _duplicate_candidate(
     session: AsyncSession,
     tenant_id: str,
@@ -564,6 +757,13 @@ async def _duplicate_candidate(
     return (await session.execute(statement)).scalar_one_or_none()
 
 
+def _normalize_recruitment_type(value: Any) -> str:
+    recruitment_type = normalize_text(str(value or "unspecified")).lower() or "unspecified"
+    if recruitment_type not in RECRUITMENT_TYPE_VALUES:
+        raise ValueError("recruitment_type_invalid")
+    return recruitment_type
+
+
 def _build_job(permission_context: dict[str, Any], body: dict[str, Any]) -> RecruitJob:
     now = utc_now()
     job = RecruitJob(
@@ -574,6 +774,7 @@ def _build_job(permission_context: dict[str, Any], body: dict[str, Any]) -> Recr
         department=normalize_text(str(body.get("department") or "")),
         location=normalize_text(str(body.get("location") or "")),
         employment_type=normalize_text(str(body.get("employment_type") or "full-time")) or "full-time",
+        recruitment_type=_normalize_recruitment_type(body.get("recruitment_type")),
         status=normalize_text(str(body.get("status") or "draft")) or "draft",
         hiring_manager=normalize_text(str(body.get("hiring_manager") or "")),
         recruiter=normalize_text(str(body.get("recruiter") or "")),
@@ -633,12 +834,23 @@ async def _persist_screening(
     job: RecruitJob,
     resume_text: str,
     screening_result: dict[str, Any] | None = None,
+    extraction: dict[str, Any] | None = None,
+    model: str | None = None,
+    progress: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> RecruitScreeningResult:
     result = screening_result or await screen_candidate_profile(
         candidate_name=candidate.full_name,
         jd_text=_body_text(job.description, job.requirements),
         resume_text=resume_text,
+        rubric=await _job_rubric(job),
+        jd_title=job.title,
+        extraction=extraction,
+        model=model,
+        progress=progress,
     )
+    ai_usage = usage_summary()
+    if ai_usage:
+        result = {**result, "ai_usage": ai_usage}
     score_breakdown = result.get("score_breakdown") or {}
     screening = RecruitScreeningResult(
         tenant_id=candidate.tenant_id,
@@ -686,7 +898,9 @@ async def _persist_screening(
             )
         )
     candidate.ranking = (
-        "strong" if screening.total_score >= 85 else "medium" if screening.total_score >= 70 else "watch"
+        "strong" if screening.total_score >= STRONG_MATCH_SCORE
+        else "medium" if screening.total_score >= INTERVIEW_MATCH_SCORE
+        else "watch"
     )
     candidate.current_stage = "screening" if candidate.current_stage == "applied" else candidate.current_stage
     candidate.updated_at = utc_now()
@@ -697,7 +911,12 @@ async def _persist_screening(
         message=f"{candidate.full_name} 完成 AI 初筛",
         candidate_id=candidate.id,
         job_id=job.id,
-        metadata={"score": screening.total_score, "recommendation": screening.recommendation},
+        metadata={
+            "score": screening.total_score,
+            "recommendation": screening.recommendation,
+            "candidate_name": candidate.full_name,
+            **({"ai_usage": ai_usage} if ai_usage else {}),
+        },
     )
     return screening
 
@@ -711,6 +930,8 @@ async def create_candidate(
     source_name: str = "",
     source_mime_type: str = "",
     source_hash: str = "",
+    model: str | None = None,
+    progress: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     job_id = normalize_text(str(body.get("job_id") or ""))
     if not job_id:
@@ -721,7 +942,11 @@ async def create_candidate(
     extracted_profile = extract_resume_profile(resume_text) if resume_text else {}
     candidate_body = {
         **body,
-        "full_name": normalize_text(str(body.get("full_name") or "")) or extracted_profile.get("full_name", ""),
+        "full_name": (
+            normalize_text(str(body.get("full_name") or ""))
+            or extracted_profile.get("full_name", "")
+            or _name_from_filename(source_name)
+        ),
         "email": normalize_text(str(body.get("email") or "")).lower() or extracted_profile.get("email", "").lower(),
         "phone": normalize_text(str(body.get("phone") or "")) or extracted_profile.get("phone", ""),
         "current_company": normalize_text(str(body.get("current_company") or "")) or extracted_profile.get("current_company", ""),
@@ -731,6 +956,10 @@ async def create_candidate(
     duplicate = await _duplicate_candidate(session, permission_context["tenant_id"], job_id, email)
     if duplicate:
         raise ValueError("candidate_duplicate")
+
+    # 画像与候选人表主字段对齐，避免列表 profile_summary 与详情姓名不一致
+    if isinstance(extracted_profile, dict) and candidate_body.get("full_name"):
+        extracted_profile["full_name"] = candidate_body["full_name"]
 
     candidate = _build_candidate(permission_context, job, candidate_body)
     session.add(candidate)
@@ -754,7 +983,16 @@ async def create_candidate(
                 created_by=_current_user_id(permission_context),
             )
         )
-        screening = await _persist_screening(session, permission_context, candidate=candidate, job=job, resume_text=resume_text)
+        screening = await _persist_screening(
+            session,
+            permission_context,
+            candidate=candidate,
+            job=job,
+            resume_text=resume_text,
+            extraction=(parsed_document or {}).get("metadata", {}).get("extraction"),
+            model=model,
+            progress=progress,
+        )
     else:
         screening = None
 
@@ -788,6 +1026,10 @@ async def create_screening_workflow(
     jd_text = normalize_text(str(body.get("jd_text") or ""))
     if not jd_text:
         raise ValueError("jd_text_required")
+    jd_title = normalize_text(str(body.get("jd_title") or ""))
+    rubric = parse_rubric_json(body.get("rubric_json"), jd_title=jd_title, jd_text=jd_text) or await generate_rubric(
+        jd_title, jd_text
+    )
 
     job = _build_job(
         permission_context,
@@ -801,6 +1043,7 @@ async def create_screening_workflow(
             "tags": "AI,AI人才",
         },
     )
+    job.metadata_json = {**(job.metadata_json or {}), "rubric": rubric}
     session.add(job)
     await session.flush()
 
@@ -812,7 +1055,7 @@ async def create_screening_workflow(
         permission_context,
         job,
         {
-            "full_name": body.get("candidate_name") or extracted_profile.get("full_name") or "候选人",
+            "full_name": body.get("candidate_name") or extracted_profile.get("full_name") or _name_from_filename(source_name) or "候选人",
             "email": body.get("email") or extracted_profile.get("email"),
             "phone": body.get("phone") or extracted_profile.get("phone"),
             "current_company": body.get("current_company") or extracted_profile.get("current_company"),
@@ -857,6 +1100,9 @@ async def create_screening_workflow(
         jd_text=jd_text,
         resume_text=resume_text,
         source_name=source_name,
+        rubric=rubric,
+        jd_title=jd_title,
+        extraction=(parsed_document or {}).get("metadata", {}).get("extraction"),
     )
     screening = await _persist_screening(
         session,
@@ -962,6 +1208,8 @@ async def get_candidate_detail(session: AsyncSession, permission_context: dict[s
             jd_text=_body_text(job.description, job.requirements),
             resume_text=resumes[0].parsed_text,
             source_name=resumes[0].filename,
+            rubric=(job.metadata_json or {}).get("rubric") or None,
+            jd_title=job.title,
         )
     screening_payloads: list[dict[str, Any]] = []
     for row in screenings:
@@ -1228,6 +1476,8 @@ async def rerun_candidate_screening(
     source_name: str = "",
     source_mime_type: str = "",
     source_hash: str = "",
+    model: str | None = None,
+    progress: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     candidate = await _get_candidate(session, permission_context, candidate_id)
     await _ensure_write_access(session, permission_context, candidate.project_id)
@@ -1245,6 +1495,16 @@ async def rerun_candidate_screening(
     if not resume_text:
         raise ValueError("resume_text_required")
     if parsed_document or resume_text_override:
+        # 同步写入提取画像，避免列表页 profile_summary 兜底重 extract 出旧脏值；
+        # 且若画像缺少姓名等主字段，用候选人表当前值补齐（人工修正优先）。
+        rerun_profile = extract_resume_profile(resume_text) if resume_text else {}
+        if isinstance(rerun_profile, dict):
+            if not rerun_profile.get("full_name"):
+                rerun_profile["full_name"] = candidate.full_name
+            if not rerun_profile.get("email"):
+                rerun_profile["email"] = candidate.email
+            if not rerun_profile.get("phone"):
+                rerun_profile["phone"] = candidate.phone
         session.add(
             RecruitResume(
                 tenant_id=candidate.tenant_id,
@@ -1257,11 +1517,21 @@ async def rerun_candidate_screening(
                 route_mode=str((parsed_document or {}).get("metadata", {}).get("route_mode") or "text"),
                 processing_status=str((parsed_document or {}).get("metadata", {}).get("processing_status") or "parsed"),
                 parsed_text=resume_text,
+                profile_json=rerun_profile if isinstance(rerun_profile, dict) else {},
                 metadata_json=(parsed_document or {}).get("metadata") or {},
                 created_by=_current_user_id(permission_context),
             )
         )
-    screening = await _persist_screening(session, permission_context, candidate=candidate, job=job, resume_text=resume_text)
+    screening = await _persist_screening(
+        session,
+        permission_context,
+        candidate=candidate,
+        job=job,
+        resume_text=resume_text,
+        extraction=(parsed_document or {}).get("metadata", {}).get("extraction"),
+        model=model,
+        progress=progress,
+    )
     await session.commit()
     await session.refresh(screening)
     return serialize_screening(screening)
@@ -1300,7 +1570,7 @@ async def dashboard_summary(session: AsyncSession, permission_context: dict[str,
     profiles_map = await _latest_resume_profiles_map(session, permission_context["tenant_id"], [candidate.id for candidate in candidates])
     pipeline_counter = Counter(candidate.current_stage for candidate in candidates)
     source_counter = Counter(candidate.source_channel or "manual" for candidate in candidates)
-    strong_count = sum(1 for screening in latest_map.values() if screening.total_score >= 85)
+    strong_count = sum(1 for screening in latest_map.values() if screening.total_score >= STRONG_MATCH_SCORE)
     jobs_by_id = {job.id: job for job in jobs}
     recent_candidates = sorted(candidates, key=lambda item: item.updated_at, reverse=True)[:6]
     return {
@@ -1347,7 +1617,7 @@ async def analytics_summary(session: AsyncSession, permission_context: dict[str,
         passed = sum(
             1
             for candidate in job_candidates
-            if (screenings_by_candidate.get(candidate.id) and screenings_by_candidate[candidate.id].total_score >= 70)
+            if (screenings_by_candidate.get(candidate.id) and screenings_by_candidate[candidate.id].total_score >= INTERVIEW_MATCH_SCORE)
         )
         offers = sum(1 for candidate in job_candidates if candidate.current_stage == "offer")
         by_job.append(

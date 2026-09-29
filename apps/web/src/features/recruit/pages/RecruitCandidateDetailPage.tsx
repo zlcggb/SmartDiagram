@@ -1,10 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { CalendarPlus, FilePenLine, FileSearch, RefreshCw, UsersRound } from 'lucide-react'
+import { CalendarPlus, Coins, Download, FilePenLine, FileSearch, LoaderCircle, RefreshCw, Sparkles, UsersRound } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 
+import { AnalysisProgress, ModelPicker, ResumeDropZone } from '@/features/recruit/components/RecruitAnalysisStream'
+import { applyStreamEvent, EMPTY_RUN, streamErrorMessage, type AnalysisRun } from '@/features/recruit/lib/analysisStream'
 import { ErrorBanner, RecruitPage, ScoreBadge } from '@/features/recruit/components/RecruitPrimitives'
 import { RecruitScoreReport } from '@/features/recruit/components/RecruitScoreReport'
+import { Avatar, ScoreRing, StageChip } from '@/features/recruit/components/RecruitUI'
 import type {
   CreateInterviewInput,
   RecruitCandidateSummary,
@@ -13,6 +16,9 @@ import type {
   UpdateRecruitCandidateProfileInput,
 } from '@/features/recruit/lib/types'
 import { getInterviewOpportunity } from '@/features/recruit/lib/screening'
+import { formatTokens, MODEL_ROLE_LABELS } from '@/features/recruit/lib/format'
+import { downloadScreeningReport } from '@/features/recruit/lib/reportPdf'
+import { createResumeDraft, resumeLabErrorMessage } from '@/features/recruit/lib/resumeLab'
 import { useRecruitStore } from '@/features/recruit/store/recruitStore'
 
 const DEFAULT_INTERVIEW: CreateInterviewInput = {
@@ -67,6 +73,7 @@ export function RecruitCandidateDetailPage() {
     moveCandidateStage,
     addInterview,
     rerunScreening,
+    clearError,
   } = useRecruitStore(useShallow((state) => ({
     candidateDetail: state.candidateDetail,
     candidates: state.candidates,
@@ -78,20 +85,36 @@ export function RecruitCandidateDetailPage() {
     moveCandidateStage: state.moveCandidateStage,
     addInterview: state.addInterview,
     rerunScreening: state.rerunScreening,
+    clearError: state.clearError,
   })))
   const [stagesByCandidate, setStagesByCandidate] = useState<Record<string, string>>({})
   const [resumeTextByCandidate, setResumeTextByCandidate] = useState<Record<string, string>>({})
   const [resumeFileByCandidate, setResumeFileByCandidate] = useState<Record<string, File | null>>({})
   const [interviewByCandidate, setInterviewByCandidate] = useState<Record<string, CreateInterviewInput>>({})
   const [profileSaveError, setProfileSaveError] = useState('')
+  const [rerunModel, setRerunModel] = useState('')
+  const [rerunRun, setRerunRun] = useState<AnalysisRun | null>(null)
+  const [rerunError, setRerunError] = useState('')
+  const [rerunOpen, setRerunOpen] = useState(false)
+  const [openingLab, setOpeningLab] = useState(false)
+  const [labError, setLabError] = useState('')
+  const abortRef = useRef<AbortController | null>(null)
   const profileScrollRef = useRef<HTMLDivElement>(null)
   const assessmentScrollRef = useRef<HTMLDivElement>(null)
   const candidate = candidateDetail?.candidate
   const profile = candidateDetail?.resumes[0]?.profile
+  // 姓名以画像为准：画像是人工校正（编辑档案）的载体；
+  // candidate.full_name 可能是 PDF 误解析的标签行（如“籍贯：”）
+  const displayName = profile?.full_name || candidate?.full_name || ''
   const profileEditorOpen = searchParams.get('edit') === 'profile'
 
   useEffect(() => {
     if (candidateId) void loadCandidateDetail(candidateId)
+    return () => {
+      abortRef.current?.abort()
+      setRerunRun(null)
+      setRerunError('')
+    }
   }, [candidateId, loadCandidateDetail])
 
   useLayoutEffect(() => {
@@ -125,7 +148,26 @@ export function RecruitCandidateDetailPage() {
 
   async function handleRerunScreening() {
     if (!candidateDetail) return
-    await rerunScreening(candidateId, selectedResumeText, selectedResumeFile)
+    setRerunError('')
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    setRerunRun(EMPTY_RUN)
+    try {
+      // A freshly uploaded file supersedes the stored (possibly garbled) text unless the user edited it.
+      const editedText = resumeTextByCandidate[candidateId]
+      await rerunScreening(
+        candidateId,
+        { resumeText: selectedResumeFile && editedText === undefined ? '' : selectedResumeText, file: selectedResumeFile, model: rerunModel.trim() },
+        (streamEvent) => setRerunRun((current) => applyStreamEvent(current, streamEvent)),
+        controller.signal,
+      )
+      setRerunRun(null)
+    } catch (rerunFailure) {
+      if (controller.signal.aborted) return
+      setRerunError(streamErrorMessage(rerunFailure))
+      clearError()
+    }
   }
 
   async function handleAddInterview() {
@@ -166,13 +208,13 @@ export function RecruitCandidateDetailPage() {
       description="切换候选人后，画像与 AI 评估会在各自面板中独立滚动。"
     >
       <div className="recruit-candidate-detail">
-        <ErrorBanner message={error} />
+        <ErrorBanner message={error || labError} />
         {candidateDetail && candidate ? (
           <>
             <CandidateSwitcher
               candidates={candidateOptions}
               currentCandidateId={candidateId}
-              currentCandidateName={profile?.full_name || candidate.full_name}
+              currentCandidateName={displayName}
               onSelect={(id) => navigate(`/recruit/candidates/${id}`)}
             />
 
@@ -207,12 +249,11 @@ export function RecruitCandidateDetailPage() {
                   ) : null}
 
                   <div className="recruit-candidate-identity">
-                    <span className="recruit-candidate-identity__avatar" aria-hidden="true">
-                      {(profile?.full_name || candidate.full_name || '候').trim().slice(0, 1)}
-                    </span>
+                    <Avatar name={displayName || '候'} size={52} />
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h4>{profile?.full_name || candidate.full_name || '候选人'}</h4>
+                        <h4>{displayName || '候选人'}</h4>
+                        <StageChip stage={candidate.current_stage} />
                         {profile?.headline ? <span className="recruit-chip">{profile.headline}</span> : null}
                       </div>
                       {profile?.summary ? <p>{profile.summary}</p> : null}
@@ -288,23 +329,27 @@ export function RecruitCandidateDetailPage() {
                     </div>
                   </details>
 
-                  <details className="recruit-disclosure">
+                  <details className="recruit-disclosure" onToggle={(event) => setRerunOpen(event.currentTarget.open)}>
                     <summary><RefreshCw size={16} /> 上传新版简历并重新评分</summary>
-                    <div className="recruit-disclosure__content">
-                      <p className="mb-3 text-xs text-slate-400">用于补充简历文本或替换 PDF；新结果会保留为一条独立初筛记录。</p>
+                    <div className="recruit-disclosure__content recruit-form">
+                      <p className="text-xs text-slate-400">用于补充简历文本或替换 PDF；新结果会保留为一条独立初筛记录。</p>
                       <textarea
                         value={selectedResumeText}
                         onChange={(event) => setResumeTextByCandidate((current) => ({ ...current, [candidateId]: event.target.value }))}
                         rows={7}
                       />
-                      <input
-                        type="file"
-                        accept=".pdf,.docx,.txt,.md"
-                        onChange={(event) => setResumeFileByCandidate((current) => ({ ...current, [candidateId]: event.target.files?.[0] ?? null }))}
+                      <ResumeDropZone
+                        file={selectedResumeFile}
+                        caption="不上传则使用上方文本；上传后以新简历为准。"
+                        onFile={(file) => setResumeFileByCandidate((current) => ({ ...current, [candidateId]: file }))}
+                        onReject={setRerunError}
                       />
-                      <button type="button" className="recruit-button recruit-button--primary mt-3" onClick={() => void handleRerunScreening()}>
-                        <RefreshCw size={16} />
-                        重新生成 AI 评分
+                      <ModelPicker id="recruit-rerun-model-options" enabled={rerunOpen} value={rerunModel} onChange={setRerunModel} />
+                      {rerunRun ? <AnalysisProgress run={rerunRun} /> : null}
+                      {rerunError ? <p className="recruit-form-error">{rerunError}</p> : null}
+                      <button type="button" disabled={Boolean(rerunRun)} className="recruit-button recruit-button--primary" onClick={() => void handleRerunScreening()}>
+                        <RefreshCw size={16} className={rerunRun ? 'animate-spin' : undefined} />
+                        {rerunRun ? 'AI 分析中…' : '重新生成 AI 评分'}
                       </button>
                     </div>
                   </details>
@@ -318,7 +363,29 @@ export function RecruitCandidateDetailPage() {
                     <h3>评分与面试</h3>
                     <p>证据、缺口与下一轮验证重点。</p>
                   </div>
-                  <span className="recruit-pane-status">{formatRanking(candidate.ranking)}</span>
+                  <div className="recruit-pane-actions">
+                    <button
+                      type="button"
+                      className="recruit-button"
+                      disabled={openingLab}
+                      title="在简历优化工作台中用 AI 改写并反复评分"
+                      onClick={async () => {
+                        setOpeningLab(true)
+                        setLabError('')
+                        try {
+                          const draft = await createResumeDraft({ candidate_id: candidateId })
+                          navigate(`/recruit/resume-lab/${draft.id}`)
+                        } catch (reason) {
+                          setLabError(resumeLabErrorMessage(reason))
+                          setOpeningLab(false)
+                        }
+                      }}
+                    >
+                      {openingLab ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      {openingLab ? '正在载入…' : 'AI 优化简历'}
+                    </button>
+                    <span className="recruit-pane-status">{formatRanking(candidate.ranking)}</span>
+                  </div>
                 </header>
 
                 <div ref={assessmentScrollRef} className="recruit-candidate-pane__scroll">
@@ -330,7 +397,7 @@ export function RecruitCandidateDetailPage() {
                         <span>{interviewOpportunity.detail}</span>
                       </div>
                       <div className="recruit-decision-card__actions">
-                        <ScoreBadge score={latestScreening?.total_score} maxScore={latestScreening?.max_score} />
+                        <ScoreRing score={latestScreening?.total_score} max={latestScreening?.max_score} size={64} stroke={5} />
                         {interviewOpportunity.shouldInterview ? (
                           <button type="button" className="recruit-button recruit-button--primary" onClick={() => void moveCandidateStage(candidateId, 'interview')}>
                             <CalendarPlus size={16} />
@@ -351,7 +418,15 @@ export function RecruitCandidateDetailPage() {
                     </div>
                     <div className="space-y-3">
                       {candidateDetail.screenings.map((screening, index) => (
-                        <ScreeningRecord key={screening.screening_id} screening={screening} open={index === 0} />
+                        <ScreeningRecord
+                          key={screening.screening_id}
+                          screening={screening}
+                          open={index === 0}
+                          onExport={() => downloadScreeningReport(screening, {
+                            candidateName: displayName,
+                            jobTitle: candidateDetail.job?.title || '',
+                          })}
+                        />
                       ))}
                     </div>
                   </section>
@@ -420,9 +495,9 @@ function CandidateSwitcher({
       <div className="recruit-candidate-switcher__list">
         {candidates.map((item) => {
           const isActive = item.candidate_id === currentCandidateId
-          const displayName = isActive
-            ? currentCandidateName || item.profile_summary?.full_name || item.full_name
-            : item.profile_summary?.full_name || item.full_name
+          // 画像姓名优先（人工校正在画像上），候选人表 full_name 兜底
+          const itemName = item.profile_summary?.full_name || item.full_name || ''
+          const itemDisplayName = isActive ? currentCandidateName || itemName : itemName
           return (
             <button
               key={item.candidate_id}
@@ -432,7 +507,7 @@ function CandidateSwitcher({
               onClick={() => onSelect(item.candidate_id)}
             >
               <span className="recruit-candidate-switcher__copy">
-                <strong>{displayName || '未命名候选人'}</strong>
+                <strong>{itemDisplayName || '未命名候选人'}</strong>
                 <span>{item.current_company || item.source_channel || '候选人档案'}</span>
               </span>
             </button>
@@ -443,7 +518,9 @@ function CandidateSwitcher({
   )
 }
 
-function ScreeningRecord({ screening, open }: { screening: RecruitScreeningSummary; open: boolean }) {
+function ScreeningRecord({ screening, open, onExport }: { screening: RecruitScreeningSummary; open: boolean; onExport: () => Promise<void> }) {
+  const isRubricReport = screening.score_report?.model === 'rubric-v3'
+  const [exporting, setExporting] = useState(false)
   return (
     <details className="recruit-screening-record" open={open}>
       <summary>
@@ -451,10 +528,38 @@ function ScreeningRecord({ screening, open }: { screening: RecruitScreeningSumma
           <strong>{screening.recommendation}</strong>
           <em>{screening.created_at}</em>
         </span>
-        <ScoreBadge score={screening.total_score} maxScore={screening.max_score} />
+        <span className="flex items-center gap-2">
+          {screening.ai_usage ? (
+            <span
+              className="rx-usage-pill"
+              title={screening.ai_usage.calls.map((call) => `${MODEL_ROLE_LABELS[call.role] || call.role} · ${call.model} · ${call.total_tokens}`).join('\n')}
+            >
+              <Coins size={12} />
+              {screening.ai_usage.estimated ? '≈' : ''}{formatTokens(screening.ai_usage.total_tokens)} tokens
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="recruit-button recruit-button--quiet"
+            title="导出分析报告为 PDF"
+            disabled={exporting}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              setExporting(true)
+              onExport()
+                .catch((exportError) => window.alert(exportError instanceof Error ? exportError.message : '导出 PDF 失败'))
+                .finally(() => setExporting(false))
+            }}
+          >
+            <Download size={14} />
+            {exporting ? '导出中…' : '导出 PDF'}
+          </button>
+          <ScoreBadge score={screening.total_score} maxScore={screening.max_score} />
+        </span>
       </summary>
       <div className="recruit-screening-record__content">
-        <p className="recruit-screening-record__summary">{screening.overall_summary}</p>
+        {isRubricReport ? null : <p className="recruit-screening-record__summary">{screening.overall_summary}</p>}
         {screening.score_report ? (
           <RecruitScoreReport
             report={screening.score_report}
@@ -474,7 +579,7 @@ function ScreeningRecord({ screening, open }: { screening: RecruitScreeningSumma
             ))}
           </div>
         )}
-        <div className="grid gap-3 md:grid-cols-3">
+        {isRubricReport ? null : <div className="grid gap-3 md:grid-cols-3">
           {Object.entries(SCORE_BREAKDOWN_LABELS).map(([key, label]) => {
             const value = screening.score_breakdown[key as keyof typeof screening.score_breakdown] || 0
             return (
@@ -489,7 +594,7 @@ function ScreeningRecord({ screening, open }: { screening: RecruitScreeningSumma
               </div>
             )
           })}
-        </div>
+        </div>}
       </div>
     </details>
   )
@@ -661,6 +766,7 @@ function createCandidateProfileDraft(
   profile?: RecruitResumeProfile,
 ): CandidateProfileDraft {
   const baseProfile: RecruitResumeProfile = {
+    // 画像是人工校正的载体，优先；candidate.* 仅在画像缺失时兜底
     full_name: profile?.full_name || candidate.full_name,
     email: profile?.email || candidate.email,
     phone: profile?.phone || candidate.phone,

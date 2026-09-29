@@ -1,138 +1,16 @@
-"""AI-assisted resume screening helpers for the recruiting demo module."""
+"""Resume text/profile helpers and the screening entry point for the recruiting module."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
-from typing import Any
+from collections import OrderedDict
+from typing import Any, Awaitable, Callable
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from app.services.ats_scoring_service import SKILL_TERMS, extract_keywords
 
-from app.core.llm import create_llm, extract_text_content
-from app.services.ats_scoring_service import (
-    SKILL_TERMS,
-    calculate_ats_scores,
-    combine_scores,
-    extract_keywords,
-)
-
-SCREENING_DIMENSIONS = [
-    {
-        "key": "education_fit",
-        "label": "教育背景与专业基础",
-        "max_score": 15,
-        "keywords": [
-            "本科",
-            "硕士",
-            "博士",
-            "研究生",
-            "计算机",
-            "软件",
-            "电子",
-            "信息",
-            "工程",
-            "数学",
-            "物理",
-        ],
-        "sections": ["education"],
-    },
-    {
-        "key": "experience_fit",
-        "label": "相关经历与岗位匹配",
-        "max_score": 25,
-        "keywords": [
-            "工作",
-            "实习",
-            "业务",
-            "系统",
-            "交付",
-            "上线",
-            "开发",
-            "工程",
-            "需求",
-        ],
-        "sections": ["experience", "projects", "competitions"],
-    },
-    {
-        "key": "technical_skills",
-        "label": "技术技能与工具覆盖",
-        "max_score": 25,
-        "keywords": [
-            "ai",
-            "llm",
-            "agent",
-            "rag",
-            "react",
-            "vue",
-            "typescript",
-            "python",
-            "c++",
-            "fastapi",
-            "sql",
-            "linux",
-            "docker",
-            "自动化",
-            "工作流",
-        ],
-        "sections": ["skills", "experience", "projects"],
-    },
-    {
-        "key": "project_evidence",
-        "label": "项目深度与可验证成果",
-        "max_score": 20,
-        "keywords": [
-            "项目",
-            "负责",
-            "核心",
-            "独立",
-            "算法",
-            "方案",
-            "验证",
-            "实现",
-            "部署",
-            "优化",
-        ],
-        "sections": ["projects", "experience", "competitions"],
-    },
-    {
-        "key": "delivery_impact",
-        "label": "交付结果与影响力",
-        "max_score": 10,
-        "keywords": [
-            "提升",
-            "降低",
-            "减少",
-            "增长",
-            "加速",
-            "达到",
-            "完成",
-            "落地",
-            "上线",
-            "倍",
-            "%",
-        ],
-        "sections": ["experience", "projects", "competitions", "awards"],
-    },
-    {
-        "key": "ownership_collaboration",
-        "label": "主动性与协作能力",
-        "max_score": 10,
-        "keywords": [
-            "沟通",
-            "协作",
-            "跨团队",
-            "团队",
-            "组织",
-            "协调",
-            "主导",
-            "负责人",
-            "lead",
-            "owner",
-            "管理",
-        ],
-        "sections": ["experience", "projects", "competitions", "awards"],
-    },
-]
+_SCREENING_CACHE: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
 
 PROFILE_SECTION_ALIASES = {
     "summary": (
@@ -201,8 +79,8 @@ PROFILE_SECTION_ALIASES = {
 PROFILE_SECTION_NAMES = tuple(PROFILE_SECTION_ALIASES.keys())
 
 _RESUME_DATE_RE = re.compile(
-    r"(?<!\d)(?:(?:19|20)\d{2}\s*[./年-]\s*(?:\d{1,2})|(?:19|20)\d{2})(?!\d)"
-    r"(?:\s*[~～\-—至到]\s*(?:(?:(?:19|20)\d{2}\s*[./年-]\s*(?:\d{1,2}))|"
+    r"(?<!\d)(?:(?:19|20)\d{2}\s*[./年-]\s*(?:\d{1,2})(?:\s*月)?|(?:19|20)\d{2})(?!\d)"
+    r"(?:\s*[~～\-—–至到]\s*(?:(?:(?:19|20)\d{2}\s*[./年-]\s*(?:\d{1,2})(?:\s*月)?)|"
     r"(?:19|20)\d{2}|至今|现在|今))?"
 )
 _DEGREE_RE = re.compile(
@@ -210,6 +88,34 @@ _DEGREE_RE = re.compile(
     re.IGNORECASE,
 )
 _BULLET_RE = re.compile(r"^\s*(?:[-*•●▪◦※⚫]|\d+[)、])\s*")
+_NON_NAME_LINES = {"个人简历", "简历", "基本信息", "个人信息", "联系方式", "求职意向", "教育背景", "项目经历", "专业能力", "荣誉奖项", "技能证书"}
+# OCR 按列读表格时“姓 名 ： 籍 贯 ：”这种行会把下一个标签误捕为姓名；
+# 这些词永远不是姓名，命中即拒绝。
+_NAME_LABEL_BLOCKLIST = {
+    "籍贯", "年龄", "性别", "邮箱", "电话", "微信", "地址", "政治面貌",
+    "出生年月", "生日", "民族", "学历", "学校", "专业", "求职意向", "现居",
+}
+
+
+def _is_plausible_name(value: str) -> bool:
+    """Reject label words captured as names (OCR column-split tables)."""
+    compact = value.replace(" ", "")
+    if not compact or compact in _NAME_LABEL_BLOCKLIST:
+        return False
+    if re.search(r"[:：@＠]", value):
+        return False
+    return True
+
+
+def _clean_name_candidate(value: str) -> str:
+    """姓名候选清洗：剥离尾随的标签词（如「张三 籍贯」→「张三」），并做可信度校验。"""
+    tokens = [token for token in value.split() if token]
+    while tokens and tokens[-1] in _NAME_LABEL_BLOCKLIST:
+        tokens.pop()
+    cleaned = " ".join(tokens) if len(tokens) > 1 else (tokens[0] if tokens else "")
+    if cleaned and re.fullmatch(r"(?:[\u4e00-\u9fff]\s)+[\u4e00-\u9fff]", cleaned):
+        cleaned = cleaned.replace(" ", "")
+    return cleaned if cleaned and _is_plausible_name(cleaned) else ""
 
 
 def normalize_text(value: str | None) -> str:
@@ -229,8 +135,12 @@ def compile_resume_text(parsed_document: dict[str, Any] | None, manual_text: str
         locator = str(block.get("source_locator") or "").strip()
         parsed_parts.append(f"[{locator}]\n{text}" if locator else text)
     parsed_text = "\n\n".join(parsed_parts).strip()
-    if manual and parsed_text and manual == parsed_text:
-        return parsed_text[:18_000].rstrip() + ("\n\n[内容已截断]" if len(parsed_text) > 18_000 else "")
+    if manual and parsed_text:
+        # The client usually echoes the previewed text back; avoid doubling it.
+        if parsed_text in manual:
+            parsed_text = ""
+        elif manual in parsed_text:
+            manual = ""
     parts = [item for item in (manual, parsed_text) if item]
     combined = "\n\n".join(parts).strip()
     if len(combined) > 18_000:
@@ -529,6 +439,17 @@ def _extract_skill_terms(skill_evidence: list[dict[str, str]], full_text: str) -
     return terms[:32]
 
 
+def _field_value(value: str) -> str:
+    """Value of a `标签：值` field, cut before the next label; empty if it is itself just a label."""
+
+    cleaned = re.split(r"\s+[\u4e00-\u9fff]{2,4}\s*[:：]", normalize_text(value), maxsplit=1)[0].strip(" |，,")
+    if not cleaned or re.search(r"[:：]", cleaned):
+        return ""
+    if re.fullmatch(r"(?:[\u4e00-\u9fff]\s)+[\u4e00-\u9fff]", cleaned):
+        cleaned = cleaned.replace(" ", "")
+    return cleaned
+
+
 def extract_resume_profile(resume_text: str) -> dict[str, Any]:
     """Extract high-signal resume structure and keep source evidence local."""
 
@@ -537,12 +458,12 @@ def extract_resume_profile(resume_text: str) -> dict[str, Any]:
     sections = _group_profile_sections(lines)
     header_text = "\n".join(str(item["text"]) for item in sections.get("header", []))
     email_match = re.search(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", text)
-    phone_match = re.search(r"(?<!\d)(?:\+?86[\s-]?)?1[3-9]\d{9}(?!\d)", text)
+    phone_match = re.search(r"(?<!\d)(?:\+?86[\s-]?)?1[3-9]\d(?:[\s-]?\d{4}){2}(?!\d)", text)
 
     profile: dict[str, Any] = {
         "full_name": "",
         "email": email_match.group(0) if email_match else "",
-        "phone": phone_match.group(0) if phone_match else "",
+        "phone": re.sub(r"[\s-]", "", phone_match.group(0)) if phone_match else "",
         "current_company": "",
         "location": "",
         "headline": "",
@@ -576,22 +497,63 @@ def extract_resume_profile(resume_text: str) -> dict[str, Any]:
     }
 
     labeled_name = re.search(
-        r"(?:姓\s*名|name)\s*[:：]\s*"
-        r"([^\n:：|]+?)(?=\s+(?:个人)?(?:邮箱|email)|\s+(?:联系电话|电话|phone)|\s+政治面貌|$)",
+        r"(?:姓\s*名|name)[ \t]*[:：][ \t]*([^\n:：|]+)",
         text,
         re.IGNORECASE,
     )
     if labeled_name:
-        profile["full_name"] = normalize_text(labeled_name.group(1))
+        candidate_name = _clean_name_candidate(_field_value(labeled_name.group(1)))
+        if candidate_name:
+            profile["full_name"] = candidate_name
+
+    # OCR 把表格按列读出时，标签与值会分成相邻两行：
+    #   “姓 名 ： 籍 贯 ：” → 下一行 “肖 雨 航 江 苏 扬 州”
+    # 此时姓名是标签行下一行的第一个词（去除字间空格后 2-4 个汉字）。
+    if not profile["full_name"]:
+        raw_lines = [line.strip() for line in text.split("\n") if line.strip()]
+        for index, raw in enumerate(raw_lines[:-1]):
+            if not re.search(r"姓\s*名\s*[:：]", raw):
+                continue
+            # 同一行标签后已有可用值时跳过（交给上面的正则处理）
+            inline = re.search(r"姓\s*名\s*[:：]\s*([^\n:：]+)", raw)
+            if inline and _clean_name_candidate(_field_value(inline.group(1))):
+                continue
+            for following in raw_lines[index + 1 : index + 5]:
+                # 跳过仍含标签冒号的行（如「年 龄 ： 邮 箱 ：」也是标签行）
+                if re.search(r"[:：]", following):
+                    continue
+                # 值行可能是「肖雨航 江苏扬州」，也可能是 OCR 逐字分开的「肖 雨 航 江 苏 扬 州」。
+                tokens = [token for token in following.split() if token]
+                first = tokens[0].replace(" ", "") if tokens else ""
+                if re.fullmatch(r"[\u4e00-\u9fff]{2,4}", first) and first not in _NAME_LABEL_BLOCKLIST and first not in _NON_NAME_LINES:
+                    # 首个 token 本身就是完整姓名
+                    profile["full_name"] = first
+                    break
+                # 逐字分隔：合并连续单字 token；2-4 字取全部，更长则取前 3 字（姓名最长见 3 字）
+                if all(re.fullmatch(r"[\u4e00-\u9fff]", token) for token in tokens[:2]) and len(tokens) >= 2:
+                    merged = ""
+                    for token in tokens:
+                        if not re.fullmatch(r"[\u4e00-\u9fff]", token):
+                            break
+                        merged += token
+                    candidate = merged if 2 <= len(merged) <= 4 else (merged[:3] if len(merged) > 4 else "")
+                    if candidate and candidate not in _NAME_LABEL_BLOCKLIST and candidate not in _NON_NAME_LINES:
+                        profile["full_name"] = candidate
+                        break
+            if profile["full_name"]:
+                break
 
     for line in lines[:40]:
         value = str(line["text"])
         labeled_name = re.match(r"^(?:姓\s*名|name)\s*[:：]\s*(.+)$", value, re.IGNORECASE)
         if labeled_name and not profile["full_name"]:
-            profile["full_name"] = labeled_name.group(1).strip()
-            break
+            candidate_name = _clean_name_candidate(_field_value(labeled_name.group(1)))
+            if candidate_name:
+                profile["full_name"] = candidate_name
+                break
+            continue
         if not profile["full_name"] and re.fullmatch(r"[\u4e00-\u9fff]{2,4}", value):
-            if value not in {"个人简历", "基本信息", "教育背景", "项目经历", "专业能力", "荣誉奖项"}:
+            if value not in _NON_NAME_LINES and value.replace(" ", "") not in _NAME_LABEL_BLOCKLIST and not _section_from_line(value)[0]:
                 profile["full_name"] = value
                 break
         if not profile["full_name"] and re.fullmatch(r"[A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,2}", value):
@@ -604,9 +566,10 @@ def extract_resume_profile(resume_text: str) -> dict[str, Any]:
         "location": ("所在地", "城市", "地址", "location", "city", "籍\\s*贯"),
     }.items():
         for label in labels:
-            match = re.search(rf"(?:{label})\s*[:：]\s*([^\n|]+)", text, re.IGNORECASE)
-            if match:
-                profile[key] = normalize_text(match.group(1))
+            match = re.search(rf"(?:{label})[ \t]*[:：][ \t]*([^\n|]+)", text, re.IGNORECASE)
+            value = _field_value(match.group(1)) if match else ""
+            if value:
+                profile[key] = value
                 break
 
     profile["summary"] = normalize_text(
@@ -621,16 +584,6 @@ def extract_resume_profile(resume_text: str) -> dict[str, Any]:
     return profile
 
 
-def _bucket_from_score(score: int) -> str:
-    if score >= 85:
-        return "进入面试"
-    if score >= 70:
-        return "人工复核"
-    if score >= 60:
-        return "进入人才库"
-    return "暂不推进"
-
-
 def _contains_term(term: str, text_lower: str) -> bool:
     normalized = term.strip().lower()
     if not normalized:
@@ -640,502 +593,31 @@ def _contains_term(term: str, text_lower: str) -> bool:
     return bool(re.search(rf"(?<!\w){re.escape(normalized)}(?!\w)", text_lower))
 
 
-def _keyword_hits(text: str, keywords: list[str]) -> list[str]:
-    lowered = normalize_text(text).lower()
-    return [keyword for keyword in keywords if _contains_term(keyword, lowered)]
-
-
-def _profile_section_text(profile: dict[str, Any], sections: list[str]) -> str:
-    evidence: list[str] = []
-    for section in sections:
-        evidence.extend(
-            str(item.get("text") or "")
-            for item in (profile.get("section_evidence") or {}).get(section, [])
-        )
-    return "\n".join(item for item in evidence if item)
-
-
-def _dimension_evidence(
-    profile: dict[str, Any],
-    *,
-    sections: list[str],
-    terms: list[str],
-    limit: int = 3,
-) -> list[dict[str, str]]:
-    evidence: list[dict[str, str]] = []
-    for section in sections:
-        for item in (profile.get("section_evidence") or {}).get(section, []):
-            text = normalize_text(str(item.get("text") or ""))
-            if not text:
-                continue
-            if _keyword_hits(text, terms) or not evidence:
-                evidence.append(
-                    {
-                        "label": "简历证据",
-                        "text": text[:360],
-                        "source_locator": normalize_text(str(item.get("source_locator") or "")),
-                        "kind": "resume",
-                    }
-                )
-            if len(evidence) >= limit:
-                return evidence
-    return evidence
-
-
-def _build_dimension_scores(
-    *,
-    profile: dict[str, Any],
-    resume_text: str,
-    jd_text: str,
-    ats_scores: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Score only resume evidence; the JD is used to define the comparison terms."""
-
-    jd_keywords = extract_keywords(jd_text)
-    dimensions: list[dict[str, Any]] = []
-    for dimension in SCREENING_DIMENSIONS:
-        sections = list(dimension["sections"])
-        section_text = _profile_section_text(profile, sections) or resume_text
-        fixed_hits = _keyword_hits(section_text, list(dimension["keywords"]))
-        jd_hits = _keyword_hits(section_text, jd_keywords)
-        has_section = any(
-            (profile.get("section_presence") or {}).get(section, False)
-            for section in sections
-        )
-        signal_ratio = len(fixed_hits) / max(1, min(len(dimension["keywords"]), 8))
-        jd_ratio = len(jd_hits) / max(1, min(len(jd_keywords), 6))
-        if dimension["key"] == "technical_skills":
-            ratio = float((ats_scores.get("score_breakdown") or {}).get("skills_coverage") or 0) / 100
-        else:
-            ratio = (0.35 if has_section else 0.0) + signal_ratio * 0.35 + jd_ratio * 0.30
-        ratio = max(0.0, min(1.0, ratio))
-        score = int(round(float(dimension["max_score"]) * ratio))
-
-        evidence_terms = list(dict.fromkeys([*jd_keywords, *dimension["keywords"]]))
-        evidence = _dimension_evidence(profile, sections=sections, terms=evidence_terms)
-        gaps: list[str] = []
-        if not has_section:
-            gaps.append(f"未提取到{dimension['label']}对应的简历段落。")
-        if not jd_hits:
-            gaps.append("简历中没有找到与当前 JD 关键词直接对应的证据。")
-        if score < dimension["max_score"] * 0.55 and has_section:
-            gaps.append("有相关段落，但深度、结果或岗位关联度需要面试核实。")
-        reason_parts = [
-            f"简历信号 {', '.join(fixed_hits[:4]) or '无'}",
-            f"与 JD 的直接交集 {', '.join(jd_hits[:4]) or '无'}",
-        ]
-        if evidence:
-            reason_parts.append(f"引用 {len(evidence)} 条简历证据")
-        dimensions.append(
-            {
-                "key": dimension["key"],
-                "label": dimension["label"],
-                "score": score,
-                "max_score": int(dimension["max_score"]),
-                "weight": int(dimension["max_score"]),
-                "reason": "；".join(reason_parts) + "。",
-                "evidence": evidence,
-                "gaps": gaps[:3],
-                "matched_signals": list(dict.fromkeys([*fixed_hits, *jd_hits]))[:8],
-            }
-        )
-    return dimensions
-
-
-def _interview_questions(
-    *,
-    dimension_scores: list[dict[str, Any]],
-    missing_keywords: list[str],
-    profile: dict[str, Any],
-) -> list[str]:
-    questions: list[str] = []
-    weak_dimensions = [
-        item for item in dimension_scores if item["score"] < item["max_score"] * 0.6
-    ]
-    for item in weak_dimensions[:3]:
-        evidence = (item.get("evidence") or [{}])[0].get("text")
-        if evidence:
-            questions.append(
-                f"请围绕简历中的“{str(evidence)[:80]}”说明你本人负责的部分、技术取舍和最终结果。"
-            )
-        else:
-            questions.append(
-                f"简历对“{item['label']}”证据不足，请提供一个可复盘的真实案例和量化结果。"
-            )
-    for keyword in missing_keywords[:3]:
-        questions.append(
-            f"当前 JD 关注“{keyword}”，简历没有直接证据；你是否实际使用过？请说明场景、个人贡献和产出。"
-        )
-    if not questions and profile.get("projects"):
-        questions.append("请挑选一个最能代表你的项目，从目标、个人贡献、难点和结果四步复盘。")
-    if not questions:
-        questions.append("请说明你最近一次从需求澄清到交付上线的完整经历，以及如何验证结果。")
-    return list(dict.fromkeys(questions))[:6]
-
-
-def _build_score_report(
-    *,
-    candidate_name: str,
-    jd_text: str,
-    resume_text: str,
-    profile: dict[str, Any],
-    ats_scores: dict[str, Any],
-    dimension_scores: list[dict[str, Any]],
-) -> dict[str, Any]:
-    dimension_total = sum(int(item["score"]) for item in dimension_scores)
-    breakdown = ats_scores.get("score_breakdown") or {}
-    ats_score = round(
-        float(breakdown.get("keyword_match") or 0) * 0.55
-        + float(breakdown.get("skills_coverage") or 0) * 0.25
-        + float(breakdown.get("section_completeness") or 0) * 0.20,
-        1,
-    )
-    total_score = combine_scores(dimension_total, ats_scores)
-    recommendation = _bucket_from_score(total_score)
-    should_interview = total_score >= 70
-    priority = "high" if total_score >= 85 else "review" if total_score >= 70 else "pool" if total_score >= 60 else "low"
-    core_sections = ("education", "experience", "projects", "skills")
-    evidence_coverage = round(
-        sum(
-            1
-            for section in core_sections
-            if (profile.get("section_presence") or {}).get(section, False)
-        )
-        / len(core_sections)
-        * 100,
-        1,
-    )
-    confidence = round(min(100.0, evidence_coverage * 0.7 + min(len(resume_text) / 1800, 1.0) * 30), 1)
-    missing_keywords = list(ats_scores.get("missing_keywords") or [])
-    strengths = [
-        item["label"]
-        for item in dimension_scores
-        if item["score"] >= item["max_score"] * 0.7
-    ][:4]
-    if not strengths and profile.get("education"):
-        strengths.append("简历至少包含可核验的教育背景")
-    gaps = list(
-        dict.fromkeys(
-            [
-                *missing_keywords[:5],
-                *[
-                    gap
-                    for item in dimension_scores
-                    for gap in item.get("gaps") or []
-                ],
-            ]
-        )
-    )[:6]
-    risks = [
-        item["label"]
-        for item in dimension_scores
-        if item["score"] < item["max_score"] * 0.55
-    ][:4]
-    if not risks:
-        risks.append("核心经历仍需通过面试核验真实性、个人贡献和交付深度。")
-    interview_questions = _interview_questions(
-        dimension_scores=dimension_scores,
-        missing_keywords=missing_keywords,
-        profile=profile,
-    )
-    decision_reason = (
-        "建议优先安排面试，重点确认简历证据对应的个人贡献和交付结果。"
-        if priority == "high"
-        else "有可用匹配证据，建议先人工复核重点经历后安排面试。"
-        if priority == "review"
-        else "证据不足以优先安排面试，建议补充材料或暂存人才库。"
-    )
-    component_scores = [
-        {
-            "key": "capability_dimensions",
-            "label": "能力与经历证据",
-            "score": dimension_total,
-            "max_score": 100,
-            "weight": 65,
-            "contribution": round(dimension_total * 0.65, 1),
-        },
-        {
-            "key": "jd_evidence",
-            "label": "JD 直接证据",
-            "score": ats_score,
-            "max_score": 100,
-            "weight": 35,
-            "contribution": round(ats_score * 0.35, 1),
-        },
-    ]
-    score_explanation = (
-        "总分 = 能力与经历证据 × 65% + JD 直接证据 × 35%。"
-        "邮箱、电话只用于联系和去重，不参与评分；教育背景、经历、技能、项目和可验证结果才是主要证据。"
-    )
-    return {
-        "title": "证据优先评分报告",
-        "model": ats_scores.get("score_version") or "evidence-v2",
-        "score_explanation": score_explanation,
-        "component_scores": component_scores,
-        "evidence_coverage": evidence_coverage,
-        "confidence": confidence,
-        "decision": {
-            "recommendation": recommendation,
-            "should_interview": should_interview,
-            "priority": priority,
-            "reason": decision_reason,
-        },
-        "strengths": strengths or ["暂未发现足够强的直接匹配证据。"],
-        "gaps": gaps or ["暂无明确缺口，但仍需面试核实。"],
-        "risks": risks,
-        "interview_focus": interview_questions,
-        "dimension_scores": dimension_scores,
-        "ats_metrics": [
-            {
-                "key": "keyword_match",
-                "label": "JD 关键词匹配",
-                "score": float(breakdown.get("keyword_match") or 0),
-                "weight": 55,
-            },
-            {
-                "key": "skills_coverage",
-                "label": "技能覆盖",
-                "score": float(breakdown.get("skills_coverage") or 0),
-                "weight": 25,
-            },
-            {
-                "key": "section_completeness",
-                "label": "简历结构完整度",
-                "score": float(breakdown.get("section_completeness") or 0),
-                "weight": 20,
-            },
-        ],
-        "matched_keywords": ats_scores.get("matched_keywords") or [],
-        "missing_keywords": missing_keywords,
-        "evidence_excerpt": "\n".join(
-            item["text"]
-            for dimension in dimension_scores
-            for item in (dimension.get("evidence") or [])
-        )[:1800],
-        "jd_summary": normalize_text(jd_text)[:600],
-        "candidate_name": candidate_name or "候选人",
-    }
-
-
 def build_fallback_screening(
     *,
     candidate_name: str,
     jd_text: str,
     resume_text: str,
     source_name: str | None = None,
+    rubric: dict[str, Any] | None = None,
+    jd_title: str = "",
+    extraction: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    profile = extract_resume_profile(resume_text)
-    ats_scores = calculate_ats_scores(jd_text, resume_text)
-    dimension_scores = _build_dimension_scores(
-        profile=profile,
-        resume_text=resume_text,
-        jd_text=jd_text,
-        ats_scores=ats_scores,
-    )
-    report = _build_score_report(
+    """Rule-only evaluation with the same report shape as the AI path."""
+
+    from app.services.talent_evaluation_service import build_evaluation
+    from app.services.talent_rubric_service import build_fallback_rubric
+
+    return build_evaluation(
         candidate_name=candidate_name,
         jd_text=jd_text,
         resume_text=resume_text,
-        profile=profile,
-        ats_scores=ats_scores,
-        dimension_scores=dimension_scores,
+        rubric=rubric or build_fallback_rubric(jd_title, jd_text),
+        profile=extract_resume_profile(resume_text),
+        llm_payload=None,
+        extraction=extraction,
+        source_name=source_name or "",
     )
-    dimension_total = sum(item["score"] for item in dimension_scores)
-    total_score = combine_scores(dimension_total, ats_scores)
-    recommendation = _bucket_from_score(total_score)
-    matched_signals = list(
-        dict.fromkeys(
-            signal
-            for item in dimension_scores
-            for signal in item.get("matched_signals") or []
-        )
-    )
-
-    return {
-        "candidate_name": candidate_name or "候选人",
-        "job_summary": normalize_text(jd_text)[:280],
-        "total_score": total_score,
-        "max_score": 100,
-        "recommendation": recommendation,
-        "overall_summary": (
-            f"{candidate_name or '候选人'} 的评分基于 "
-            f"{report['evidence_coverage']}% 核心简历段落证据。"
-            f"{report['decision']['reason']}"
-        ),
-        "dimension_scores": dimension_scores,
-        "matched_signals": list(dict.fromkeys(matched_signals))[:8],
-        "strengths": report["strengths"],
-        "risks": report["risks"],
-        "interview_questions": report["interview_focus"],
-        "evidence_excerpt": report["evidence_excerpt"],
-        "score_version": ats_scores["score_version"],
-        "score_breakdown": ats_scores["score_breakdown"],
-        "matched_keywords": ats_scores["matched_keywords"],
-        "missing_keywords": ats_scores["missing_keywords"],
-        "recommendations": list(
-            dict.fromkeys(
-                [
-                    *ats_scores["recommendations"],
-                    *report["gaps"][:3],
-                ]
-            )
-        )[:6],
-        "score_report": report,
-        "resume_profile": profile,
-        "source_name": source_name or "",
-        "evaluation_mode": "fallback",
-    }
-
-
-def extract_json_object(raw_text: str) -> dict[str, Any]:
-    text = normalize_text(raw_text)
-    if not text:
-        raise ValueError("empty_llm_response")
-
-    try:
-        data = json.loads(text)
-        if isinstance(data, dict):
-            return data
-    except json.JSONDecodeError:
-        pass
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("json_not_found")
-    return json.loads(text[start : end + 1])
-
-
-def coerce_screening_result(payload: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
-    raw_dimensions = payload.get("dimension_scores")
-    normalized_dimensions: list[dict[str, Any]] = []
-    fallback_dimensions = {item["key"]: item for item in fallback["dimension_scores"]}
-    legacy_aliases = {
-        "ai_practice": "technical_skills",
-        "frontend_delivery": "experience_fit",
-        "business_systems": "experience_fit",
-        "product_thinking": "project_evidence",
-        "self_drive": "delivery_impact",
-        "communication": "ownership_collaboration",
-    }
-
-    if isinstance(raw_dimensions, list):
-        for item in raw_dimensions:
-            if not isinstance(item, dict):
-                continue
-            key = str(item.get("key") or "").strip()
-            fallback_item = fallback_dimensions.get(key) or fallback_dimensions.get(legacy_aliases.get(key, ""))
-            if not fallback_item:
-                continue
-            score = item.get("score", fallback_item["score"])
-            try:
-                score_value = max(0, min(int(score), int(fallback_item["max_score"])))
-            except (TypeError, ValueError):
-                score_value = fallback_item["score"]
-            normalized_dimensions.append(
-                {
-                    "key": key,
-                    "label": str(item.get("label") or fallback_item["label"]),
-                    "score": score_value,
-                    "max_score": int(fallback_item["max_score"]),
-                    "weight": int(fallback_item.get("weight") or fallback_item["max_score"]),
-                    "reason": normalize_text(str(item.get("reason") or fallback_item["reason"])),
-                    "evidence": fallback_item.get("evidence") or [],
-                    "gaps": fallback_item.get("gaps") or [],
-                    "matched_signals": fallback_item.get("matched_signals") or [],
-                }
-            )
-
-    if not normalized_dimensions:
-        normalized_dimensions = fallback["dimension_scores"]
-
-    total_score = combine_scores(
-        sum(item["score"] for item in normalized_dimensions),
-        {"score_breakdown": fallback["score_breakdown"]},
-    )
-    report = dict(fallback.get("score_report") or {})
-    capability_score = sum(item["score"] for item in normalized_dimensions)
-    report["dimension_scores"] = normalized_dimensions
-    report["component_scores"] = [
-        {
-            "key": "capability_dimensions",
-            "label": "能力与经历证据",
-            "score": capability_score,
-            "max_score": 100,
-            "weight": 65,
-            "contribution": round(capability_score * 0.65, 1),
-        },
-        *(report.get("component_scores") or [])[1:2],
-    ]
-    report["decision"] = {
-        **(report.get("decision") or {}),
-        "recommendation": _bucket_from_score(total_score),
-        "should_interview": total_score >= 70,
-    }
-    return {
-        **fallback,
-        "candidate_name": normalize_text(str(payload.get("candidate_name") or fallback["candidate_name"])),
-        "job_summary": normalize_text(str(payload.get("job_summary") or fallback["job_summary"]))[:280],
-        "total_score": max(0, min(total_score, 100)),
-        "recommendation": normalize_text(str(payload.get("recommendation") or _bucket_from_score(total_score))),
-        "overall_summary": normalize_text(str(payload.get("overall_summary") or fallback["overall_summary"])),
-        "dimension_scores": normalized_dimensions,
-        "matched_signals": [
-            normalize_text(str(item))
-            for item in (payload.get("matched_signals") or fallback["matched_signals"])
-            if normalize_text(str(item))
-        ][:8],
-        "matched_keywords": fallback["matched_keywords"],
-        "missing_keywords": fallback["missing_keywords"],
-        "recommendations": fallback["recommendations"],
-        "score_version": fallback["score_version"],
-        "score_breakdown": fallback["score_breakdown"],
-        "score_report": report,
-        "strengths": [
-            normalize_text(str(item))
-            for item in (payload.get("strengths") or fallback["strengths"])
-            if normalize_text(str(item))
-        ][:5],
-        "risks": [
-            normalize_text(str(item))
-            for item in (payload.get("risks") or fallback["risks"])
-            if normalize_text(str(item))
-        ][:5],
-        "interview_questions": [
-            normalize_text(str(item))
-            for item in (payload.get("interview_questions") or fallback["interview_questions"])
-            if normalize_text(str(item))
-        ][:5],
-        "evidence_excerpt": fallback["evidence_excerpt"],
-        "source_name": fallback["source_name"],
-        "evaluation_mode": "ai",
-    }
-
-
-def _screening_messages(candidate_name: str, jd_text: str, resume_text: str) -> list[Any]:
-    rubric_lines = "\n".join(
-        f"- {item['label']}：{item['max_score']} 分" for item in SCREENING_DIMENSIONS
-    )
-    return [
-        SystemMessage(
-            content=(
-                "你是一名招聘评估助手。请根据岗位 JD 与候选人简历做 100 分制初筛，"
-                "输出严格 JSON，不要输出 markdown，不要补充解释。"
-            )
-        ),
-        HumanMessage(
-            content=(
-                "评分维度：\n"
-                f"{rubric_lines}\n\n"
-                "请返回 JSON，字段包含：candidate_name, job_summary, overall_summary, "
-                "recommendation, matched_signals, strengths, risks, interview_questions, dimension_scores。\n"
-                "其中 dimension_scores 是数组，每项包含 key, label, score, reason。\n\n"
-                f"候选人：{candidate_name or '候选人'}\n\n"
-                f"岗位 JD：\n{jd_text}\n\n"
-                f"简历内容：\n{resume_text}"
-            )
-        ),
-    ]
 
 
 async def screen_candidate_profile(
@@ -1144,17 +626,69 @@ async def screen_candidate_profile(
     jd_text: str,
     resume_text: str,
     source_name: str | None = None,
+    rubric: dict[str, Any] | None = None,
+    jd_title: str = "",
+    extraction: dict[str, Any] | None = None,
+    model: str | None = None,
+    progress: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
-    fallback = build_fallback_screening(
+    from app.services.talent_evaluation_service import assess_by_llm, build_evaluation
+    from app.services.talent_rubric_service import generate_rubric
+    from app.services.university_service import infer_education_facts
+
+    async def emit(event: dict[str, Any]) -> None:
+        if progress is not None:
+            await progress(event)
+
+    profile = extract_resume_profile(resume_text)
+    await emit({"type": "step", "key": "tool", "status": "running", "label": "调用院校库识别学校层次与毕业年份"})
+    education_facts = infer_education_facts(profile, resume_text)
+    await emit({"type": "tool", "name": "university_lookup", "output": education_facts})
+    await emit({"type": "step", "key": "tool", "status": "done", "label": "院校库查询完成"})
+
+    await emit({"type": "step", "key": "rubric", "status": "running", "label": "加载岗位评分卡"})
+    active_rubric = rubric or await generate_rubric(jd_title, jd_text)
+    await emit({"type": "step", "key": "rubric", "status": "done", "label": "评分卡就绪"})
+    # Saving a previewed screening must not re-run the LLM and silently change the score.
+    rubric_identity = [
+        [r.get("key"), r.get("label"), r.get("description"), r.get("category"), r.get("weight")]
+        for r in active_rubric.get("requirements") or []
+    ]
+    cache_key = hashlib.sha256(
+        json.dumps([rubric_identity, active_rubric.get("knockouts"), jd_text, resume_text, model or ""],
+                   ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    payload = _SCREENING_CACHE.get(cache_key)
+    await emit({"type": "step", "key": "llm", "status": "running", "label": f"AI 逐项评估{f'（{model}）' if model else ''}"})
+    if payload is None:
+        try:
+            payload = await assess_by_llm(
+                active_rubric,
+                resume_text,
+                jd_text,
+                model=model,
+                education_facts=education_facts,
+                on_token=(lambda text: emit({"type": "token", "text": text})) if progress else None,
+            )
+        except Exception as exc:
+            payload = None
+            await emit({"type": "step", "key": "llm", "status": "error", "label": f"AI 评估失败，改用规则评估：{str(exc)[:120]}"})
+        if payload:
+            _SCREENING_CACHE[cache_key] = payload
+            while len(_SCREENING_CACHE) > 64:
+                _SCREENING_CACHE.popitem(last=False)
+    if payload:
+        await emit({"type": "step", "key": "llm", "status": "done", "label": "AI 评估完成"})
+    await emit({"type": "step", "key": "score", "status": "running", "label": "核验证据并计算得分"})
+    result = build_evaluation(
         candidate_name=candidate_name,
         jd_text=jd_text,
         resume_text=resume_text,
-        source_name=source_name,
+        rubric=active_rubric,
+        profile=profile,
+        llm_payload=payload,
+        extraction=extraction,
+        source_name=source_name or "",
     )
-    try:
-        llm = create_llm()
-        response = await llm.ainvoke(_screening_messages(candidate_name, jd_text, resume_text))
-        payload = extract_json_object(extract_text_content(response.content))
-        return coerce_screening_result(payload, fallback)
-    except Exception:
-        return fallback
+    await emit({"type": "step", "key": "score", "status": "done", "label": f"总分 {result['total_score']} · {result['recommendation']}"})
+    return result

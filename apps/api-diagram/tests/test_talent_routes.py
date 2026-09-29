@@ -11,7 +11,7 @@ def _client():
 
 
 def test_screen_route_uses_existing_ai_service(monkeypatch):
-    async def fake_screen_candidate_profile(*, candidate_name, jd_text, resume_text, source_name):
+    async def fake_screen_candidate_profile(*, candidate_name, jd_text, resume_text, source_name, **_):
         return {
             "candidate_name": candidate_name,
             "job_summary": jd_text[:20],

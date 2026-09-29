@@ -3154,12 +3154,14 @@
 /* PPT 模块沉浸模式：自动隐藏顶部桌面菜单栏；底部的 Dock 保持 macOS 风格自动隐藏与触底唤出，仅在专注全屏模式（focus-mode）下完全隐藏 Dock */
 .mac-app-shell[data-area='ppt-project'] .mac-menu-bar,
 .mac-app-shell[data-area='ppt-home'] .mac-menu-bar,
+.mac-app-shell[data-area='recruit'] .mac-menu-bar,
 body.has-ppt-focus-mode .mac-menu-bar {
   display: none !important;
 }
 
 .mac-app-shell[data-area='ppt-project'] .mac-app-content,
 .mac-app-shell[data-area='ppt-home'] .mac-app-content,
+.mac-app-shell[data-area='recruit'] .mac-app-content,
 body.has-ppt-focus-mode .mac-app-content {
   top: 0 !important;
   inset: 0 0 0 !important;
