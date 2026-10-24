@@ -103,6 +103,7 @@ export interface SummaryResult {
   mindmap?: string;
   transcript?: TranscriptSegment[];
   transcript_source?: string;
+  report_style?: string;
   chat_history?: ChatMessageItem[];
   quiz?: QuizData | null;
   quiz_state?: QuizSavedState | null;
@@ -112,6 +113,8 @@ export interface SummaryTiming {
   total_ms?: number;
   asr_ms?: number;
   llm_ms?: number;
+  cached_hit?: boolean;
+  reused_transcript?: boolean;
 }
 
 export interface SummaryState {

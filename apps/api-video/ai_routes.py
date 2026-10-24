@@ -23,13 +23,13 @@ from pydantic import BaseModel, Field, model_validator
 
 from cloud_asr import _probe_duration
 from downloader import classify_error
-from url_normalize import extract_url_from_text
+from url_normalize import canonical_video_key, extract_url_from_text
 from llm_client import LLMConfigError, is_configured
 from qa import ask as qa_ask, ask_routed as qa_ask_routed, ask_routed_stream as qa_ask_routed_stream, _now_time_str
 from quiz_generator import generate_quiz
 from quiz_scorer import score_quiz
 from quiz_store import create_quiz, get_quiz, public_quiz
-from summarizer import summarize, summarize_upload
+from summarizer import summarize, summarize_from_segments, summarize_upload
 from translator import translate_segments
 from summary_tasks import (
     SummaryCancelledError,
@@ -54,8 +54,10 @@ from upload_store import (
 )
 from repo import (
     append_analysis_chat,
+    clone_analysis_for_reuse,
     create_analysis,
     create_video,
+    find_reusable_analysis_by_url,
     finish_analysis,
     get_analysis_for_user,
     get_latest_quiz_bundle_for_analysis,
@@ -89,6 +91,8 @@ _ALLOWED_BROWSERS = {
     "vivaldi",
 }
 _ALLOWED_LANGS = {"zh", "zh-Hant", "en", "ja", "ko"}
+_ALLOWED_REPORT_STYLES = {"deep_report", "executive_brief", "tutorial_sop", "critical_review"}
+_IN_FLIGHT_URL_TASKS: dict[str, str] = {}
 
 
 def _normalize_browser(browser: Optional[str]) -> Optional[str]:
@@ -106,13 +110,19 @@ class SummarizeRequest(BaseModel):
     browser: Optional[str] = None
     target_lang: Optional[str] = "zh"
     prompt: Optional[str] = None
+    report_style: Optional[str] = "deep_report"
+    regenerate_mode: Optional[str] = None  # None | "report_only" | "full_reparse"
+    source_task_id: Optional[str] = None
 
     @model_validator(mode="after")
     def _url_or_file(self):
         has_url = bool((self.url or "").strip())
         has_file = bool((self.file_id or "").strip())
-        if has_url == has_file:
-            raise ValueError("请提供 url 或 file_id 之一（不能同时提供或同时为空）")
+        has_source = bool((self.source_task_id or "").strip())
+        if not has_url and not has_file and not has_source:
+            raise ValueError("请提供 url 或 file_id 之一")
+        if has_url and has_file:
+            raise ValueError("请勿同时提供 url 与 file_id")
         return self
 
 
@@ -171,12 +181,135 @@ def _summary_error_from_exception(exc: Exception) -> dict:
     return classify_error(exc)
 
 
+def _run_summary_from_segments(
+    task_id: str,
+    segments: list,
+    source_kind: str,
+    target_lang: str,
+    report_style: str = "deep_report",
+    prompt: Optional[str] = None,
+    preserved_quiz: Optional[dict] = None,
+    user_id: Optional[str] = None,
+) -> None:
+    """复用已有字幕 segments，跳过音频下载与 ASR，仅按指定风格重新生成研报与导图。"""
+    import time
+    t0 = time.time()
+
+    def progress(stage: str, percent: float | None = None, stage_message: str | None = None, **extra):
+        if is_summary_cancelled(task_id):
+            raise SummaryCancelledError()
+        status = "done" if stage == "done" else stage
+        payload = {"status": status, "stage": stage}
+        if percent is not None:
+            payload["percent"] = percent
+        if stage_message is not None:
+            payload["stage_message"] = stage_message
+        if "partial_transcript" in extra:
+            payload["partial_transcript"] = extra["partial_transcript"]
+        if "partial_result" in extra and extra["partial_result"]:
+            payload["result"] = extra["partial_result"]
+
+        now = time.time()
+        payload["timing"] = {
+            "asr_ms": 0,
+            "llm_ms": int((now - t0) * 1000),
+            "total_ms": int((now - t0) * 1000),
+            "reused_transcript": True,
+        }
+        update_summary_task(task_id, **payload)
+
+    try:
+        result = summarize_from_segments(
+            segments=segments,
+            source_kind=source_kind,
+            task_id=task_id,
+            target_lang=target_lang,
+            progress=progress,
+            report_style=report_style,
+            custom_prompt=prompt,
+        )
+        if preserved_quiz and isinstance(preserved_quiz, dict) and preserved_quiz.get("questions"):
+            new_quiz_id = uuid.uuid4().hex
+            q_list = preserved_quiz["questions"]
+            q_title = preserved_quiz.get("title") or "AI 视频学习测验"
+            q_est = int(preserved_quiz.get("estimated_minutes") or 5)
+            result["quiz"] = {
+                "quiz_id": new_quiz_id,
+                "summary_task_id": task_id,
+                "title": q_title,
+                "estimated_minutes": q_est,
+                "question_count": len(q_list),
+                "questions": q_list,
+            }
+            try:
+                save_quiz(
+                    analysis_id=task_id,
+                    user_id=user_id,
+                    title=q_title,
+                    estimated_minutes=q_est,
+                    questions=q_list,
+                    quiz_id=new_quiz_id,
+                )
+            except Exception as qe:
+                logger.warning("重生成研报时克隆测验异常: %s", qe)
+
+        total_ms = int((time.time() - t0) * 1000)
+        timing = {
+            "asr_ms": 0,
+            "llm_ms": total_ms,
+            "total_ms": total_ms,
+            "reused_transcript": True,
+        }
+        update_summary_task(
+            task_id,
+            status="done",
+            stage="done",
+            percent=100,
+            result=result,
+            timing=timing,
+        )
+        finish_analysis(
+            task_id,
+            status="done",
+            result=result,
+            timing=timing,
+        )
+    except SummaryCancelledError:
+        update_summary_task(
+            task_id,
+            status="cancelled",
+            stage="cancelled",
+            error="已取消 AI 总结",
+        )
+        finish_analysis(task_id, status="cancelled", error="已取消 AI 总结")
+    except LLMConfigError as e:
+        update_summary_task(
+            task_id,
+            status="error",
+            error=str(e),
+            error_code="llm_not_configured",
+        )
+        finish_analysis(task_id, status="error", error=str(e), error_code="llm_not_configured")
+    except Exception as e:  # noqa: BLE001
+        info = _summary_error_from_exception(e)
+        err_msg = info.get("message") or str(e)
+        err_code = info.get("code") or "generic"
+        update_summary_task(
+            task_id,
+            status="error",
+            error=err_msg,
+            error_code=err_code,
+        )
+        finish_analysis(task_id, status="error", error=err_msg, error_code=err_code)
+
+
 def _run_summary(
     task_id: str,
     url: str,
     browser: Optional[str],
     target_lang: str,
     prompt: Optional[str] = None,
+    report_style: str = "deep_report",
 ) -> None:
     import time
     t0 = time.time()
@@ -207,7 +340,9 @@ def _run_summary(
         update_summary_task(task_id, **payload)
 
     try:
-        result = summarize(url, browser, task_id, target_lang, progress, prompt=prompt)
+        result = summarize(
+            url, browser, task_id, target_lang, progress, prompt=prompt, report_style=report_style
+        )
         total_ms = int((time.time() - t0) * 1000)
         asr_ms = int((asr_done_time[0] - t0) * 1000) if asr_done_time[0] else int(total_ms * 0.4)
         llm_ms = max(0, total_ms - asr_ms)
@@ -261,7 +396,11 @@ def _run_summary(
 
 
 def _run_summary_upload(
-    task_id: str, file_id: str, target_lang: str, prompt: Optional[str] = None
+    task_id: str,
+    file_id: str,
+    target_lang: str,
+    prompt: Optional[str] = None,
+    report_style: str = "deep_report",
 ) -> None:
     import time
     t0 = time.time()
@@ -303,6 +442,7 @@ def _run_summary_upload(
             progress,
             filename=meta.get("filename") or "",
             prompt=prompt,
+            report_style=report_style,
         )
         total_ms = int((time.time() - t0) * 1000)
         asr_ms = int((asr_done_time[0] - t0) * 1000) if asr_done_time[0] else int(total_ms * 0.4)
@@ -474,7 +614,88 @@ def api_summarize(
     _check_llm_configured()
     user_id = user["id"] if user else None
     target_lang = req.target_lang if req.target_lang in _ALLOWED_LANGS else "zh"
+    report_style = (req.report_style or "deep_report").strip()
+    if report_style not in _ALLOWED_REPORT_STYLES:
+        report_style = "deep_report"
+    regen_mode = (req.regenerate_mode or "").strip() or None
+    source_task_id = (req.source_task_id or "").strip() or None
     task_id = uuid.uuid4().hex
+
+    raw_url = (req.url or "").strip()
+    extracted = extract_url_from_text(raw_url) if raw_url else None
+    url = extracted or (raw_url if raw_url.lower().startswith(("http://", "https://")) else "")
+
+    # 分支 1：仅重生成研报（复用已提取的字幕，跳过 40 秒音轨下载与 ASR）
+    if regen_mode == "report_only":
+        src_record = None
+        src_res = None
+        if source_task_id:
+            mem_t = get_summary_task(source_task_id)
+            src_record = get_analysis_for_user(
+                source_task_id,
+                user_id=user_id,
+                is_admin=user.get("role") == "admin" if user else False,
+                allow_public_read=True,
+            )
+            if mem_t and isinstance(mem_t.get("result"), dict):
+                src_res = mem_t["result"]
+            elif src_record and isinstance(src_record.get("result"), dict):
+                src_res = src_record["result"]
+        if not src_res and url:
+            src_record = find_reusable_analysis_by_url(url, target_lang)
+            if src_record and isinstance(src_record.get("result"), dict):
+                src_res = src_record["result"]
+
+        segments = (src_res or {}).get("transcript") if isinstance(src_res, dict) else None
+        if isinstance(segments, list) and len(segments) > 0:
+            src_kind = (src_res or {}).get("transcript_source") or "cloud_asr"
+            preserved_quiz = (src_res or {}).get("quiz") if isinstance(src_res, dict) else None
+            src_video_id = str((src_record or {}).get("video_id") or "")
+            src_url = (src_record or {}).get("source_url") or url
+            src_type = (src_record or {}).get("source_type") or ("url" if src_url else "upload")
+            if not src_video_id:
+                v_row = create_video(
+                    user_id=user_id,
+                    source_type=src_type,
+                    source_url=src_url or None,
+                    storage_status="link_only",
+                )
+                src_video_id = str(v_row["id"])
+
+            create_analysis(
+                task_id=task_id,
+                video_id=src_video_id,
+                user_id=user_id,
+                target_lang=target_lang,
+                prompt=req.prompt,
+            )
+            create_summary_task(
+                task_id,
+                target_lang,
+                url=src_url or None,
+                source_type=src_type,
+                video_id=src_video_id,
+            )
+            update_summary_task(
+                task_id,
+                status="summarizing",
+                stage="summarizing",
+                percent=55,
+                stage_message="已复用字幕，正在按所选风格重新生成研报...",
+                partial_transcript=segments,
+            )
+            background.add_task(
+                _run_summary_from_segments,
+                task_id,
+                segments,
+                src_kind,
+                target_lang,
+                report_style=report_style,
+                prompt=req.prompt,
+                preserved_quiz=preserved_quiz,
+                user_id=user_id,
+            )
+            return {"task_id": task_id, "reused_transcript": True}
 
     file_id = (req.file_id or "").strip()
     if file_id:
@@ -515,18 +736,63 @@ def api_summarize(
             video_id=str(video["id"]),
         )
         background.add_task(
-            _run_summary_upload, task_id, file_id, target_lang, prompt=req.prompt
+            _run_summary_upload,
+            task_id,
+            file_id,
+            target_lang,
+            prompt=req.prompt,
+            report_style=report_style,
         )
         return {"task_id": task_id}
 
-    raw_url = (req.url or "").strip()
-    extracted = extract_url_from_text(raw_url)
-    if extracted:
-        url = extracted
-    elif raw_url.lower().startswith(("http://", "https://")):
-        url = raw_url
-    else:
+    if not url:
         raise HTTPException(status_code=400, detail="请输入合法的视频链接")
+
+    canon_key = f"{canonical_video_key(url)}::{target_lang}"
+
+    # 分支 2：默认首次解析（未指定强制重解析 regen_mode != "full_reparse"）-> 命中哈希指纹秒级复用
+    if regen_mode != "full_reparse":
+        # 2a. 若当前正好有相同 URL 在并发解析中，直接复用进行中的任务（Singleflight）
+        in_flight_id = _IN_FLIGHT_URL_TASKS.get(canon_key)
+        if in_flight_id:
+            in_flight_task = get_summary_task(in_flight_id)
+            if in_flight_task and in_flight_task.get("status") in (
+                "queued",
+                "transcribing",
+                "local_asr",
+                "analyzing_frames",
+                "summarizing",
+            ):
+                return {"task_id": in_flight_id, "in_flight_reused": True}
+
+        # 2b. 查找数据库是否已有该 URL 指纹的已完成分析记录，0.1 秒克隆返回（并附带空白测验卷）
+        cached_record = find_reusable_analysis_by_url(url, target_lang)
+        if cached_record:
+            cloned = clone_analysis_for_reuse(
+                source_record=cached_record,
+                new_task_id=task_id,
+                user_id=user_id,
+                source_url=url,
+                target_lang=target_lang,
+                prompt=req.prompt,
+            )
+            create_summary_task(
+                task_id,
+                target_lang,
+                url=url,
+                source_type="url",
+                video_id=cloned["video_id"],
+            )
+            update_summary_task(
+                task_id,
+                status="done",
+                stage="done",
+                percent=100,
+                result=cloned["result"],
+                timing=cloned["timing"],
+                partial_transcript=(cloned["result"] or {}).get("transcript") or [],
+            )
+            return {"task_id": task_id, "cached": True}
 
     browser = _normalize_browser(req.browser)
     # 未登录游客：按 IP 消耗每日免费分析配额（默认 3 次，GUEST_DAILY_LIMIT 可调）
@@ -552,8 +818,15 @@ def api_summarize(
         source_type="url",
         video_id=str(video["id"]),
     )
+    _IN_FLIGHT_URL_TASKS[canon_key] = task_id
     background.add_task(
-        _run_summary, task_id, url, browser, target_lang, prompt=req.prompt
+        _run_summary,
+        task_id,
+        url,
+        browser,
+        target_lang,
+        prompt=req.prompt,
+        report_style=report_style,
     )
     return {"task_id": task_id}
 

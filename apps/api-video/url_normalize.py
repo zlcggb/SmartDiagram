@@ -390,3 +390,106 @@ def normalize_url(text: str) -> str:
     if candidate.lower().startswith(("http://", "https://")):
         return candidate
     raise ValueError("无法识别视频链接，请粘贴以 http:// 或 https:// 开头的地址")
+
+
+_STRIP_QUERY_PREFIXES = (
+    "utm_",
+    "spm_",
+    "vd_source",
+    "share_",
+    "from",
+    "is_copy_url",
+    "timestamp",
+    "unique_id",
+    "sec_uid",
+    "tt_from",
+    "u_code",
+    "did",
+    "iid",
+)
+
+
+def canonical_video_key(raw_url: str) -> str:
+    """提取跨分享口令/短链稳定的视频唯一标识键，用于同链接哈希指纹去重。"""
+    from urllib.parse import parse_qs, urlencode
+
+    try:
+        norm = normalize_url(raw_url)
+    except Exception:
+        norm = (extract_url_from_text(raw_url or "") or (raw_url or "")).strip()
+
+    if not norm:
+        return ""
+
+    platform = detect_platform(norm)
+
+    if platform == "douyin" or is_douyin_url(norm):
+        aweme_id = extract_douyin_aweme_id(norm)
+        if aweme_id:
+            return f"douyin:{aweme_id}"
+
+    if platform == "bilibili":
+        parsed = urlparse(norm)
+        qs = parse_qs(parsed.query)
+        page = (qs.get("p") or ["1"])[0]
+        m_bv = re.search(r"(BV[0-9A-Za-z]{10})", norm)
+        if m_bv:
+            return f"bilibili:{m_bv.group(1)}:p{page}"
+        m_av = re.search(r"/(av\d+)", norm, re.IGNORECASE)
+        if m_av:
+            return f"bilibili:{m_av.group(1).lower()}:p{page}"
+
+    if platform == "youtube":
+        parsed = urlparse(norm)
+        qs = parse_qs(parsed.query)
+        vid = (qs.get("v") or [None])[0]
+        if not vid:
+            m_yt = re.search(r"(?:youtu\.be/|/shorts/|/embed/)([0-9A-Za-z_-]{11})", norm)
+            if m_yt:
+                vid = m_yt.group(1)
+        if vid:
+            return f"youtube:{vid}"
+
+    if platform == "xhs" or is_xhs_url(norm):
+        m_xhs = re.search(r"/(?:explore|discovery/item)/([0-9a-fA-F]{24})", norm)
+        if m_xhs:
+            return f"xhs:{m_xhs.group(1).lower()}"
+
+    if platform == "tiktok" or is_tiktok_url(norm):
+        m_tt = re.search(r"/video/(\d+)", norm)
+        if m_tt:
+            return f"tiktok:{m_tt.group(1)}"
+
+    if platform == "x":
+        m_x = re.search(r"/status/(\d+)", norm)
+        if m_x:
+            return f"x:{m_x.group(1)}"
+
+    # 通用 URL：剥离追踪参数与 #fragment
+    cleaned = norm.split("#", 1)[0].strip()
+    try:
+        p = urlparse(cleaned)
+        host = (p.hostname or "").lower()
+        path = (p.path or "/").rstrip("/") or "/"
+        qs = parse_qs(p.query, keep_blank_values=False)
+        kept = {}
+        for k in sorted(qs.keys()):
+            kl = k.lower()
+            if any(kl == pref or kl.startswith(pref) for pref in _STRIP_QUERY_PREFIXES):
+                continue
+            kept[k] = sorted(qs[k])
+        q_str = urlencode(kept, doseq=True)
+        return f"url:{host}{path}" + (f"?{q_str}" if q_str else "")
+    except Exception:
+        return f"url:{cleaned}"
+
+
+def url_fingerprint(raw_url: str) -> str:
+    """计算视频链接的 32 位 SHA-256 指纹。"""
+    import hashlib
+
+    key = canonical_video_key(raw_url)
+    if not key:
+        return ""
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:32]
+

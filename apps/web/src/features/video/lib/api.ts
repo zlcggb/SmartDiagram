@@ -194,16 +194,33 @@ export function startSummarize(payload: {
   target_lang?: string;
   prompt?: string;
   browser?: string | null;
-}): Promise<{ task_id: string }> {
+  report_style?: string;
+  regenerate_mode?: 'report_only' | 'full_reparse';
+  source_task_id?: string;
+}): Promise<{
+  task_id: string;
+  cached?: boolean;
+  reused_transcript?: boolean;
+  in_flight_reused?: boolean;
+}> {
   const body: Record<string, any> = {
     target_lang: payload.target_lang || 'zh',
   };
   if (payload.prompt && payload.prompt.trim()) {
     body.prompt = payload.prompt.trim();
   }
+  if (payload.report_style) {
+    body.report_style = payload.report_style;
+  }
+  if (payload.regenerate_mode) {
+    body.regenerate_mode = payload.regenerate_mode;
+  }
+  if (payload.source_task_id) {
+    body.source_task_id = payload.source_task_id;
+  }
   if (payload.file_id) {
     body.file_id = payload.file_id;
-  } else {
+  } else if (payload.url) {
     body.url = payload.url;
     body.browser = payload.browser || null;
   }

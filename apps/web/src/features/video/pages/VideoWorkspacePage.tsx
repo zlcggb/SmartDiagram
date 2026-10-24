@@ -253,34 +253,45 @@ export const VideoWorkspacePage: React.FC = () => {
   const triggerSummarizeUpload = async (
     fileId: string,
     filename: string,
-    opts: { targetLang?: string; prompt?: string } = {},
+    opts: {
+      targetLang?: string;
+      prompt?: string;
+      reportStyle?: string;
+      regenerateMode?: 'report_only' | 'full_reparse';
+      sourceTaskId?: string;
+    } = {},
   ) => {
     if (summaryTimerRef.current) {
       clearInterval(summaryTimerRef.current);
       summaryTimerRef.current = null;
     }
     resetTranslation();
-    setSummary({
-      status: 'queued',
-      stage: 'queued',
-      stageMessage: '',
-      percent: 0,
+    const isReportOnly = opts.regenerateMode === 'report_only';
+    setSummary((prev) => ({
+      status: isReportOnly ? 'summarizing' : 'queued',
+      stage: isReportOnly ? 'summarizing' : 'queued',
+      stageMessage: isReportOnly ? '正在复用已有字幕，按所选风格重写研报…' : '',
+      percent: isReportOnly ? 55 : 0,
       result: null,
-      partial_transcript: [],
+      partial_transcript: isReportOnly ? prev.result?.transcript || prev.partial_transcript : [],
       timing: null,
       error: '',
       errorCode: '',
-    });
+    }));
     try {
       const res = await startSummarize({
         file_id: fileId,
         target_lang: opts.targetLang || 'zh',
         prompt: opts.prompt,
+        report_style: opts.reportStyle,
+        regenerate_mode: opts.regenerateMode,
+        source_task_id: opts.sourceTaskId || summaryTaskId || undefined,
       });
       prevAnalysisParamRef.current = res.task_id;
       setSummaryTaskId(res.task_id);
       setSearchParams({ analysis: res.task_id }, { replace: true });
       void loadQuota();
+      void pollSummary(res.task_id, filename);
       summaryTimerRef.current = setInterval(() => {
         void pollSummary(res.task_id, filename);
       }, 700);
@@ -298,35 +309,46 @@ export const VideoWorkspacePage: React.FC = () => {
   const triggerSummarizeUrl = async (
     targetUrl: string,
     title: string,
-    opts: { targetLang?: string; prompt?: string } = {},
+    opts: {
+      targetLang?: string;
+      prompt?: string;
+      reportStyle?: string;
+      regenerateMode?: 'report_only' | 'full_reparse';
+      sourceTaskId?: string;
+    } = {},
   ) => {
     if (summaryTimerRef.current) {
       clearInterval(summaryTimerRef.current);
       summaryTimerRef.current = null;
     }
     resetTranslation();
-    setSummary({
-      status: 'queued',
-      stage: 'queued',
-      stageMessage: '',
-      percent: 0,
+    const isReportOnly = opts.regenerateMode === 'report_only';
+    setSummary((prev) => ({
+      status: isReportOnly ? 'summarizing' : 'queued',
+      stage: isReportOnly ? 'summarizing' : 'queued',
+      stageMessage: isReportOnly ? '正在复用已有字幕，按所选风格重写研报…' : '',
+      percent: isReportOnly ? 55 : 0,
       result: null,
-      partial_transcript: [],
+      partial_transcript: isReportOnly ? prev.result?.transcript || prev.partial_transcript : [],
       timing: null,
       error: '',
       errorCode: '',
-    });
+    }));
     try {
       const res = await startSummarize({
         url: targetUrl,
         browser: useCookies ? cookieBrowser : null,
         target_lang: opts.targetLang || 'zh',
         prompt: opts.prompt,
+        report_style: opts.reportStyle,
+        regenerate_mode: opts.regenerateMode,
+        source_task_id: opts.sourceTaskId || summaryTaskId || undefined,
       });
       prevAnalysisParamRef.current = res.task_id;
       setSummaryTaskId(res.task_id);
       setSearchParams({ analysis: res.task_id }, { replace: true });
       void loadQuota();
+      void pollSummary(res.task_id, title, targetUrl);
       summaryTimerRef.current = setInterval(() => {
         void pollSummary(res.task_id, title, targetUrl);
       }, 700);

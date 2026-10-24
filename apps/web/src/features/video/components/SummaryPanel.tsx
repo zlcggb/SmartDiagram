@@ -31,7 +31,12 @@ interface SummaryPanelProps {
   embedded?: boolean;
   readOnly?: boolean;
   shareToken?: string;
-  onGenerate: (opts: { targetLang: string; prompt: string }) => void;
+  onGenerate: (opts: {
+    targetLang: string;
+    prompt: string;
+    reportStyle?: string;
+    regenerateMode?: 'report_only' | 'full_reparse';
+  }) => void;
   onTranslate: (targetLang: string) => void;
   onCancel: () => void;
   onSeek: (seconds: number) => void;
@@ -42,6 +47,13 @@ const LANGS = [
   { id: 'en', label: 'English' },
   { id: 'ja', label: '日本語' },
   { id: 'ko', label: '한국어' },
+];
+
+const REPORT_STYLES = [
+  { id: 'deep_report', label: '🏛️ 深度研报', desc: '麦肯锡级结构化深度研报' },
+  { id: 'executive_brief', label: '⚡ 极简速读', desc: '30 秒高管决策脱水简报' },
+  { id: 'tutorial_sop', label: '🛠️ 教程 SOP', desc: '分步实操指南与避坑清单' },
+  { id: 'critical_review', label: '🧠 批判思辨', desc: '第一性原理审视与反方视角' },
 ];
 
 const STAGE_TEXT: Record<string, string> = {
@@ -130,6 +142,8 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
   const navigate = useNavigate();
   const [targetLang, setTargetLang] = useState('zh');
   const [transLang, setTransLang] = useState('zh');
+  const [reportStyle, setReportStyle] = useState('deep_report');
+  const [showRegenDrawer, setShowRegenDrawer] = useState(false);
   const [activeTab, setActiveTab] = useState<'summary' | 'chapters' | 'mindmap' | 'transcript' | 'quiz' | 'chat'>('summary');
   const [customPrompt, setCustomPrompt] = useState('');
   const [copiedShareLink, setCopiedShareLink] = useState(false);
@@ -209,7 +223,14 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
 
   const timingBadge = useMemo(() => {
     const t = summary.timing;
-    if (!t || !t.total_ms) return '';
+    if (!t) return '';
+    if (t.cached_hit) {
+      return '指纹秒开 · 0.1s';
+    }
+    if (t.reused_transcript && t.llm_ms) {
+      return `复用字幕 · 研报 ${(t.llm_ms / 1000).toFixed(1)}s`;
+    }
+    if (!t.total_ms) return '';
     const total = (t.total_ms / 1000).toFixed(1);
     let text = `总耗时 ${total}s`;
     if (t.asr_ms && t.llm_ms) {
@@ -226,6 +247,12 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
     }
     return text;
   }, [summary.timing, videoDuration]);
+
+  useEffect(() => {
+    if (result?.report_style && REPORT_STYLES.some((s) => s.id === result.report_style)) {
+      setReportStyle(result.report_style);
+    }
+  }, [result?.report_style]);
 
   useEffect(() => {
     if (isRunning) {
@@ -566,6 +593,36 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                 <span>{copiedShareLink ? '已复制' : '分享'}</span>
               </button>
             )}
+            <div className="relative hidden sm:block">
+              <select
+                value={reportStyle}
+                disabled={isRunning}
+                onChange={(e) => {
+                  const nextStyle = e.target.value;
+                  setReportStyle(nextStyle);
+                  if (isDone) {
+                    setShowRegenDrawer(true);
+                  }
+                }}
+                className="field-pill appearance-none !h-6.5 !px-2.5 pr-6 !text-[11.5px] lg:!h-7 lg:!px-3 lg:pr-7 lg:!text-[12px]"
+                title="选择研报生成风格"
+              >
+                {REPORT_STYLES.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <svg
+                className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 lg:right-2.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
             <div className="relative">
               <select
                 value={targetLang}
@@ -597,18 +654,121 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
               >
                 取消
               </button>
+            ) : isDone ? (
+              <button
+                type="button"
+                className={`btn-pill-outline-sm !h-6.5 !px-2.5 !text-[11.5px] lg:!h-7 lg:!px-3 lg:!text-[12px] ${
+                  showRegenDrawer ? '!border-[#0071e3] !bg-[#0071e3]/5 !text-[#0071e3]' : ''
+                }`}
+                onClick={() => setShowRegenDrawer((v) => !v)}
+              >
+                重新生成
+              </button>
             ) : (
               <button
                 type="button"
                 className="btn-pill-outline-sm !h-6.5 !px-2.5 !text-[11.5px] lg:!h-7 lg:!px-3 lg:!text-[12px]"
-                onClick={() => onGenerate({ targetLang, prompt: customPrompt.trim() })}
+                onClick={() =>
+                  onGenerate({
+                    targetLang,
+                    prompt: customPrompt.trim(),
+                    reportStyle,
+                  })
+                }
               >
-                {isDone || summary.status === 'error' || isCancelled ? '重新生成' : '开始总结'}
+                {summary.status === 'error' || isCancelled ? '重新生成' : '开始总结'}
               </button>
             )}
           </div>
         )}
       </div>
+
+      {/* Focused Regeneration Drawer (When already summarized) */}
+      {!readOnly && !isRunning && isDone && showRegenDrawer && (
+        <div className="border-b border-slate-200/80 bg-slate-50/90 px-3.5 py-2.5 lg:px-5 lg:py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11.5px] font-medium text-slate-500">研报风格：</span>
+              {REPORT_STYLES.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setReportStyle(s.id)}
+                  className={`rounded-full px-2.5 py-1 text-[11.5px] font-medium transition ${
+                    reportStyle === s.id
+                      ? 'bg-[#0071e3] text-white shadow-xs'
+                      : 'border border-slate-200/80 bg-white text-slate-600 hover:border-slate-300'
+                  }`}
+                  title={s.desc}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowRegenDrawer(false)}
+              className="text-[11px] text-slate-400 hover:text-slate-600"
+            >
+              收起 ✕
+            </button>
+          </div>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              type="text"
+              placeholder="可选：输入定制侧重点（如：重点拆解商业变现模式 / 提炼代码架构细节）"
+              className="field-pill min-w-0 flex-1 !h-7.5 !px-3 !text-[12px] bg-white"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setShowRegenDrawer(false);
+                  onGenerate({
+                    targetLang,
+                    prompt: customPrompt.trim(),
+                    reportStyle,
+                    regenerateMode: 'report_only',
+                  });
+                }
+              }}
+            />
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRegenDrawer(false);
+                  onGenerate({
+                    targetLang,
+                    prompt: customPrompt.trim(),
+                    reportStyle,
+                    regenerateMode: 'report_only',
+                  });
+                }}
+                className="btn-apple-primary !h-7.5 !px-3 !text-[11.5px]"
+                title="直接复用已提取的字幕，仅重新生成结构化研报与导图（约 12 秒）"
+              >
+                ✨ 仅重写研报 (复用字幕)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRegenDrawer(false);
+                  onGenerate({
+                    targetLang,
+                    prompt: customPrompt.trim(),
+                    reportStyle,
+                    regenerateMode: 'full_reparse',
+                  });
+                }}
+                className="btn-pill-outline-sm !h-7.5 !px-2.5 !text-[11.5px] text-slate-500"
+                title="强制重新拉取音频并重新跑语音转写与总结"
+              >
+                🔄 重提字幕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Optional Prompt Bar */}
       {!readOnly && !isRunning && !isDone && (
@@ -622,7 +782,12 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
               placeholder="可选（留空时全自动根据视频标题提取先验主题）"
               className="field-pill min-w-0 flex-1 !h-8 !px-3 !text-[12px]"
               onKeyDown={(e) => {
-                if (e.key === 'Enter') onGenerate({ targetLang, prompt: customPrompt.trim() });
+                if (e.key === 'Enter')
+                  onGenerate({
+                    targetLang,
+                    prompt: customPrompt.trim(),
+                    reportStyle,
+                  });
               }}
             />
           </div>

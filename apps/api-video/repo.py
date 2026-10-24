@@ -268,6 +268,164 @@ def get_analysis_for_user(
     return res
 
 
+def find_reusable_analysis_by_url(raw_url: str, target_lang: str = "zh") -> dict | None:
+    """根据视频链接归一化哈希指纹查找最近一条已完成的分析记录（用于跨用户/同用户秒级复用）。"""
+    from url_normalize import canonical_video_key
+
+    target_key = canonical_video_key(raw_url)
+    if not target_key:
+        return None
+
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT a.*, v.source_type, v.source_url, v.title as video_title,
+                   v.platform, v.duration_sec, v.storage_status
+            FROM analyses a
+            JOIN videos v ON a.video_id = v.id
+            WHERE a.status = 'done'
+              AND a.result IS NOT NULL
+              AND v.source_type = 'url'
+              AND COALESCE(a.target_lang, 'zh') = %s
+            ORDER BY a.created_at DESC
+            LIMIT 250
+            """,
+            (target_lang or "zh",),
+        )
+        rows = cur.fetchall()
+
+    matched_record: dict | None = None
+    fallback_quiz: dict | None = None
+
+    for r in rows:
+        src_url = (r.get("source_url") or "").strip()
+        if not src_url:
+            continue
+        if src_url == raw_url or canonical_video_key(src_url) == target_key:
+            row_dict = dict(r)
+            row_dict["id"] = str(row_dict["id"])
+            row_dict["video_id"] = str(row_dict["video_id"])
+            row_dict["user_id"] = str(row_dict["user_id"]) if row_dict.get("user_id") else None
+            res_json = row_dict.get("result") if isinstance(row_dict.get("result"), dict) else {}
+            if matched_record is None:
+                matched_record = row_dict
+            if isinstance(res_json.get("quiz"), dict) and res_json["quiz"].get("questions"):
+                fallback_quiz = res_json["quiz"]
+                break
+
+    if matched_record and fallback_quiz:
+        res_copy = dict(matched_record.get("result") or {})
+        if not res_copy.get("quiz"):
+            res_copy["quiz"] = fallback_quiz
+            matched_record["result"] = res_copy
+
+    return matched_record
+
+
+def clone_analysis_for_reuse(
+    source_record: dict,
+    new_task_id: str,
+    user_id: str | None,
+    source_url: str,
+    target_lang: str = "zh",
+    prompt: str | None = None,
+) -> dict:
+    """基于已完成的源分析记录克隆一条干净的新分析记录：
+    - 完整保留研报、章节、思维导图与逐字稿字幕；
+    - 若存在 AI 测验题，克隆题目并赋予新 quiz_id，同时清空 quiz_state（返回空白试卷）；
+    - 清空他人的 chat_history。
+    """
+    src_result = dict(source_record.get("result") or {})
+    src_analysis_id = str(source_record["id"])
+
+    # 剥离原用户的对话记录与作答状态
+    src_result.pop("chat_history", None)
+    src_result.pop("quiz_state", None)
+
+    # 若原分析在 quizzes 表有测验但未内嵌，先尝试提取题目
+    quiz_questions = None
+    quiz_title = "AI 视频学习测验"
+    quiz_est = 5
+    embedded_quiz = src_result.get("quiz")
+    if isinstance(embedded_quiz, dict) and embedded_quiz.get("questions"):
+        quiz_questions = embedded_quiz.get("questions")
+        quiz_title = embedded_quiz.get("title") or quiz_title
+        quiz_est = int(embedded_quiz.get("estimated_minutes") or 5)
+    else:
+        bundle = get_latest_quiz_bundle_for_analysis(src_analysis_id)
+        if bundle and isinstance(bundle.get("quiz"), dict):
+            q_obj = bundle["quiz"]
+            quiz_questions = q_obj.get("questions")
+            quiz_title = q_obj.get("title") or quiz_title
+            quiz_est = int(q_obj.get("estimated_minutes") or 5)
+
+    # 创建归属当前用户/访客的 video 行
+    video = create_video(
+        user_id=user_id,
+        source_type="url",
+        source_url=source_url,
+        platform=source_record.get("platform"),
+        title=source_record.get("video_title") or src_result.get("title"),
+        duration_sec=source_record.get("duration_sec"),
+        storage_status="link_only",
+    )
+
+    if quiz_questions:
+        new_quiz_id = uuid.uuid4().hex
+        src_result["quiz"] = {
+            "quiz_id": new_quiz_id,
+            "summary_task_id": new_task_id,
+            "title": quiz_title,
+            "estimated_minutes": quiz_est,
+            "question_count": len(quiz_questions),
+            "questions": quiz_questions,
+        }
+    else:
+        new_quiz_id = None
+
+    orig_timing = dict(source_record.get("timing") or {})
+    timing = {
+        "asr_ms": orig_timing.get("asr_ms", 0),
+        "llm_ms": orig_timing.get("llm_ms", 0),
+        "total_ms": orig_timing.get("total_ms", 120),
+        "cached_hit": True,
+    }
+
+    create_analysis(
+        task_id=new_task_id,
+        video_id=str(video["id"]),
+        user_id=user_id,
+        target_lang=target_lang,
+        prompt=prompt,
+    )
+    finish_analysis(
+        task_id=new_task_id,
+        status="done",
+        result=src_result,
+        timing=timing,
+    )
+
+    if new_quiz_id and quiz_questions:
+        try:
+            save_quiz(
+                analysis_id=new_task_id,
+                user_id=user_id,
+                title=quiz_title,
+                estimated_minutes=quiz_est,
+                questions=quiz_questions,
+                quiz_id=new_quiz_id,
+            )
+        except Exception as e:
+            logger.warning("克隆测验题库异常 (task_id=%s): %s", new_task_id, e)
+
+    return {
+        "task_id": new_task_id,
+        "video_id": str(video["id"]),
+        "result": src_result,
+        "timing": timing,
+    }
+
+
 def append_analysis_chat(task_id: str, user_msg: dict, assistant_msg: dict) -> None:
     """将单轮问答对话追加持久化到 analyses.result.chat_history (JSONB)。"""
     new_msgs = [user_msg, assistant_msg]

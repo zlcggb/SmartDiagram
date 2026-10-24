@@ -159,17 +159,71 @@ def _normalize_result(data: dict) -> dict:
     }
 
 
+_STYLE_REPORT_SPECS: dict[str, dict[str, str]] = {
+    "deep_report": {
+        "label": "智库深度研报",
+        "persona": "你是顶级商业智库与技术战略架构师。请深入剖析所提供的视频素材",
+        "guidelines": (
+            "1. 结构清晰，包含以下核心板块（可根据视频主题灵活命名二级标题）：\n"
+            "   - `## 一、现状痛点与认知破局`\n"
+            "   - `## 二、核心方法论与体系全景拆解`\n"
+            "   - `## 三、实战演练与关键细节剖析`\n"
+            "   - `## 四、深层洞见与终局思考`\n"
+            "2. 深度剖析底层逻辑、方法论与因果链条，善用 `**加粗**`、要点列表与标准 Markdown 对比表格，篇幅充实（800-2200字）；\n"
+        ),
+    },
+    "executive_brief": {
+        "label": "极简高管速读",
+        "persona": "你是麦肯锡首席顾问与高管简报专家。请以「结论先行（BLUF）+ 极高信息密度」的方式提炼视频精华",
+        "guidelines": (
+            "1. 采用 3 分钟电梯汇报结构，包含以下板块：\n"
+            "   - `## 一、一句话核心结论与战略价值`\n"
+            "   - `## 二、五大黄金法则与核心洞察（高密度清单）`\n"
+            "   - `## 三、关键数据 / 方案对比速查表`\n"
+            "   - `## 四、立即执行的 3 个关键动作`\n"
+            "2. 拒绝冗长铺垫，每一条都用「**核心短语**：一针见血解释」呈现，并提炼原视频最具启发性的金句（500-1100字）；\n"
+        ),
+    },
+    "tutorial_sop": {
+        "label": "教程实操手册",
+        "persona": "你是资深实战工程师与 SOP 流程架构师。请将视频内容转化为一份可直接照着落地执行的「标准作业程序（SOP）与避坑手册」",
+        "guidelines": (
+            "1. 严格按实操落地顺序组织章节：\n"
+            "   - `## 一、前置条件、核心概念与环境准备`\n"
+            "   - `## 二、分步实操指南（Step-by-Step SOP）`\n"
+            "   - `## 三、关键参数、公式或指令速查表`\n"
+            "   - `## 四、高频踩坑点与故障排查清单（Checklist）`\n"
+            "2. 每个操作步骤都需写清「做什么 → 怎么做 → 预期效果/验收标准」，最大化实操复用价值（800-2000字）；\n"
+        ),
+    },
+    "critical_review": {
+        "label": "批判性深度思辨",
+        "persona": "你是独立学者与第一性原理思想家。请对视频内容进行「解构式、思辨式、跨学科」的深度审视",
+        "guidelines": (
+            "1. 按认知深度递进组织章节：\n"
+            "   - `## 一、核心命题重构与论证链条拆解`\n"
+            "   - `## 二、隐含前提假设与适用边界审视`\n"
+            "   - `## 三、正反视角碰撞与潜在盲区剖析`\n"
+            "   - `## 四、第一性原理推演与跨领域迁移启发`\n"
+            "2. 不仅总结作者说了什么，更要指出其成立的前提条件、局限性以及更高维度的认知启发（800-2000字）；\n"
+        ),
+    },
+}
+
+
 def _final_summary(
     content: str,
     lang: str,
     is_notes: bool,
     *,
     source: str = "asr",
+    report_style: str = "deep_report",
+    custom_prompt: str | None = None,
     on_partial=None,
 ) -> dict:
     """双路并发生成：
     - 快路（_task_meta）：生成结构化 JSON（title, tldr, key_points, actionable_takeaways, chapters, mindmap）
-    - 流式路（_task_report）：流式生成深度研报长文 Markdown（summary），实时回调 on_partial
+    - 流式路（_task_report）：按所选风格流式生成深度研报长文 Markdown（summary），实时回调 on_partial
     """
     if source == "vision":
         src_desc = "下面是从视频各场景抽取的画面描述（该视频几乎无旁白/字幕）"
@@ -180,9 +234,14 @@ def _final_summary(
     else:
         src_desc = "下面是视频的带时间戳逐字转写"
 
+    style_key = report_style if report_style in _STYLE_REPORT_SPECS else "deep_report"
+    style_spec = _STYLE_REPORT_SPECS[style_key]
+
     extra = ""
     if source in ("vision", "multimodal"):
         extra = "若素材以画面描述为主，请侧重场景、动作与视觉信息；"
+    if custom_prompt and custom_prompt.strip():
+        extra += f"\n用户特别关注与定制要求：{custom_prompt.strip()}；"
 
     state_lock = threading.Lock()
     shared_state: dict = {
@@ -193,6 +252,7 @@ def _final_summary(
         "actionable_takeaways": [],
         "chapters": [],
         "mindmap": "",
+        "report_style": style_key,
     }
 
     def _emit_partial(pct: float, msg: str):
@@ -210,11 +270,11 @@ def _final_summary(
             {
                 "role": "system",
                 "content": (
-                    f"你是顶级商业智库与技术战略架构师。请深入剖析所提供的视频素材，用{lang}输出严格 JSON（不要代码块围栏，直接输出合法 JSON）。\n\n"
+                    f"{style_spec['persona']}，用{lang}输出严格 JSON（不要代码块围栏，直接输出合法 JSON）。\n\n"
                     f"数据格式严格遵循：\n{_META_SCHEMA}\n\n"
-                    f"核心质量标准：\n"
-                    f"1. tldr 必须一针见血点明本质逻辑与核心结论（150-250字）；\n"
-                    f"2. key_points 需包含 6-10 条带维度标签的深度要点（如【底层认知】、【架构选型】、【实战避坑】等）；\n"
+                    f"核心质量标准（当前风格：【{style_spec['label']}】）：\n"
+                    f"1. tldr 必须契合【{style_spec['label']}】定位，一针见血点明本质逻辑与核心结论（150-250字）；\n"
+                    f"2. key_points 需包含 6-10 条带维度标签的深度要点；\n"
                     f"3. actionable_takeaways 提供 3-6 条即学即用的落地行动步骤；\n"
                     f"4. chapters 必须按时间先后提取真实时间戳（mm:ss），给出高质量章节小结；\n"
                     f"5. mindmap 必须是层级清晰、多维展开的 Markdown 标题/列表语法（# 根节点 / ## 一级分支 / ### 二级分支 / - 叶子节点）。\n"
@@ -223,7 +283,7 @@ def _final_summary(
             },
             {"role": "user", "content": f"{src_desc}：\n\n{content}"},
         ]
-        raw = chat_json(messages, temperature=0.25, max_tokens=4096)
+        raw = chat_json(messages, temperature=0.35, max_tokens=4096)
         norm = _normalize_result(raw)
         with state_lock:
             shared_state["title"] = norm["title"]
@@ -232,7 +292,7 @@ def _final_summary(
             shared_state["actionable_takeaways"] = norm["actionable_takeaways"]
             shared_state["chapters"] = norm["chapters"]
             shared_state["mindmap"] = norm["mindmap"]
-        _emit_partial(78, "核心结论、章节导航与思维导图已就绪，正在流式输出深度研报…")
+        _emit_partial(78, f"核心结论、章节与思维导图已就绪，正在流式输出【{style_spec['label']}】…")
         return norm
 
     def _task_report() -> str:
@@ -240,14 +300,9 @@ def _final_summary(
             {
                 "role": "system",
                 "content": (
-                    f"你是顶级商业智库与技术战略架构师。请深入剖析所提供的视频素材，用{lang}直接撰写一篇**高级研报级结构化分析长文**（纯 Markdown 格式，不要输出 JSON 外层包裹）。\n\n"
+                    f"{style_spec['persona']}，用{lang}直接撰写一篇**【{style_spec['label']}】风格的结构化分析长文**（纯 Markdown 格式，不要输出 JSON 外层包裹）。\n\n"
                     f"写作与排版规范：\n"
-                    f"1. 结构清晰，包含以下核心板块（可根据视频主题灵活命名二级标题）：\n"
-                    f"   - `## 一、现状痛点与认知破局`\n"
-                    f"   - `## 二、核心方法论与体系全景拆解`\n"
-                    f"   - `## 三、实战演练与关键细节剖析`\n"
-                    f"   - `## 四、深层洞见与终局思考`\n"
-                    f"2. 深度剖析底层逻辑、方法论与因果链条，善用 `**加粗**`、要点列表与标准 Markdown 对比表格，篇幅充实（800-2200字）；\n"
+                    f"{style_spec['guidelines']}"
                     f"3. 在阐述核心递进流程或架构模型时，可使用如下围栏流程语法（前端会自动渲染为横向可视化流程卡片）：\n"
                     f"   ```\n"
                     f"   [阶段一：核心动作] -> [阶段二：关键突破] -> [阶段三：终局闭环]\n"
@@ -262,7 +317,7 @@ def _final_summary(
         chunks: list[str] = []
         last_emit = time.monotonic()
         try:
-            for delta in chat_stream(messages, temperature=0.3, max_tokens=6144):
+            for delta in chat_stream(messages, temperature=0.4, max_tokens=6144):
                 chunks.append(delta)
                 now = time.monotonic()
                 if now - last_emit >= 0.35:
@@ -270,11 +325,11 @@ def _final_summary(
                     with state_lock:
                         shared_state["summary"] = text_so_far
                     pct = min(96, 60 + int(len(text_so_far) / 45))
-                    _emit_partial(pct, "AI 正在实时流式撰写深度研报…")
+                    _emit_partial(pct, f"AI 正在实时流式撰写【{style_spec['label']}】…")
                     last_emit = now
         except Exception:
             if not chunks:
-                fallback_text = chat(messages, temperature=0.3, max_tokens=6144)
+                fallback_text = chat(messages, temperature=0.4, max_tokens=6144)
                 chunks.append(fallback_text)
 
         final_report = "".join(chunks).strip()
@@ -289,6 +344,7 @@ def _final_summary(
         report_res = fut_report.result()
 
     meta_res["summary"] = report_res
+    meta_res["report_style"] = style_key
     return meta_res
 
 
@@ -298,9 +354,14 @@ def summarize_from_segments(
     work_id: str,
     target_lang: str = "zh",
     progress=None,
+    *,
+    report_style: str = "deep_report",
+    custom_prompt: str | None = None,
 ) -> dict:
-    """转写结果 → 双路并发结构化总结（链接与上传共用后半段）。"""
+    """转写结果 → 双路并发结构化总结（链接与上传共用后半段，支持基于已有字幕直接按新风格秒级重生）。"""
     lang = _lang_name(target_lang)
+    style_key = report_style if report_style in _STYLE_REPORT_SPECS else "deep_report"
+    style_label = _STYLE_REPORT_SPECS[style_key]["label"]
     formatted_transcript = [
         {"start": int(s["start"]), "time": _fmt_ts(s["start"]), "text": s["text"]}
         for s in segments
@@ -315,7 +376,7 @@ def summarize_from_segments(
     _p(
         "summarizing",
         55,
-        "语音转写完毕，正在并发生成思维导图与流式深度研报…",
+        f"字幕已就绪，正在并发生成思维导图与【{style_label}】…",
         partial_result={
             "title": "",
             "tldr": "",
@@ -324,6 +385,7 @@ def summarize_from_segments(
             "actionable_takeaways": [],
             "chapters": [],
             "mindmap": "",
+            "report_style": style_key,
             "transcript_source": source,
             "target_lang": target_lang,
             "segment_count": len(segments),
@@ -337,11 +399,18 @@ def summarize_from_segments(
         snapshot["target_lang"] = target_lang
         snapshot["segment_count"] = len(segments)
         snapshot["transcript"] = formatted_transcript
+        snapshot["report_style"] = style_key
         _p("summarizing", pct, msg, partial_result=snapshot)
 
     if len(full_text) <= MAX_CHARS_SINGLE:
         result = _final_summary(
-            full_text, lang, is_notes=False, source=source, on_partial=_on_partial
+            full_text,
+            lang,
+            is_notes=False,
+            source=source,
+            report_style=style_key,
+            custom_prompt=custom_prompt,
+            on_partial=_on_partial,
         )
     else:
         chunks = _chunk_segments(segments)
@@ -372,6 +441,8 @@ def summarize_from_segments(
             lang,
             is_notes=True,
             source=source,
+            report_style=style_key,
+            custom_prompt=custom_prompt,
             on_partial=_on_partial,
         )
 
@@ -379,6 +450,7 @@ def summarize_from_segments(
     result["target_lang"] = target_lang
     result["segment_count"] = len(segments)
     result["transcript"] = formatted_transcript
+    result["report_style"] = style_key
     _p("done", 100)
     return result
 
@@ -390,6 +462,7 @@ def summarize(
     target_lang: str = "zh",
     progress=None,
     prompt: str | None = None,
+    report_style: str = "deep_report",
 ) -> dict:
     """完整管线：转写 → 总结。progress(stage, percent) 为可选回调。"""
 
@@ -401,7 +474,13 @@ def summarize(
     _p("transcribing", 8)
     tr = get_transcript(url, browser, work_id, progress=_p, prompt=prompt)
     return summarize_from_segments(
-        tr["segments"], tr["source"], work_id, target_lang, progress
+        tr["segments"],
+        tr["source"],
+        work_id,
+        target_lang,
+        progress,
+        report_style=report_style,
+        custom_prompt=prompt,
     )
 
 
@@ -412,6 +491,7 @@ def summarize_upload(
     progress=None,
     filename: str = "",
     prompt: str | None = None,
+    report_style: str = "deep_report",
 ) -> dict:
     """本地上传：文件转写 → 总结。"""
 
@@ -425,7 +505,13 @@ def summarize_upload(
         file_path, work_id, progress=_p, filename=filename, prompt=prompt
     )
     result = summarize_from_segments(
-        tr["segments"], tr["source"], work_id, target_lang, progress
+        tr["segments"],
+        tr["source"],
+        work_id,
+        target_lang,
+        progress,
+        report_style=report_style,
+        custom_prompt=prompt,
     )
     result["source_type"] = "upload"
     if filename:
