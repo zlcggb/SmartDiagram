@@ -301,6 +301,9 @@ services:
     build:
       context: ./apps/api-video
       dockerfile: Dockerfile
+      args:
+        CN_MIRROR: ${CN_MIRROR:-false}
+        UV_PYTHON_IMAGE: ${UV_PYTHON_IMAGE:-ghcr.io/astral-sh/uv:python3.13-bookworm-slim}
     container_name: smartdiagram-api-video
     restart: always
     extra_hosts:
@@ -325,6 +328,7 @@ services:
       - NO_PROXY=${NO_PROXY:-127.0.0.1,localhost,douyin.com,iesdouyin.com,bilibili.com,b23.tv}
     volumes:
       - videodata:/data
+      - ./docs/video:/app/docs:ro
     expose:
       - "4020"
 

@@ -10,7 +10,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_HTTP_TIMEOUT=300
 
 ARG CN_MIRROR=false
-ENV UV_INDEX_URL=${CN_MIRROR:+https://mirrors.aliyun.com/pypi/simple}
 
 WORKDIR /app
 
@@ -19,7 +18,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml requirements.txt ./
-RUN uv pip install --system --no-cache -r requirements.txt
+RUN if [ "$CN_MIRROR" = "true" ]; then \
+        UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple uv pip install --system --no-cache -r requirements.txt; \
+    else \
+        uv pip install --system --no-cache -r requirements.txt; \
+    fi
 
 COPY . .
 

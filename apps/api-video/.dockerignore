@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+downloads/
+uploads/
+data/
+models/
+vendor/jeff/bench/
+.anonymous_cookies.txt
+cookies.txt

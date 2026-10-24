@@ -8,9 +8,20 @@ from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter(prefix="/api/docs", tags=["docs"])
 
-_PRIMARY_DOCS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "docs", "video"))
-_FALLBACK_DOCS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "docs"))
-DOCS_DIR = _PRIMARY_DOCS_DIR if os.path.isdir(_PRIMARY_DOCS_DIR) else _FALLBACK_DOCS_DIR
+def _resolve_docs_dir() -> str:
+    candidates = [
+        os.environ.get("VIDEO_DOCS_DIR", "").strip(),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "docs", "video")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "docs")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "docs")),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isdir(candidate):
+            return candidate
+    return candidates[1]
+
+
+DOCS_DIR = _resolve_docs_dir()
 
 # 结构化目录定义
 CATEGORIES = [
