@@ -140,6 +140,13 @@ export interface ExportPlanSummary {
   note?: string;
 }
 
+export interface VideoSourceContext {
+  taskId: string;
+  title: string;
+  tldr?: string;
+  webpageUrl?: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -150,6 +157,7 @@ export interface Message {
   code?: string;
   diagramId?: string;
   diagramVersionId?: string;
+  sourceVideo?: VideoSourceContext;
   images?: string[];
   statusText?: string;
   steps?: ThinkingStep[];

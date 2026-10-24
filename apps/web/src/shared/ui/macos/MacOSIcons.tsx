@@ -7,7 +7,7 @@
 import { Building2 } from "lucide-react";
 import smartDiagramHomeIcon from '@/assets/macos-icons/smartdiagram-home.svg';
 import recentFolderIcon from '@/assets/macos-icons/recent-folder-384.png';
-import { PptAgentIconMark, RecruitIconMark, SmartDiagramIconMark } from '@/components/brand/AppIconMarks';
+import { PptAgentIconMark, RecruitIconMark, SmartDiagramIconMark, VideoAppIconMark } from '@/components/brand/AppIconMarks';
 
 interface IconProps {
   size?: number;
@@ -42,6 +42,10 @@ export function SlidesAppIcon({ size = 60 }: IconProps) {
 
 export function RecruitAppIcon({ size = 60 }: IconProps) {
   return <RecruitIconMark className="mac-artwork-image" size={size} />;
+}
+
+export function VideoAppIcon({ size = 60 }: IconProps) {
+  return <VideoAppIconMark className="mac-artwork-image" size={size} />;
 }
 
 export function FolderIcon({ size = 60 }: IconProps) {

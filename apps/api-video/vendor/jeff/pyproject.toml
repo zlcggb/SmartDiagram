@@ -1,0 +1,47 @@
+[project]
+name = "jeff"
+version = "0.1.0"
+description = "jev-compatible System One API served by GLiFormer"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "gliformer>=0.1.1",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "httpx>=0.27",
+    "huggingface-hub>=0.24",
+    "modal>=1.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.16", "ty>=0.0.1a1"]
+onnx = ["onnx>=1.16", "onnxruntime>=1.18"]
+
+[project.scripts]
+jeff = "jeff.server.main:main"
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ty.environment]
+root = [".", "src", "bench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[dependency-groups]
+bench = [
+    "datasets>=5.0.1",
+]
+dev = [
+    "typesafe-sdk>=0.7.0",
+]

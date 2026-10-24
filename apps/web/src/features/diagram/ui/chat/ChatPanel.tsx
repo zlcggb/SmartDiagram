@@ -14,7 +14,7 @@
 
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Send, Loader2, Settings, SquarePen,
   ChevronDown, ChevronUp, ChevronRight,
@@ -1442,6 +1442,7 @@ interface ChatPanelProps {
 
 export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const {
     messages, addMessage, updateLastAssistantMessage, clearMessages,
     conversationId, setConversationId,
@@ -2022,6 +2023,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
     if (!overrides?.preserveInputImages) {
       clearInputImages();
     }
+    const activeDesignConcept = overrides?.designConcept ?? useChatStore.getState().designConcept ?? '';
     setSelectedAgent(null);
     addMessage({ id: `a_${Date.now()}`, role: 'assistant', content: '', steps: [], timestamp: Date.now() });
     setIsStreaming(true);
@@ -2088,7 +2090,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
           current_engine: overrides?.currentEngine ?? canvasEngine ?? '',
           current_diagram_id: overrides?.currentDiagramId ?? canvasDiagramId ?? '',
           current_diagram_version_id: overrides?.currentDiagramVersionId ?? canvasDiagramVersionId ?? '',
-          design_concept: overrides?.designConcept ?? '',
+          design_concept: activeDesignConcept,
           conversation_id: conversationId,
           model_config: modelConfig,
           detailLevel,
@@ -2842,6 +2844,99 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
                   <HumanApprovalCard approval={msg.approvalRequest} />
                 )}
 
+                {/* Video source context card */}
+                {msg.role === 'assistant' && msg.sourceVideo && (
+                  <div
+                    className={`mb-2.5 rounded-xl border p-2.5 text-[12px] ${
+                      canvasMode === 'light'
+                        ? 'border-blue-200/80 bg-blue-50/60 text-slate-700'
+                        : 'border-blue-500/25 bg-blue-950/25 text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+                          <span>📹 来自视频学习助手</span>
+                        </div>
+                        <div className="mt-0.5 truncate font-semibold">
+                          《{msg.sourceVideo.title}》
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = msg.sourceVideo?.taskId
+                            ? `/video?analysis=${encodeURIComponent(msg.sourceVideo.taskId)}`
+                            : '/video';
+                          navigate(target);
+                        }}
+                        className={`shrink-0 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                          canvasMode === 'light'
+                            ? 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50'
+                            : 'border-blue-500/30 bg-slate-900/80 text-blue-300 hover:bg-blue-950/60'
+                        }`}
+                      >
+                        ← 返回原视频研报
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        disabled={isStreaming}
+                        onClick={() => {
+                          void sendMessage(
+                            '@mindmap 请结合当前视频的核心观点，进一步细化思维导图各分支下的具体落地方法与实操步骤',
+                            {
+                              forcedAgent: DIAGRAM_AGENTS.find((a) => a.id === 'mindmap') || null,
+                              currentCode: msg.code || canvasCode || '',
+                              currentTask: 'mindmap',
+                              currentEngine: 'mindmap',
+                              designConcept: msg.designConcept || '',
+                            },
+                          );
+                        }}
+                        className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors cursor-pointer disabled:opacity-50 ${
+                          canvasMode === 'light'
+                            ? 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700'
+                            : 'border-slate-700 bg-slate-800/80 text-slate-300 hover:border-blue-500/40 hover:text-blue-300'
+                        }`}
+                      >
+                        ✨ 细化实操步骤
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isStreaming}
+                        onClick={() => {
+                          const flowAgent = DIAGRAM_AGENTS.find((a) => a.id === 'flow');
+                          if (flowAgent) handleChangeDiagramType(msg, flowAgent);
+                        }}
+                        className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors cursor-pointer disabled:opacity-50 ${
+                          canvasMode === 'light'
+                            ? 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700'
+                            : 'border-slate-700 bg-slate-800/80 text-slate-300 hover:border-blue-500/40 hover:text-blue-300'
+                        }`}
+                      >
+                        🔀 转为核心流程图
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isStreaming}
+                        onClick={() => {
+                          const infoAgent = DIAGRAM_AGENTS.find((a) => a.id === 'infographic');
+                          if (infoAgent) handleChangeDiagramType(msg, infoAgent);
+                        }}
+                        className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors cursor-pointer disabled:opacity-50 ${
+                          canvasMode === 'light'
+                            ? 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700'
+                            : 'border-slate-700 bg-slate-800/80 text-slate-300 hover:border-blue-500/40 hover:text-blue-300'
+                        }`}
+                      >
+                        📊 转为一页信息图
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Design concept */}
                 {msg.role === 'assistant' && msg.designConcept && (
                   <DesignConceptCard text={msg.designConcept} />
@@ -2864,6 +2959,7 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
                         if (msg.designConcept) setDesignConcept(msg.designConcept);
                         setCanvasPhase('done');
                         setStreamingCode('');
+                        requestCanvasRenderRetry();
                         switchToCanvas();
                       }}
                       title={t('chat.viewOnCanvasTitle')}
@@ -2872,46 +2968,44 @@ export default function ChatPanel({ authSession, onLogout, onLogin }: ChatPanelP
                       {t('chat.generatedToCanvas')}
                     </button>
 
+                    <DiagramTypeSwitchButton
+                      message={msg}
+                      open={typeSwitchMessageId === msg.id}
+                      busy={versionActionBusy}
+                      disabled={isStreaming}
+                      onToggle={() => setTypeSwitchMessageId(typeSwitchMessageId === msg.id ? null : msg.id)}
+                      onClose={() => setTypeSwitchMessageId(null)}
+                      onSelect={(agent) => handleChangeDiagramType(msg, agent)}
+                    />
+                    <button
+                      type="button"
+                      disabled={isStreaming}
+                      onClick={() => handleRetryRender(msg)}
+                      className={`text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 border transition-colors disabled:opacity-50 ${
+                        canvasMode === 'light'
+                          ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                          : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={t('version.retryRenderTitle')}
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      {msg.engineType === 'mermaid' ? t('mermaid.autoRepairRetry') : t('common.retry')}
+                    </button>
                     {msg.diagramId && msg.diagramVersionId && (
-                      <>
-                        <DiagramTypeSwitchButton
-                          message={msg}
-                          open={typeSwitchMessageId === msg.id}
-                          busy={versionActionBusy}
-                          disabled={isStreaming}
-                          onToggle={() => setTypeSwitchMessageId(typeSwitchMessageId === msg.id ? null : msg.id)}
-                          onClose={() => setTypeSwitchMessageId(null)}
-                          onSelect={(agent) => handleChangeDiagramType(msg, agent)}
-                        />
-                        <button
-                          type="button"
-                          disabled={isStreaming}
-                          onClick={() => handleRetryRender(msg)}
-                          className={`text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 border transition-colors disabled:opacity-50 ${
-                            canvasMode === 'light'
-                              ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                              : 'border-slate-700 text-slate-300 hover:bg-slate-800'
-                          }`}
-                          title={t('version.retryRenderTitle')}
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          {msg.engineType === 'mermaid' ? t('mermaid.autoRepairRetry') : t('common.retry')}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={versionActionBusy || msg.diagramVersionId === canvasDiagramVersionId}
-                          onClick={() => handleRollback(msg)}
-                          className={`text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 border transition-colors disabled:opacity-50 ${
-                            canvasMode === 'light'
-                              ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                              : 'border-slate-700 text-slate-300 hover:bg-slate-800'
-                          }`}
-                          title={t('version.rollbackTitle')}
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                          {t('version.rollback')}
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        disabled={versionActionBusy || msg.diagramVersionId === canvasDiagramVersionId}
+                        onClick={() => handleRollback(msg)}
+                        className={`text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 border transition-colors disabled:opacity-50 ${
+                          canvasMode === 'light'
+                            ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                            : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                        }`}
+                        title={t('version.rollbackTitle')}
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        {t('version.rollback')}
+                      </button>
                     )}
                   </div>
                 ) : msg.role === 'assistant' && !msg.content && isStreaming ? (

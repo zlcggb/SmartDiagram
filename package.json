@@ -11,6 +11,7 @@
         "dev:frontend": "cd apps/web && pnpm dev",
         "dev:ppt-api": "bash scripts/run-with-root-env.sh bash -c 'cd apps/api-ppt && PYTHONPATH=src uv run uvicorn ppt_agent_api.main:app --host 127.0.0.1 --port 4000 --reload'",
         "dev:ppt-renderer": "bash scripts/run-with-root-env.sh bash -c 'cd apps/service-ppt-renderer && API_PORT=4010 API_HOST=127.0.0.1 pnpm dev'",
+        "dev:video-api": "bash scripts/run-with-root-env.sh bash -c 'cd apps/api-video && uv run uvicorn main:app --host 127.0.0.1 --port 4020 --reload'",
         "build": "cd apps/web && pnpm build",
         "test:typescript": "corepack pnpm --filter @ppt-agent/slide-ir test && corepack pnpm --filter @ppt-agent/slide-ir build && corepack pnpm --filter @ppt-agent/shared exec tsx --test 'src/**/*.test.ts' && corepack pnpm --filter @ppt-agent/shared build && corepack pnpm --filter @ppt-agent/agents exec tsx --test 'src/**/*.test.ts' && corepack pnpm --filter @ppt-agent/ppt-renderer exec tsx --test 'src/**/*.test.ts' && corepack pnpm --filter @ppt-agent/api exec tsx --test 'src/**/*.test.ts' && corepack pnpm --filter @smartdiagram/web exec tsx --tsconfig tsconfig.app.json --test 'src/**/*.test.ts' 'src/**/*.test.tsx'",
         "test:python": "cd apps/api-diagram && uv run python -m pytest tests -q && cd ../api-ppt && uv run python -m pytest tests -q",

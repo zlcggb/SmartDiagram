@@ -11,6 +11,7 @@ dev_common_init_paths() {
   FRONTEND_DIR="$ROOT_DIR/apps/web"
   PPT_API_DIR="$ROOT_DIR/apps/api-ppt"
   PPT_RENDERER_DIR="$ROOT_DIR/apps/service-ppt-renderer"
+  VIDEO_API_DIR="$ROOT_DIR/apps/api-video"
 }
 
 # shellcheck disable=SC2034
@@ -226,6 +227,9 @@ prepare_local_stack() {
   prepare_diagram_backend
   prepare_frontend_deps
   prepare_ppt_stack
+  if [ -d "$VIDEO_API_DIR" ]; then
+    (cd "$VIDEO_API_DIR" && uv sync --quiet) && echo -e "${GREEN}   ✅ Video 后端依赖${NC}"
+  fi
 }
 
 ensure_frontend_build() {
@@ -240,7 +244,7 @@ start_diagram_api() {
   local reload_flag="${1:-}"
   echo -e "${GREEN}🚀 SmartDiagram 后端  →  http://localhost:8000${NC}"
   if [ "$reload_flag" = "--reload" ]; then
-    (cd "$BACKEND_DIR" && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload) &
+    (cd "$BACKEND_DIR" && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app) &
   else
     (cd "$BACKEND_DIR" && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000) &
   fi
@@ -257,9 +261,28 @@ start_ppt_api() {
   local reload_flag="${1:-}"
   echo -e "${GREEN}🚀 PPT Agent 后端     →  http://127.0.0.1:4000${NC}"
   if [ "$reload_flag" = "--reload" ]; then
-    run_with_root_env bash -c "cd \"$PPT_API_DIR\" && PYTHONPATH=src uv run uvicorn ppt_agent_api.main:app --host 127.0.0.1 --port 4000 --reload" &
+    run_with_root_env bash -c "cd \"$PPT_API_DIR\" && PYTHONPATH=src uv run uvicorn ppt_agent_api.main:app --host 127.0.0.1 --port 4000 --reload --reload-dir src" &
   else
     run_with_root_env bash -c "cd \"$PPT_API_DIR\" && PYTHONPATH=src uv run uvicorn ppt_agent_api.main:app --host 127.0.0.1 --port 4000" &
+  fi
+  PIDS+=($!)
+}
+
+start_video_api() {
+  local reload_flag="${1:-}"
+  if ! curl -s --connect-timeout 1 http://127.0.0.1:8001/healthz >/dev/null 2>&1; then
+    if [ -x "$VIDEO_API_DIR/scripts/start-jeff.sh" ]; then
+      echo -e "${GREEN}🚀 Jeff 意图路由服务  →  http://127.0.0.1:8001${NC}"
+      nohup "$VIDEO_API_DIR/scripts/start-jeff.sh" > "$VIDEO_API_DIR/vendor/jeff.log" 2>&1 &
+    fi
+  else
+    echo -e "${GREEN}   ✅ Jeff 意图路由服务已就绪 (http://127.0.0.1:8001)${NC}"
+  fi
+  echo -e "${GREEN}🚀 Video 学习后端     →  http://127.0.0.1:4020${NC}"
+  if [ "$reload_flag" = "--reload" ]; then
+    run_with_root_env bash -c "cd \"$VIDEO_API_DIR\" && uv run uvicorn main:app --host 127.0.0.1 --port 4020 --reload --reload-exclude '.venv/*' --reload-exclude 'downloads/*' --reload-exclude 'uploads/*'" &
+  else
+    run_with_root_env bash -c "cd \"$VIDEO_API_DIR\" && uv run uvicorn main:app --host 127.0.0.1 --port 4020" &
   fi
   PIDS+=($!)
 }

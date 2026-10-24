@@ -308,7 +308,7 @@ pause_writers() {
     PAUSED_SERVICES=()
     running="$(docker compose --profile worker --profile qdrant ps --status running --services 2>/dev/null || true)"
 
-    for service in api-diagram worker ppt-node-api ppt-python-api qdrant; do
+    for service in api-diagram worker ppt-node-api ppt-python-api api-video qdrant; do
         if echo "$running" | grep -qx "$service"; then
             info "短暂停写以生成一致备份/迁移: $service"
             docker compose --profile worker --profile qdrant pause "$service"
@@ -567,6 +567,7 @@ verify_deployment() {
     wait_for_url "统一网关" "http://127.0.0.1:${gateway_port}/nginx-health"
     wait_for_url "统一前端" "http://127.0.0.1:${gateway_port}/"
     wait_for_url "PPT Agent API" "http://127.0.0.1:${gateway_port}/ppt-api/api/health"
+    wait_for_url "Video Studio API" "http://127.0.0.1:${gateway_port}/video-api/api/health"
     verify_worker_deployment
 }
 
@@ -577,7 +578,7 @@ prefetch_runtime_images() {
 
 build_application_images() {
     local build_args=()
-    local services=(api-diagram web ppt-node-api ppt-python-api gateway)
+    local services=(api-diagram web ppt-node-api ppt-python-api api-video gateway)
     local service
 
     if [ "$FORCE_REBUILD" = true ]; then

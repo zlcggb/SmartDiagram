@@ -5,7 +5,7 @@
  * 接入新模块：在这里加一条记录 + 在路由里挂它的组件，无需改动导航与首页。
  */
 import type { LucideIcon } from 'lucide-react';
-import { BrainCircuit, Presentation, UsersRound } from 'lucide-react';
+import { BrainCircuit, Presentation, UsersRound, Video } from 'lucide-react';
 
 export interface ModuleRegistration {
   /** 路由路径（如 /diagram），导航高亮以此为前缀匹配 */
@@ -73,6 +73,21 @@ export const moduleRegistry: ModuleRegistration[] = [
       gradientFrom: '#f59e0b',
       gradientTo: '#f43f5e',
       glowColor: 'rgba(245, 158, 11, 0.3)',
+    },
+  },
+  {
+    path: '/video',
+    navLabel: '视频学习',
+    title: '视频学习助手',
+    tagline: '视频即认知',
+    description:
+      '独立业务模块：支持本地上传或粘贴 Bilibili / YouTube / 抖音等链接，自动提取字幕并生成深度研报、思维导图、双语字幕与互动测验。',
+    highlights: ['深度研报与思维导图', '双语字幕对照与导出', 'AI 视频问答与互动测验'],
+    icon: Video,
+    accent: {
+      gradientFrom: '#3b82f6',
+      gradientTo: '#1d4ed8',
+      glowColor: 'rgba(59, 130, 246, 0.32)',
     },
   },
 ];

@@ -30,7 +30,14 @@ import { MODULE_ICONS } from "../macos/moduleIcons";
 import { moduleRegistry } from "@/modules/registry";
 import { usePlatformAuth } from '@/shared/store/authStore';
 import { useChatStore } from '@/features/diagram/model/chatStore';
-import { useDesktopStore, type ShellPanel } from '@/shared/store/desktopStore';
+import {
+  matchModulePath,
+  resolveModuleRoute,
+  useDesktopStore,
+  type KeepAliveModulePath,
+  type ShellPanel
+} from '@/shared/store/desktopStore';
+import { KeepAliveWorkspace } from "./KeepAliveOutlet";
 import { dispatchDiagramShellCommand, type DiagramShellCommand } from "./shellEvents";
 import {
   DOCK_AUTO_HIDE_DELAY_MS,
@@ -156,19 +163,34 @@ interface DockItem {
   onActivate?: (trigger: HTMLElement) => void;
 }
 
+interface DockContextMenuState {
+  modulePath: KeepAliveModulePath;
+  label: string;
+  running: boolean;
+  routeActive: boolean;
+}
+
 function Dock({
   alwaysVisible,
-  onOpenRecents
+  onOpenRecents,
+  onNotice
 }: {
   alwaysVisible: boolean;
   onOpenRecents: (trigger: HTMLElement) => void;
+  onNotice: (message: string) => void;
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const activeWindow = useDesktopStore((state) => state.activeWindow);
+  const moduleLastRoutes = useDesktopStore((state) => state.moduleLastRoutes);
+  const mountedModules = useDesktopStore((state) => state.mountedModules);
+  const quitModule = useDesktopStore((state) => state.quitModule);
   const [peekVisible, setPeekVisible] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [hoveredDockItem, setHoveredDockItem] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<DockContextMenuState | null>(null);
   const iconRefs = useRef<Record<string, HTMLElement | null>>({});
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef<number | null>(null);
 
   const cancelHide = useCallback(() => {
@@ -222,6 +244,45 @@ function Dock({
     window.addEventListener("keydown", focusDock);
     return () => window.removeEventListener("keydown", focusDock);
   }, [cancelHide]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (contextMenuRef.current?.contains(event.target as Node)) return;
+      setContextMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const handleGoModuleHome = (modPath: KeepAliveModulePath) => {
+    setContextMenu(null);
+    navigate(modPath);
+    if (modPath === "/video" && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("vidgrab:reset-home"));
+    }
+  };
+
+  const handleQuitModule = (modPath: KeepAliveModulePath, label: string, isCurrentRoute: boolean) => {
+    setContextMenu(null);
+    if (isCurrentRoute) {
+      navigate("/");
+      window.setTimeout(() => {
+        quitModule(modPath);
+        onNotice(`已退出“${label}”并释放后台缓存`);
+      }, 20);
+    } else {
+      quitModule(modPath);
+      onNotice(`已退出“${label}”并释放后台缓存`);
+    }
+  };
 
   const items: DockItem[] = [
     {
@@ -312,10 +373,20 @@ function Dock({
             const routeActive = item.path === "/"
               ? location.pathname === "/"
               : item.path
-                ? location.pathname.startsWith(item.path)
+                ? matchModulePath(location.pathname) === item.path
                 : activeWindow === "recents";
-            const running = item.key === "home" || (Boolean(item.path) && item.path !== "/" && routeActive);
+            const isMountedModule = Boolean(
+              item.path && item.path !== "/" && mountedModules.includes(item.path as KeepAliveModulePath)
+            );
+            const running = item.key === "home" || (Boolean(item.path) && item.path !== "/" && (routeActive || isMountedModule));
             const windowOpen = item.key === "recents" && activeWindow === "recents";
+            const targetPath = item.path
+              ? item.path === "/"
+                ? "/"
+                : routeActive
+                  ? `${location.pathname}${location.search}${location.hash}`
+                  : resolveModuleRoute(item.path, moduleLastRoutes)
+              : null;
             const Artwork = item.artwork;
             const FallbackIcon = item.icon;
             const scale = dockScaleForItem(item.key, hoveredDockItem, reduceMotion);
@@ -342,12 +413,13 @@ function Dock({
                 <i className="mac-dock-indicator" aria-hidden="true" />
               </>
             );
-            if (item.path) {
+            if (targetPath) {
+              const isKeepAliveMod = item.path && item.path !== "/";
               return (
                 <NavLink
                   key={item.key}
                   ref={(element) => { iconRefs.current[item.key] = element; }}
-                  to={item.path}
+                  to={targetPath}
                   className="mac-dock-item"
                   data-active={running || undefined}
                   data-open={windowOpen || undefined}
@@ -358,6 +430,24 @@ function Dock({
                   onMouseLeave={deactivateMagnification}
                   onFocus={activateMagnification}
                   onBlur={deactivateMagnification}
+                  onClick={(event) => {
+                    setContextMenu(null);
+                    if (routeActive) {
+                      event.preventDefault();
+                    }
+                  }}
+                  onContextMenu={(event) => {
+                    if (!isKeepAliveMod || !item.path) return;
+                    event.preventDefault();
+                    cancelHide();
+                    setPeekVisible(true);
+                    setContextMenu({
+                      modulePath: item.path as KeepAliveModulePath,
+                      label: item.label,
+                      running,
+                      routeActive
+                    });
+                  }}
                 >
                   {content}
                 </NavLink>
@@ -385,6 +475,54 @@ function Dock({
             );
           })}
         </nav>
+        {contextMenu ? (
+          <div
+            ref={contextMenuRef}
+            className="mac-dock-context-menu"
+            role="menu"
+            aria-label={`${contextMenu.label} 程序坞菜单`}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="mac-menu-item"
+              onClick={() => {
+                const mod = contextMenu.modulePath;
+                const active = contextMenu.routeActive;
+                setContextMenu(null);
+                if (!active) {
+                  navigate(resolveModuleRoute(mod, moduleLastRoutes));
+                }
+              }}
+            >
+              <span className="mac-menu-check" />
+              <span className="mac-menu-label">{contextMenu.routeActive ? `保持在${contextMenu.label}` : `切换到${contextMenu.label}`}</span>
+              <span />
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="mac-menu-item"
+              onClick={() => handleGoModuleHome(contextMenu.modulePath)}
+            >
+              <span className="mac-menu-check" />
+              <span className="mac-menu-label">回到{contextMenu.label}首页</span>
+              <span />
+            </button>
+            <div className="mac-menu-separator" role="separator" />
+            <button
+              type="button"
+              role="menuitem"
+              className="mac-menu-item"
+              disabled={!contextMenu.running}
+              onClick={() => handleQuitModule(contextMenu.modulePath, contextMenu.label, contextMenu.routeActive)}
+            >
+              <span className="mac-menu-check" />
+              <span className="mac-menu-label">退出{contextMenu.label}</span>
+              <kbd className="mac-menu-shortcut">释放缓存</kbd>
+            </button>
+          </div>
+        ) : null}
       </div>
     </>
   );
@@ -411,6 +549,7 @@ function AboutWindow({
   onClose: () => void;
   triggerRef?: RefObject<HTMLElement | null>;
 }) {
+  const moduleLastRoutes = useDesktopStore((state) => state.moduleLastRoutes);
   return (
     <MacWindow
       title="关于桌面"
@@ -424,8 +563,8 @@ function AboutWindow({
         <p>一个把思维导图、AI 绘图与演示文稿制作汇聚在同一工作空间的创作平台。</p>
         <small>现代 macOS Web Shell · 2026</small>
         <div>
-          <NavLink to="/diagram" onClick={onClose}>打开思维导图</NavLink>
-          <NavLink to="/ppt" onClick={onClose}>打开 PPT 制作</NavLink>
+          <NavLink to={resolveModuleRoute("/diagram", moduleLastRoutes)} onClick={onClose}>打开思维导图</NavLink>
+          <NavLink to={resolveModuleRoute("/ppt", moduleLastRoutes)} onClick={onClose}>打开 PPT 制作</NavLink>
         </div>
       </div>
     </MacWindow>
@@ -448,8 +587,11 @@ function HelpWindow({
   const [query, setQuery] = useState("");
   const shortcuts = [
     { keys: "⌘ K", label: "搜索应用与历史" },
-    { keys: "⌘ 1", label: "打开思维导图" },
-    { keys: "⌘ 2", label: "打开 PPT 制作" },
+    { keys: "⌘ 0", label: "返回桌面" },
+    { keys: "⌘ 1", label: "切换到智能图表" },
+    { keys: "⌘ 2", label: "切换到 AI 招聘" },
+    { keys: "⌘ 3", label: "切换到 PPT 制作" },
+    { keys: "⌘ 4", label: "切换到视频学习" },
     ...(area === "diagram" ? [
       { keys: "⌘ N", label: "新建绘图会话" },
       { keys: "⌘ O", label: "打开绘图历史" }
@@ -653,7 +795,7 @@ function AppShell() {
       dispatchDiagramShellCommand(command);
       return;
     }
-    navigate("/diagram");
+    navigate(resolveModuleRoute("/diagram", useDesktopStore.getState().moduleLastRoutes));
     window.setTimeout(() => dispatchDiagramShellCommand(command), 80);
   }, [location.pathname, navigate]);
 
@@ -821,7 +963,20 @@ function AppShell() {
       return true;
     }
     switch (item.action) {
-      case "navigate": if (item.href) navigate(item.href); break;
+      case "navigate":
+        if (item.href) {
+          const isRootModuleHref =
+            item.href === "/diagram" ||
+            item.href === "/recruit" ||
+            item.href === "/ppt" ||
+            item.href === "/video";
+          const alreadyInSameModule = matchModulePath(location.pathname) === item.href;
+          const targetHref = isRootModuleHref && !alreadyInSameModule
+            ? resolveModuleRoute(item.href, useDesktopStore.getState().moduleLastRoutes)
+            : item.href;
+          navigate(targetHref);
+        }
+        break;
       case "open-about":
         windowOpenerRef.current = opener;
         openWindow("about");
@@ -847,7 +1002,7 @@ function AppShell() {
       case "ppt-new": navigateAndReveal(item.href || "/ppt#ppt-create-project"); break;
       case "ppt-projects": navigateAndReveal(item.href || "/ppt#recent-projects"); break;
     }
-  }, [canvasMode, closeOverlay, logout, navigate, navigateAndReveal, openLogin, openWindow, runDiagramCommand, runEditCommand, setCanvasMode, toggleDesktopIcons, toggleFullscreen, toggleWidgets]);
+  }, [canvasMode, closeOverlay, location.pathname, logout, navigate, navigateAndReveal, openLogin, openWindow, runDiagramCommand, runEditCommand, setCanvasMode, toggleDesktopIcons, toggleFullscreen, toggleWidgets]);
 
   const openShellPanel = useCallback((panel: Exclude<ShellPanel, null>) => {
     if (!loginOpen) openPanel(panel);
@@ -870,9 +1025,30 @@ function AppShell() {
         return;
       }
       if (editable) return;
-      if (event.metaKey && key === "1") { event.preventDefault(); navigate("/diagram"); }
-      else if (event.metaKey && key === "2") { event.preventDefault(); navigate("/ppt"); }
-      else if (event.metaKey && key === "r" && context.area === "desktop") { event.preventDefault(); openWindow("recents"); }
+      if (event.metaKey && key === "0") {
+        event.preventDefault();
+        if (location.pathname !== "/") navigate("/");
+      } else if (event.metaKey && key === "1") {
+        event.preventDefault();
+        if (matchModulePath(location.pathname) !== "/diagram") {
+          navigate(resolveModuleRoute("/diagram", useDesktopStore.getState().moduleLastRoutes));
+        }
+      } else if (event.metaKey && key === "2") {
+        event.preventDefault();
+        if (matchModulePath(location.pathname) !== "/recruit") {
+          navigate(resolveModuleRoute("/recruit", useDesktopStore.getState().moduleLastRoutes));
+        }
+      } else if (event.metaKey && key === "3") {
+        event.preventDefault();
+        if (matchModulePath(location.pathname) !== "/ppt") {
+          navigate(resolveModuleRoute("/ppt", useDesktopStore.getState().moduleLastRoutes));
+        }
+      } else if (event.metaKey && key === "4") {
+        event.preventDefault();
+        if (matchModulePath(location.pathname) !== "/video") {
+          navigate(resolveModuleRoute("/video", useDesktopStore.getState().moduleLastRoutes));
+        }
+      } else if (event.metaKey && key === "r" && context.area === "desktop") { event.preventDefault(); openWindow("recents"); }
       else if (event.metaKey && key === "n" && context.area === "diagram") { event.preventDefault(); runDiagramCommand("new-conversation"); }
       else if (event.metaKey && key === "o" && context.area === "diagram") { event.preventDefault(); runDiagramCommand("open-history"); }
       else if (event.metaKey && event.ctrlKey && key === "f") { event.preventDefault(); void toggleFullscreen(); }
@@ -880,7 +1056,7 @@ function AppShell() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activePanel, activeWindow, closeLogin, closeOverlay, context.area, loginOpen, navigate, openShellPanel, openWindow, runDiagramCommand, toggleFullscreen]);
+  }, [activePanel, activeWindow, closeLogin, closeOverlay, context.area, location.pathname, loginOpen, navigate, openShellPanel, openWindow, runDiagramCommand, toggleFullscreen]);
 
   const userLabel = session?.user.display_name?.trim() || session?.user.email || "登录";
   const isDesktop = context.area === "desktop";
@@ -975,7 +1151,10 @@ function AppShell() {
         )}
       />
 
-      <main className="mac-app-content"><Outlet /></main>
+      <main className="mac-app-content">
+        <KeepAliveWorkspace />
+        <Outlet />
+      </main>
 
       {activePanel && activePanel !== "spotlight" ? (
         <div ref={panelRef} className="mac-system-popover" data-panel={activePanel}>
@@ -1002,6 +1181,7 @@ function AppShell() {
       <Dock
         key={`${context.area}-${dockAlwaysVisible ? "fixed" : "autohide"}`}
         alwaysVisible={dockAlwaysVisible}
+        onNotice={setNotice}
         onOpenRecents={(trigger) => {
           windowOpenerRef.current = trigger;
           openWindow("recents");

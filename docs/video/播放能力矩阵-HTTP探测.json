@@ -1,0 +1,65 @@
+[
+  {
+    "name": "YouTube",
+    "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+    "status": "ok",
+    "mode": "video",
+    "stream_type": "progressive",
+    "src": "/api/media/proxy/VA57luQpxHokkC9JyKOoyxS5",
+    "mime": "video/mp4",
+    "expires_in": 1800,
+    "source": "yt-dlp"
+  },
+  {
+    "name": "B站",
+    "url": "https://www.bilibili.com/video/BV1GJ411x7h7",
+    "status": "ok",
+    "mode": "embed",
+    "stream_type": "embed",
+    "provider": "bilibili",
+    "bvid": "BV1GJ411x7h7",
+    "cid": 137649199,
+    "page_url": "https://www.bilibili.com/video/BV1GJ411x7h7"
+  },
+  {
+    "name": "直链mp4",
+    "url": "https://www.w3schools.com/html/mov_bbb.mp4",
+    "status": "ok",
+    "mode": "video",
+    "stream_type": "progressive",
+    "src": "/api/media/proxy/FynekUkmcqzcXiU2I0ddlPwE",
+    "mime": "video/mp4",
+    "expires_in": 1800,
+    "source": "yt-dlp"
+  },
+  {
+    "name": "抖音短链",
+    "url": "https://v.douyin.com/iRNBho6U/",
+    "status": "fail",
+    "error": "抖音短链在服务端未能跳到视频页（浏览器能打开，是因为浏览器里已有抖音 Cookie）。解决办法任选其一：① 在浏览器打开该链接后，复制地址栏里 douyin.com/video/数字 的完整链接再粘贴；② 勾选「读取浏览器登录态」选 Firefox；③ 导出 cookies.txt 到 backend/cookies.txt。"
+  },
+  {
+    "name": "优酷",
+    "url": "https://v.youku.com/v_show/id_XNTA2NTA0MjA1Mg==.html",
+    "status": "ok",
+    "mode": "video",
+    "stream_type": "hls",
+    "src": "/api/media/proxy/tQPQJ6XAzU5wEybyZsrDNy3H",
+    "mime": "application/vnd.apple.mpegurl",
+    "expires_in": 1800,
+    "source": "yt-dlp",
+    "hls_risk": true
+  },
+  {
+    "name": "爱奇艺",
+    "url": "http://www.iqiyi.com/v_19rrojlavg.html",
+    "status": "fail",
+    "error": "该爱奇艺视频已下线或不可用，请换用其他链接。"
+  },
+  {
+    "name": "TikTok",
+    "url": "https://www.tiktok.com/@scout2015/video/6718339390845714177",
+    "status": "fail",
+    "error": "解析失败：\u001b[0;31mERROR:\u001b[0m [TikTok] 6718339390845714177: Your IP address is blocked from accessing this post"
+  }
+]

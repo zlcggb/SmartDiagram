@@ -9,7 +9,7 @@ import {
   type ComponentType,
   type CSSProperties
 } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
   Cloud,
@@ -32,7 +32,7 @@ import { useRecentWork } from '@/shared/ui/useRecentWork';
 import { moduleRegistry } from "@/modules/registry";
 import { usePlatformAuth } from '@/shared/store/authStore';
 import { isPlatformAdminSession } from '@/shared/lib/config/auth';
-import { useDesktopStore } from '@/shared/store/desktopStore';
+import { resolveModuleRoute, useDesktopStore } from '@/shared/store/desktopStore';
 
 const WEEKDAY_NAMES = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 const CALENDAR_WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
@@ -90,12 +90,16 @@ function formatRecentTime(value?: string) {
 }
 
 function ClockWidget() {
+  const location = useLocation();
+  const isDesktop = location.pathname === "/";
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
+    if (!isDesktop) return;
+    setNow(new Date());
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [isDesktop]);
 
   const hours = String(now.getHours()).padStart(2, "0");
   const minutes = String(now.getMinutes()).padStart(2, "0");
@@ -408,7 +412,7 @@ export default function HomePage() {
         key: module.path,
         label: module.navLabel,
         artwork: MODULE_ICONS[module.path] ?? FolderIcon,
-        onOpen: () => navigate(module.path)
+        onOpen: () => navigate(resolveModuleRoute(module.path, useDesktopStore.getState().moduleLastRoutes))
       })),
       {
         key: "recents",

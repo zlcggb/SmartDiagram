@@ -21,6 +21,7 @@ const frontendDistDir = path.join(projectRoot, "apps/web/dist");
 const proxyRoutes = [
   { prefix: "/api/", target: "http://127.0.0.1:8000", stripPrefix: false },
   { prefix: "/ppt-api/", target: "http://127.0.0.1:4000", stripPrefix: true },
+  { prefix: "/video-api/", target: "http://127.0.0.1:4020", stripPrefix: true },
   { prefix: "/drawio/", target: "http://127.0.0.1:9022", stripPrefix: true }
 ];
 
@@ -118,7 +119,8 @@ const server = http.createServer((clientRequest, clientResponse) => {
 
 server.listen(listenPort, () => {
   console.log(`聚合网关已启动 → http://localhost:${listenPort}`);
-  console.log(`  /         平台首页（统一 SPA：/diagram 思维导图 · /ppt PPT 制作）`);
-  console.log(`  /api/     SmartDiagram 后端 → :8000`);
-  console.log(`  /ppt-api/ PPT Agent 后端   → :4000`);
+  console.log(`  /           平台首页（统一 SPA：/diagram · /ppt · /video）`);
+  console.log(`  /api/       SmartDiagram 后端 → :8000`);
+  console.log(`  /ppt-api/   PPT Agent 后端   → :4000`);
+  console.log(`  /video-api/ Video 后端       → :4020`);
 });

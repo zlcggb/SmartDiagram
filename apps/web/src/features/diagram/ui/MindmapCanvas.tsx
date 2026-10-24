@@ -158,13 +158,25 @@ const fitWithPadding = (me: any) => {
 // ─── Component ───
 
 export default function MindmapCanvas() {
-  const { canvasCode, streamingCode, isStreaming, setCanvasCode, setMindmapInstance, setSelectedNode, canvasMode } = useChatStore();
+  const {
+    canvasCode,
+    streamingCode,
+    isStreaming,
+    setCanvasCode,
+    setMindmapInstance,
+    setSelectedNode,
+    canvasMode,
+    canvasRenderRevision,
+  } = useChatStore();
   const { t } = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const mindInstance = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [layoutReadyTick, setLayoutReadyTick] = useState(0);
   const isSyncingRef = useRef(false);
   const lastCanvasMode = useRef(canvasMode);
+  const lastSizeRef = useRef({ width: 0, height: 0 });
+  const lastRevisionRef = useRef(canvasRenderRevision);
 
   // Ref for double-write avoidance in markdown sync
   const lastRenderedMarkdownRef = useRef('');
@@ -347,7 +359,43 @@ export default function MindmapCanvas() {
       attributeFilter: ['class', 'style', 'expanded'],
     });
 
-    const observer = new ResizeObserver(handleInteraction);
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      const width = rect ? Math.round(rect.width) : el.clientWidth;
+      const height = rect ? Math.round(rect.height) : el.clientHeight;
+      const prev = lastSizeRef.current;
+      lastSizeRef.current = { width, height };
+
+      if (width > 0 && height > 0) {
+        if (prev.width === 0 || prev.height === 0) {
+          setLayoutReadyTick((tick) => tick + 1);
+          if (mindInstance.current) {
+            requestAnimationFrame(() => {
+              if (!mindInstance.current) return;
+              try {
+                mindInstance.current.linkDiv?.();
+              } catch {
+                // ignore
+              }
+              fitWithPadding(mindInstance.current);
+              updateMiniMap();
+            });
+          }
+          return;
+        }
+        if (
+          mindInstance.current &&
+          (Math.abs(width - prev.width) > 4 || Math.abs(height - prev.height) > 4)
+        ) {
+          try {
+            mindInstance.current.linkDiv?.();
+          } catch {
+            // ignore
+          }
+        }
+      }
+      handleInteraction();
+    });
     observer.observe(el);
 
     return () => {
@@ -364,8 +412,19 @@ export default function MindmapCanvas() {
     if (!codeToRender || !containerRef.current) return;
     if (isSyncingRef.current) return;
 
+    // 若画布当前处于 Keep-Alive 后台隐藏状态 (0x0)，等待切回前台有真实宽高后再初始化，避免 MindElixir linkDiv 计算出 0 坐标导致连线丢失
+    if (containerRef.current.clientWidth === 0 || containerRef.current.clientHeight === 0) {
+      return;
+    }
+
+    const forceRetry = lastRevisionRef.current !== canvasRenderRevision;
+    if (forceRetry) {
+      lastRevisionRef.current = canvasRenderRevision;
+      lastRenderedMarkdownRef.current = '';
+    }
+
     // Check if new code matches our internal edits to avoid redundant init
-    if (codeToRender.trim() === lastRenderedMarkdownRef.current.trim()) {
+    if (!forceRetry && codeToRender.trim() === lastRenderedMarkdownRef.current.trim()) {
       return;
     }
 
@@ -460,14 +519,22 @@ export default function MindmapCanvas() {
           setSelectedNode(null);
         });
 
+        lastRenderedMarkdownRef.current = codeToRender;
+
         // Fit after initial layout and refresh minimap
         setTimeout(() => {
+          try {
+            me.linkDiv?.();
+          } catch {
+            // ignore
+          }
           fitWithPadding(me);
           updateMiniMap();
         }, 50);
       } else {
         // Subsequent renders: re-init with new data
         mindInstance.current.init(data);
+        lastRenderedMarkdownRef.current = codeToRender;
 
         // Re-register listener (init clears listeners)
         mindInstance.current.bus.addListener('operation', () => {
@@ -499,7 +566,17 @@ export default function MindmapCanvas() {
         if (!isStreaming) {
           fitWithPadding(mindInstance.current);
         }
-        setTimeout(updateMiniMap, 50);
+        setTimeout(() => {
+          try {
+            mindInstance.current?.linkDiv?.();
+          } catch {
+            // ignore
+          }
+          if (!isStreaming && mindInstance.current) {
+            fitWithPadding(mindInstance.current);
+          }
+          updateMiniMap();
+        }, 50);
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -509,13 +586,28 @@ export default function MindmapCanvas() {
         setError(msg);
       }
     }
-  }, [isStreaming, codeToRender, syncToCanvasCode, setMindmapInstance, canvasMode, updateMiniMap]);
+  }, [
+    isStreaming,
+    codeToRender,
+    syncToCanvasCode,
+    setMindmapInstance,
+    canvasMode,
+    updateMiniMap,
+    layoutReadyTick,
+    canvasRenderRevision,
+    setSelectedNode,
+  ]);
 
   // Final fit and center adjustment when streaming concludes
   useEffect(() => {
     if (!isStreaming && mindInstance.current && canvasCode) {
       const timer = setTimeout(() => {
         if (mindInstance.current) {
+          try {
+            mindInstance.current.linkDiv?.();
+          } catch {
+            // ignore
+          }
           fitWithPadding(mindInstance.current);
           updateMiniMap();
         }

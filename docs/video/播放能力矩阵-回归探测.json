@@ -1,0 +1,280 @@
+[
+  {
+    "name": "YouTube",
+    "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+    "direct": {
+      "ok": true,
+      "ms": 21801,
+      "mode": "video",
+      "source": "yt-dlp",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    },
+    "http": {
+      "ok": true,
+      "ms": 21115,
+      "mode": "video",
+      "source": "yt-dlp",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    }
+  },
+  {
+    "name": "B站",
+    "url": "https://www.bilibili.com/video/BV1GJ411x7h7",
+    "direct": {
+      "ok": true,
+      "ms": 1278,
+      "mode": "embed",
+      "source": null,
+      "provider": "bilibili",
+      "stream_type": "embed",
+      "src_kind": "embed"
+    },
+    "http": {
+      "ok": true,
+      "ms": 1369,
+      "mode": "embed",
+      "source": null,
+      "provider": "bilibili",
+      "stream_type": "embed",
+      "src_kind": "embed"
+    }
+  },
+  {
+    "name": "直链mp4",
+    "url": "https://www.w3schools.com/html/mov_bbb.mp4",
+    "direct": {
+      "ok": true,
+      "ms": 2233,
+      "mode": "video",
+      "source": "yt-dlp",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    },
+    "http": {
+      "ok": true,
+      "ms": 12833,
+      "mode": "video",
+      "source": "yt-dlp",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    }
+  },
+  {
+    "name": "抖音短链",
+    "url": "https://v.douyin.com/iRNBho6U/",
+    "direct": {
+      "ok": false,
+      "ms": 675,
+      "error": "抖音短链未能解析出视频 ID。请在浏览器打开该链接后，复制地址栏里 douyin.com/video/数字 的完整链接再粘贴。"
+    },
+    "http": {
+      "ok": false,
+      "ms": 588,
+      "error": "抖音短链未能解析出视频 ID。请在浏览器打开该链接后，复制地址栏里 douyin.com/video/数字 的完整链接再粘贴。"
+    }
+  },
+  {
+    "name": "优酷",
+    "url": "https://v.youku.com/v_show/id_XNTA2NTA0MjA1Mg==.html",
+    "direct": {
+      "ok": true,
+      "ms": 852,
+      "mode": "video",
+      "source": "yt-dlp",
+      "provider": null,
+      "stream_type": "hls",
+      "src_kind": "proxy"
+    },
+    "http": {
+      "ok": true,
+      "ms": 789,
+      "mode": "video",
+      "source": "yt-dlp",
+      "provider": null,
+      "stream_type": "hls",
+      "src_kind": "proxy"
+    }
+  },
+  {
+    "name": "爱奇艺",
+    "url": "https://www.iqiyi.com/v_225605y1238.html",
+    "direct": {
+      "ok": true,
+      "ms": 1772,
+      "mode": "video",
+      "source": "iqiyi",
+      "provider": null,
+      "stream_type": "hls",
+      "src_kind": "proxy"
+    },
+    "http": {
+      "ok": true,
+      "ms": 1607,
+      "mode": "video",
+      "source": "iqiyi",
+      "provider": null,
+      "stream_type": "hls",
+      "src_kind": "proxy"
+    }
+  },
+  {
+    "name": "TikTok-竖屏",
+    "url": "https://www.tiktok.com/@miky.ryken/video/7652591550274211079",
+    "direct": {
+      "ok": true,
+      "ms": 6547,
+      "mode": "video",
+      "source": "tiktok-h264",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "cache"
+    },
+    "http": {
+      "ok": true,
+      "ms": 6636,
+      "mode": "video",
+      "source": "tiktok-h264",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "cache"
+    }
+  },
+  {
+    "name": "TikTok-经典",
+    "url": "https://www.tiktok.com/@scout2015/video/6718339390845714177",
+    "direct": {
+      "ok": true,
+      "ms": 1702,
+      "mode": "embed",
+      "source": "tiktok-embed",
+      "provider": "tiktok",
+      "stream_type": "embed",
+      "src_kind": "embed"
+    },
+    "http": {
+      "ok": true,
+      "ms": 1701,
+      "mode": "embed",
+      "source": "tiktok-embed",
+      "provider": "tiktok",
+      "stream_type": "embed",
+      "src_kind": "embed"
+    }
+  },
+  {
+    "name": "X/Twitter",
+    "url": "https://x.com/Google/status/1257326183101980673",
+    "direct": {
+      "ok": true,
+      "ms": 2098,
+      "mode": "video",
+      "source": "x",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    },
+    "http": {
+      "ok": true,
+      "ms": 1185,
+      "mode": "video",
+      "source": "x",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    }
+  },
+  {
+    "name": "微博",
+    "url": "https://weibo.com/7827771738/N4xlMvjhI",
+    "direct": {
+      "ok": true,
+      "ms": 1195,
+      "mode": "video",
+      "source": "weibo",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    },
+    "http": {
+      "ok": true,
+      "ms": 623,
+      "mode": "video",
+      "source": "weibo",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    }
+  },
+  {
+    "name": "Facebook",
+    "url": "https://www.facebook.com/watch/?v=647537299265662",
+    "direct": {
+      "ok": true,
+      "ms": 2275,
+      "mode": "video",
+      "source": "yt-dlp",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    },
+    "http": {
+      "ok": true,
+      "ms": 2213,
+      "mode": "video",
+      "source": "yt-dlp",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    }
+  },
+  {
+    "name": "Twitch-VOD",
+    "url": "https://www.twitch.tv/videos/6528877",
+    "direct": {
+      "ok": true,
+      "ms": 3073,
+      "mode": "video",
+      "source": "yt-dlp",
+      "provider": null,
+      "stream_type": "hls",
+      "src_kind": "proxy"
+    },
+    "http": {
+      "ok": true,
+      "ms": 3080,
+      "mode": "video",
+      "source": "yt-dlp",
+      "provider": null,
+      "stream_type": "hls",
+      "src_kind": "proxy"
+    }
+  },
+  {
+    "name": "小红书",
+    "url": "https://www.xiaohongshu.com/explore/6a167421000000003601c4ff?xsec_token=ABmRyyzWyQyMOcU7FCb_GYq7WPSR8guC9RnmLcXSxyFGc=&xsec_source=pc_feed",
+    "direct": {
+      "ok": true,
+      "ms": 8917,
+      "mode": "video",
+      "source": "xhs",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    },
+    "http": {
+      "ok": true,
+      "ms": 10834,
+      "mode": "video",
+      "source": "xhs",
+      "provider": null,
+      "stream_type": "progressive",
+      "src_kind": "proxy"
+    }
+  }
+]

@@ -9,12 +9,12 @@
 
 | 维度 | 事实 |
 |------|------|
-| **产品** | 统一桌面式 SPA：`/` 首页 · `/diagram` 智能图表 · `/recruit` AI 招聘筛选（AI 找人才 / ATS） · `/ppt` AI 演示文稿 |
-| **形态** | npm/pnpm monorepo，**一个前端 + 两个后端域 + 网关聚合** |
+| **产品** | 统一桌面式 SPA：`/` 首页 · `/diagram` 智能图表 · `/recruit` AI 招聘筛选（AI 找人才 / ATS） · `/ppt` AI 演示文稿 · `/video` 视频学习助手 |
+| **形态** | npm/pnpm monorepo，**一个前端 + 三个后端域 + 网关聚合** |
 | **本地** | `npm run dev` → Vite `:5173`，API 由 Vite proxy 分流 |
-| **生产** | `gateway :9237` 唯一入口，nginx 分流 SPA / 图表 API / PPT API / draw.io |
-| **数据库** | **双库**：`smartdiagram`（图表）+ `ppt_agent`（PPT，Prisma） |
-| **配置** | **唯一主配置** 根目录 `.env`（Platform / Diagram / PPT 三分区） |
+| **生产** | `gateway :9237` 唯一入口，nginx 分流 SPA / 图表 API / PPT API / Video API / draw.io |
+| **数据库** | **三库（同一 PG 实例）**：`smartdiagram`（图表）+ `ppt_agent`（PPT，Prisma）+ `vidgrab`（视频学习助手） |
+| **配置** | **唯一主配置** 根目录 `.env`（Platform / Diagram / PPT / Video 四分区） |
 
 ---
 
@@ -41,7 +41,8 @@ SmartDiagram/
 │   │       ├── features/
 │   │       │   ├── diagram/      # 图表：chatStore、Canvas、ChatPanel
 │   │       │   ├── recruit/      # AI 招聘 ATS：岗位、候选人、面试、统计
-│   │       │   └── ppt/          # PPT：五步工作流、workbenchStore、api.ts
+│   │       │   ├── ppt/          # PPT：五步工作流、workbenchStore、api.ts
+│   │       │   └── video/        # 视频学习：工作台、导图、双语字幕、测验、历史与后台
 │   │       └── shared/           # AppShell、auth、settings、macOS 桌面 UI
 │   │
 │   ├── api-diagram/              # 图表 FastAPI + LangGraph（:8000）
@@ -55,8 +56,11 @@ SmartDiagram/
 │   ├── api-ppt/                  # PPT Python 编排 FastAPI（:4000）
 │   │   └── src/ppt_agent_api/    # LangGraph 工作流、对 Node 侧车 HTTP 调用
 │   │
-│   └── service-ppt-renderer/     # PPT Node 侧车（:4010）
-│       └── Prisma + PPTX 渲染 + 资料存储
+│   ├── service-ppt-renderer/     # PPT Node 侧车（:4010）
+│   │   └── Prisma + PPTX 渲染 + 资料存储
+│   │
+│   └── api-video/                # 视频学习助手 FastAPI（:4020，/video-api/*）
+│       └── main.py / summarizer.py / downloader.py / quiz_generator.py / migrations/
 │
 ├── packages/
 │   ├── slide-ir/                 # PPT IR 与 SmartSlide DSL
@@ -88,10 +92,11 @@ SmartDiagram/
 
 ```
 浏览器 :5173 (apps/web, Vite HMR)
-  ├─ /api/*      ──proxy──► api-diagram      :8000
-  └─ /ppt-api/*  ──proxy──► api-ppt          :4000
-                                    │
-                                    └──HTTP──► service-ppt-renderer :4010
+  ├─ /api/*        ──proxy──► api-diagram      :8000
+  ├─ /ppt-api/*    ──proxy──► api-ppt          :4000
+  │                                 │
+  │                                 └──HTTP──► service-ppt-renderer :4010
+  └─ /video-api/*  ──proxy──► api-video        :4020 (──► Jeff :8001)
 
 Docker（基础设施）:
   db:5432 (smartdiagram + ppt_agent)
@@ -166,8 +171,9 @@ graph TB
 | `/diagram/*` | `DiagramWorkspace` | 图表工作台（画布 + 聊天） |
 | `/recruit/*` | `RecruitModule` | 招聘工作台（AI 找人才初筛 / 岗位 / 候选人 / 面试 / 统计） |
 | `/ppt/*` | `PptModule` | PPT 五步工作流 |
+| `/video/*` | `VideoModule` | 视频学习工作台（上传/链接解析、研报、导图、双语字幕、问答、测验、历史与后台） |
 
-所有路由包在 `AppShell` 内（macOS 风格菜单栏、Spotlight、设置）。
+所有路由包在 `AppShell` 内（macOS 风格菜单栏、Spotlight、设置），由 `shared/ui/shell/KeepAliveOutlet.tsx`（`KeepAliveWorkspace`）结合 `shared/store/desktopStore.ts` 按需挂载并保活各业务模块（冻结后台模块 `LocationContext`、持久化各模块最后停留的子路由到 `sessionStorage`、切入后台自动暂停音视频、切回前台触发尺寸校准）。
 
 ### 4.2 模块注册（`modules/registry.tsx`）
 
@@ -226,6 +232,17 @@ Studio 设计稿按页懒加载最近 5 个 `SlideDesignVersion`；版本导航�
 招聘页面使用独立的 `recruit` 外壳上下文：`RecruitShell` 不再渲染额外窗口标题栏，AppShell 的 Dock 在招聘工作台中自动隐藏并保留底部唤出边缘。
 人才搜索会话由 `api-diagram/app/models/recruit.py` 的 `RecruitSearchConversation` 按已验证的用户/游客身份持久化，`api/routes_recruit.py` 提供 `/api/recruit/search-conversations`，`services/recruit_search_service.py` 在响应后独立执行并写回评分依据和匹配结果；部署时 SQLModel 会创建新表。
 简历优化草稿由 `RecruitResumeDraft`（`recruit_resume_drafts`）按身份持久化结构化简历、对话与版本评分，`api/routes_recruit.py` 提供 `/api/recruit/resume-drafts`（CRUD、`/undo`、`/chat/stream`、`/score/stream` SSE），逻辑在 `services/resume_lab_service.py`；草稿评分复用岗位评分卡，只写入草稿，不生成候选人初筛记录。
+
+### 4.6 视频学习前端（`features/video/`）
+
+| 关注点 | 文件 |
+|--------|------|
+| 模块入口与专属顶栏 | `VideoModule.tsx` + `components/VideoShell.tsx`（隐藏模拟桌面顶栏，左侧品牌点击重置首页，中央 Portal 嵌入紧凑视频切换条，右侧集成学习记录/文档中心/更新记录） |
+| 核心工作台 | `pages/VideoWorkspacePage.tsx` + `components/HeroInputSection.tsx` + `components/VideoPlayer.tsx` + `components/VideoDownloadCard.tsx`（平台彩色徽章、100% 自动流式保存） |
+| AI 研报 / 导图 / 问答 | `components/SummaryPanel.tsx` + `components/MindmapElixirCanvas.tsx`（支持一键发送至 `/diagram` 画布深度编辑）+ `lib/markdown.ts`（CJK 富文本、可视化流程卡片、原生 SVG 保护） |
+| 智能测验（Study Deck & 全卷） | `components/QuizPanel.tsx`（🎴 闯关卡片 + 📋 紧凑电子全卷双模式、底部固定操作栏、PostgreSQL + `localStorage` 双重持久化） |
+| 学习记录 / 文档中心 / 更新记录 / 管理台 | `pages/VideoHistoryPage.tsx` + `pages/VideoDocsPage.tsx`（`/video/docs`）+ `pages/VideoChangelogPage.tsx`（`/video/changelog`）+ `pages/VideoAdminPage.tsx` |
+| API 与本地历史 | `lib/api.ts`（base = `/video-api/api`）+ `lib/guestHistory.ts` |
 
 ---
 
@@ -325,17 +342,31 @@ PPT 导演视频的矩形聚焦由 `SlideNarration.focusPlanJson` 与 `alignment
 只有 `transcript` 来源且覆盖率达到门限的 cue 可驱动聚焦；FFmpeg 静音检测仅作为整页字幕降级，不驱动聚焦。
 导出链路位于 `routes/media.ts`，聚焦遮罩位于 `packages/ppt-renderer/src/focusOverlay.ts`，时间区间按帧量化，成片合并后必须通过 FFmpeg 视频/音频双流完整解码。
 
+### 6.5 视频学习后端（`apps/api-video` `:4020` + 系统 1 `Jeff` `:8001`）
+
+```
+浏览器 /video-api/api/*
+    → api-video (Python FastAPI, :4020)
+         ├─ downloader.py / media_routes.py : yt-dlp 跨平台解析、HTTP 206 Range 流式播放与自动续签、一键下载
+         ├─ cloud_asr.py / summarizer.py    : 6 线程切片并发 ASR + 主总结与双语字幕并行生成 (35.4s)
+         ├─ intent_router.py / qa.py        : 系统 1 (共享 shared-jeff :8001, 0.78 高置信门控) + 系统 2 三阶段 SSE 流式问答
+         ├─ quiz_generator.py / ai_routes.py: 时间桶均匀采样 + 研报骨架双源 6 题极速出题、状态与成绩双写持久化
+         ├─ media_token.py                  : 10 位自包含 HMAC 短码 (/video?s=<code >) 免登录只读分享与沙盒试做
+         └─ docs_routes.py                  : 读取 docs/video/*.md 驱动 /video/docs 文档中心
+```
+
 ---
 
-## 7. 环境变量（根 `.env` 三分区）
+## 7. 环境变量（根 `.env` 四分区）
 
 | 分区 | 服务 | 关键变量 |
 |------|------|----------|
 | **Platform** | deploy / docker | `DB_PASSWORD`、`GATEWAY_PORT`、`PPT_INTERNAL_API_SECRET` |
 | **Diagram** | api-diagram | `DIAGRAM_DATABASE_URL`、`REDIS_URL`、`OPENAI_*`、`AUTH_*` |
 | **PPT** | api-ppt + renderer | `DATABASE_URL`（ppt_agent）、`AI_*`、`STORAGE_DIR` |
+| **Video** | api-video + jeff | `VIDEO_DATABASE_URL`（vidgrab）、`TYPESAFE_BASE_URL`（`http://shared-jeff:8001`）、`TYPESAFE_API_KEY`、`ASR_MODEL` |
 
-**切勿混库**：`DIAGRAM_DATABASE_URL` → `smartdiagram`；`DATABASE_URL` → `ppt_agent`。
+**切勿混库**：`DIAGRAM_DATABASE_URL` → `smartdiagram`；`DATABASE_URL` → `ppt_agent`；`VIDEO_DATABASE_URL` → `vidgrab`。
 
 校验：`npm run env:validate` · 部署前：`deploy.sh` 自动调用 `scripts/validate-deploy-env.sh`。
 
@@ -359,6 +390,7 @@ PPT 导演视频的矩形聚焦由 `SlideNarration.focusPlanJson` 与 `alignment
 | 改 Kimi 设计知识检索 / Prompt 注入 | `packages/agents/src/designKnowledge/kimiSlides/` + `packages/agents/src/prompts.ts` + `packages/agents/src/slideIrGeneration.ts` |
 | 改 PPTX 渲染 | `packages/ppt-renderer/` + `service-ppt-renderer/` |
 | 改 PPT 导演配音 / 字幕 / 矩形聚焦 | `service-ppt-renderer/src/routes/media.ts` + `src/lib/audioAlignment.ts` + `src/lib/focusResolver.ts` + `packages/agents/src/speechScriptPlan.ts` + `packages/ppt-renderer/src/focusOverlay.ts` |
+| 改视频学习模块（前端/后端） | `apps/web/src/features/video/` + `apps/api-video/`（`:4020`，代理前缀 `/video-api/*`，数据库 `vidgrab`，专项文档 `docs/video/`） |
 | 改生产路由 | `gateway/nginx.conf` |
 | 改本地 proxy | `apps/web/vite.config.ts` |
 | 改启动/端口 | `dev.sh`、`scripts/dev-common.sh`、`docker-compose.yml` |

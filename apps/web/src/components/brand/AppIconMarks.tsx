@@ -130,3 +130,46 @@ export function PptAgentIconMark({
     </svg>
   );
 }
+
+/** Shared Video Learning mark: a royal blue play-screen tile with AI sparkle & waveform. */
+export function VideoAppIconMark({
+  size,
+  width,
+  height,
+  ...props
+}: AppIconMarkProps) {
+  const uid = useId().replace(/:/g, "");
+  const bgId = `video-bg-${uid}`;
+  const glossId = `video-gloss-${uid}`;
+  return (
+    <svg
+      viewBox="0 0 120 120"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      width={width ?? size}
+      height={height ?? size}
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+    >
+      <defs>
+        <linearGradient id={bgId} x1="16" y1="8" x2="104" y2="114" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#3B82F6" />
+          <stop offset="1" stopColor="#1D4ED8" />
+        </linearGradient>
+        <linearGradient id={glossId} x1="60" y1="4" x2="60" y2="62" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#FFFFFF" stopOpacity="0.28" />
+          <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <rect x="4" y="4" width="112" height="112" rx="27" fill={`url(#${bgId})`} />
+      <rect x="4" y="4" width="112" height="112" rx="27" fill={`url(#${glossId})`} />
+      <rect x="22" y="28" width="76" height="54" rx="13" fill="#0F172A" fillOpacity="0.24" />
+      <rect x="22" y="25" width="76" height="54" rx="13" fill="#FFFFFF" />
+      <path d="M53 41.5v21l18-10.5-18-10.5Z" fill="#2563EB" />
+      <rect x="30" y="88" width="60" height="6" rx="3" fill="#DBEAFE" fillOpacity="0.85" />
+      <circle cx="52" cy="91" r="5" fill="#FFFFFF" />
+      <path d="M90 22l2.2 5.3 5.3 2.2-5.3 2.2L90 37l-2.2-5.3-5.3-2.2 5.3-2.2L90 22Z" fill="#FDE047" />
+    </svg>
+  );
+}

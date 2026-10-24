@@ -1,0 +1,29 @@
+[
+  {
+    "name": "YouTube-me at zoo",
+    "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+    "status": "prepare_ok",
+    "mode": "video",
+    "provider": "-",
+    "src_kind": "proxy",
+    "note": "后端 Range 代理，可内嵌 video"
+  },
+  {
+    "name": "B站-公开",
+    "url": "https://www.bilibili.com/video/BV1xx411c7mD",
+    "status": "prepare_ok",
+    "mode": "embed",
+    "provider": "bilibili",
+    "src_kind": "embed",
+    "note": "DASH 分轨，走 B 站官方嵌入"
+  },
+  {
+    "name": "直链mp4",
+    "url": "https://www.w3schools.com/html/mov_bbb.mp4",
+    "status": "prepare_ok",
+    "mode": "video",
+    "provider": "-",
+    "src_kind": "proxy",
+    "note": "后端 Range 代理，可内嵌 video"
+  }
+]

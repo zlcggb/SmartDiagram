@@ -1,6 +1,93 @@
 import { create } from "zustand";
 
 export const DESKTOP_PREFERENCES_KEY = "smartdiagram.desktop.preferences.v1";
+export const MODULE_ROUTES_SESSION_KEY = "smartdiagram.desktop.moduleRoutes.v1";
+
+export const KEEP_ALIVE_MODULES = ["/diagram", "/recruit", "/ppt", "/video"] as const;
+export type KeepAliveModulePath = (typeof KEEP_ALIVE_MODULES)[number];
+
+export const DEFAULT_MODULE_ROUTES: Record<KeepAliveModulePath, string> = {
+  "/diagram": "/diagram",
+  "/recruit": "/recruit",
+  "/ppt": "/ppt",
+  "/video": "/video"
+};
+
+export function matchModulePath(pathname: string): KeepAliveModulePath | null {
+  const normalized = pathname || "/";
+  for (const mod of KEEP_ALIVE_MODULES) {
+    if (normalized === mod || normalized.startsWith(`${mod}/`)) {
+      return mod;
+    }
+  }
+  return null;
+}
+
+export function isValidModuleRoute(mod: KeepAliveModulePath, route: unknown): route is string {
+  if (typeof route !== "string" || !route.startsWith(mod)) return false;
+  const rest = route.slice(mod.length);
+  return rest === "" || rest.startsWith("/") || rest.startsWith("?") || rest.startsWith("#");
+}
+
+export function parseModuleRoutes(raw: string | null): Record<KeepAliveModulePath, string> {
+  if (!raw) return { ...DEFAULT_MODULE_ROUTES };
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ...DEFAULT_MODULE_ROUTES };
+    }
+    const source = parsed as Record<string, unknown>;
+    return {
+      "/diagram": isValidModuleRoute("/diagram", source["/diagram"])
+        ? source["/diagram"]
+        : DEFAULT_MODULE_ROUTES["/diagram"],
+      "/recruit": isValidModuleRoute("/recruit", source["/recruit"])
+        ? source["/recruit"]
+        : DEFAULT_MODULE_ROUTES["/recruit"],
+      "/ppt": isValidModuleRoute("/ppt", source["/ppt"])
+        ? source["/ppt"]
+        : DEFAULT_MODULE_ROUTES["/ppt"],
+      "/video": isValidModuleRoute("/video", source["/video"])
+        ? source["/video"]
+        : DEFAULT_MODULE_ROUTES["/video"]
+    };
+  } catch {
+    return { ...DEFAULT_MODULE_ROUTES };
+  }
+}
+
+export function resolveModuleRoute(
+  modulePath: string,
+  moduleLastRoutes: Record<KeepAliveModulePath, string>
+): string {
+  const mod = matchModulePath(modulePath);
+  if (!mod) return modulePath;
+  return moduleLastRoutes[mod] || mod;
+}
+
+function readModuleRoutes(): Record<KeepAliveModulePath, string> {
+  if (typeof window === "undefined") return { ...DEFAULT_MODULE_ROUTES };
+  try {
+    return parseModuleRoutes(window.sessionStorage.getItem(MODULE_ROUTES_SESSION_KEY));
+  } catch {
+    return { ...DEFAULT_MODULE_ROUTES };
+  }
+}
+
+function saveModuleRoutes(routes: Record<KeepAliveModulePath, string>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(MODULE_ROUTES_SESSION_KEY, JSON.stringify(routes));
+  } catch {
+    // Ignore storage errors in restricted environments.
+  }
+}
+
+function readInitialMountedModules(): KeepAliveModulePath[] {
+  if (typeof window === "undefined") return [];
+  const mod = matchModulePath(window.location.pathname);
+  return mod ? [mod] : [];
+}
 
 export type ShellPanel =
   | "network"
@@ -76,16 +163,22 @@ interface DesktopState extends DesktopPreferences {
   activePanel: ShellPanel;
   activeWindow: ShellWindow;
   selectedDesktopIcon: string | null;
+  moduleLastRoutes: Record<KeepAliveModulePath, string>;
+  mountedModules: KeepAliveModulePath[];
   openPanel: (panel: Exclude<ShellPanel, null>) => void;
   openWindow: (windowName: Exclude<ShellWindow, null>) => void;
   closeOverlay: () => void;
   setSelectedDesktopIcon: (key: string | null) => void;
+  recordModuleLocation: (pathname: string, search?: string, hash?: string) => void;
+  quitModule: (modulePath: KeepAliveModulePath) => void;
   toggleWidgets: () => void;
   toggleDesktopIcons: () => void;
   toggleDockAutoHide: () => void;
 }
 
 const initialPreferences = readDesktopPreferences();
+const initialModuleRoutes = readModuleRoutes();
+const initialMountedModules = readInitialMountedModules();
 
 function preferencesFromState(state: DesktopState): DesktopPreferences {
   return {
@@ -100,6 +193,8 @@ export const useDesktopStore = create<DesktopState>((set) => ({
   activePanel: null,
   activeWindow: null,
   selectedDesktopIcon: null,
+  moduleLastRoutes: initialModuleRoutes,
+  mountedModules: initialMountedModules,
 
   openPanel: (panel) =>
     set((state) => ({
@@ -120,6 +215,44 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     }),
 
   setSelectedDesktopIcon: (selectedDesktopIcon) => set({ selectedDesktopIcon }),
+
+  recordModuleLocation: (pathname, search = "", hash = "") =>
+    set((state) => {
+      const mod = matchModulePath(pathname);
+      if (!mod) return state;
+      const fullRoute = `${pathname}${search}${hash}`;
+      const routeChanged = state.moduleLastRoutes[mod] !== fullRoute;
+      const alreadyMounted = state.mountedModules.includes(mod);
+      if (!routeChanged && alreadyMounted) return state;
+
+      const nextRoutes = routeChanged
+        ? { ...state.moduleLastRoutes, [mod]: fullRoute }
+        : state.moduleLastRoutes;
+      if (routeChanged) {
+        saveModuleRoutes(nextRoutes);
+      }
+      const nextMounted = alreadyMounted
+        ? state.mountedModules
+        : [...state.mountedModules, mod];
+
+      return {
+        moduleLastRoutes: nextRoutes,
+        mountedModules: nextMounted
+      };
+    }),
+
+  quitModule: (modulePath) =>
+    set((state) => {
+      const nextRoutes = {
+        ...state.moduleLastRoutes,
+        [modulePath]: DEFAULT_MODULE_ROUTES[modulePath]
+      };
+      saveModuleRoutes(nextRoutes);
+      return {
+        moduleLastRoutes: nextRoutes,
+        mountedModules: state.mountedModules.filter((m) => m !== modulePath)
+      };
+    }),
 
   toggleWidgets: () =>
     set((state) => {

@@ -19,6 +19,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import { MindmapAppIcon, SlidesAppIcon } from '@/shared/ui/macos/MacOSIcons';
+import { resolveModuleRoute, useDesktopStore } from '@/shared/store/desktopStore';
 import { buildSpotlightResults, type SpotlightResult } from "./shellModel";
 import { useRecentWork } from "./useRecentWork";
 
@@ -148,7 +149,12 @@ export function Spotlight({ open, authenticated, onClose, onLogin }: SpotlightPr
       onLogin();
       return;
     }
-    if (result.href) navigate(result.href);
+    if (result.href) {
+      const targetHref = result.kind === "app"
+        ? resolveModuleRoute(result.href, useDesktopStore.getState().moduleLastRoutes)
+        : result.href;
+      navigate(targetHref);
+    }
   };
 
   const selectMode = (nextMode: Exclude<SpotlightMode, "all">) => {

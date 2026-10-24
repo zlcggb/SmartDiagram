@@ -12,6 +12,7 @@
 | 本地启动 / 部署 | [README.md](../README.md)、[DEPLOYMENT.md](./DEPLOYMENT.md) |
 | 访客认证与配额 | [GUEST_AUTH.md](./GUEST_AUTH.md) |
 | SmartSlide 的设计、生成、校验与版本链路 | [SMARTSLIDE_DESIGN_PIPELINE.md](./SMARTSLIDE_DESIGN_PIPELINE.md) |
+| **视频学习助手文档中心（架构/ASR/Jeff/测验/运维 30 篇）** | [video/README.md](./video/README.md) · [系统架构与技术全景](./video/系统架构与技术全景.md) · [优化记录与技术演进](./video/优化记录与技术演进.md) |
 | **平台用户中心 / 权限 / 用量配额（执行记录）** | [plans/2026-07-26-platform-quota-management-execution.md](./plans/2026-07-26-platform-quota-management-execution.md) |
 | Agent 工具约定 | [AGENTS.md](../AGENTS.md) |
 

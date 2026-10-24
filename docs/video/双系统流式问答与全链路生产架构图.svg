@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 580" width="100%" height="100%" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <linearGradient id="bg-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#f1f5f9"/>
+    </linearGradient>
+    <filter id="card-shadow" x="-3%" y="-3%" width="106%" height="108%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#0284c7"/>
+    </marker>
+    <marker id="arr-emerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981"/>
+    </marker>
+    <marker id="arr-indigo" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#6366f1"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#d97706"/>
+    </marker>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="1160" height="580" rx="16" fill="url(#bg-grad)" stroke="#cbd5e1" stroke-width="1.5"/>
+
+  <!-- 顶部标题栏 -->
+  <rect x="20" y="18" width="1120" height="58" rx="12" fill="#0f172a"/>
+  <text x="40" y="44" fill="#ffffff" font-size="16" font-weight="bold">VidGrab v2.6.0 · 双系统 SSE 流式问答、秒级 Range 时间轴跳转与云端共享 Jeff 生产架构图</text>
+  <text x="40" y="64" fill="#94a3b8" font-size="11.5">全链路打通：Nginx 零缓存透传 (HTTP 206 / SSE)  ➔  系统 1 (Jeff 685MiB) 意图分流  ➔  系统 2 (LLM) 逐字流式生成  ➔  PostgreSQL 16 JSONB 持久化</text>
+  <rect x="975" y="32" width="148" height="28" rx="14" fill="#10b981" fill-opacity="0.18" stroke="#10b981" stroke-width="1"/>
+  <text x="1049" y="50" fill="#34d399" font-size="11.5" font-weight="bold" text-anchor="middle">Production v2.6.0</text>
+
+  <!-- ==================== 第 1 列：客户端与 Nginx 网关层 ==================== -->
+  <g transform="translate(20, 94)" filter="url(#card-shadow)">
+    <rect width="262" height="390" rx="12" fill="#ffffff" stroke="#0284c7" stroke-width="1.5"/>
+    <rect width="262" height="38" rx="12" fill="#0284c7"/>
+    <rect y="22" width="262" height="16" fill="#0284c7"/>
+    <text x="131" y="25" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">1. 客户端与 Nginx 流式网关</text>
+
+    <!-- 子卡片 A：Vue 3 问答与播放器 -->
+    <rect x="14" y="52" width="234" height="156" rx="8" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+    <text x="24" y="72" fill="#0369a1" font-size="12" font-weight="bold">🖥️ Vue 3 + XGPlayer 工作台</text>
+    <text x="24" y="92" fill="#0f172a" font-size="11">• askQuestionStream() 流式引擎</text>
+    <text x="32" y="108" fill="#475569" font-size="10.5">ReadableStream 解析 SSE 三阶段帧</text>
+    <text x="24" y="128" fill="#0f172a" font-size="11">• 双系统耗时与时间戳气泡</text>
+    <text x="32" y="144" fill="#047857" font-size="10.5" font-weight="bold">⚡ Jev系统1 + 🧠 大模型(首字) + 🕒 时间</text>
+    <text x="24" y="164" fill="#0f172a" font-size="11">• VideoPlayer.seekTo(seconds)</text>
+    <text x="32" y="180" fill="#475569" font-size="10.5">readyState 守卫 + loadedmetadata 校准</text>
+    <text x="32" y="196" fill="#0284c7" font-size="10.5">解决未播放初始态点击 00:26 归零问题</text>
+
+    <!-- 子卡片 B：Nginx 反向代理配置 -->
+    <rect x="14" y="222" width="234" height="148" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="24" y="242" fill="#0f172a" font-size="12" font-weight="bold">🌐 宝塔 Nginx 网关穿透加固</text>
+    <text x="24" y="262" fill="#dc2626" font-size="10.5" text-decoration="line-through">原缺陷：全局 proxy_cache 剥离 Range</text>
+    <text x="24" y="282" fill="#047857" font-size="11" font-weight="bold">✓ proxy_cache off;</text>
+    <text x="32" y="298" fill="#475569" font-size="10.5">透传 Range: bytes=... ➔ HTTP/2 206</text>
+    <text x="24" y="318" fill="#047857" font-size="11" font-weight="bold">✓ proxy_buffering off;</text>
+    <text x="32" y="334" fill="#475569" font-size="10.5">禁用响应缓冲，SSE 词块毫秒级直达</text>
+    <text x="24" y="354" fill="#0369a1" font-size="10.5">✓ Accept-Ranges: bytes 响应头常驻</text>
+  </g>
+
+  <!-- ==================== 第 2 列：系统 1 (Jeff) 意图路由层 ==================== -->
+  <g transform="translate(306, 94)" filter="url(#card-shadow)">
+    <rect width="262" height="390" rx="12" fill="#ffffff" stroke="#10b981" stroke-width="1.5"/>
+    <rect width="262" height="38" rx="12" fill="#10b981"/>
+    <rect y="22" width="262" height="16" fill="#10b981"/>
+    <text x="131" y="25" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">2. 系统 1 · Jeff 快思考路由中枢</text>
+
+    <!-- 子卡片 A：shared-jeff 低内存容器 -->
+    <rect x="14" y="52" width="234" height="156" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+    <text x="24" y="72" fill="#047857" font-size="12" font-weight="bold">⚡ shared-jeff (gliformer-large)</text>
+    <text x="24" y="92" fill="#0f172a" font-size="11">• Safetensors mmap 零拷贝加载</text>
+    <text x="32" y="108" fill="#047857" font-size="10.5" font-weight="bold">内存峰值：4.81 GB OOM ➔ 685 MiB</text>
+    <text x="24" y="128" fill="#0f172a" font-size="11">• sitecustomize.py 运行时热补丁</text>
+    <text x="32" y="144" fill="#475569" font-size="10.5">修复 meta 设备 buffer 丢失 + 折叠长提示</text>
+    <text x="24" y="164" fill="#0f172a" font-size="11">• Docker 内网 DNS 直连</text>
+    <text x="32" y="180" fill="#475569" font-size="10.5">http://shared-jeff:8001 (healthy)</text>
+    <text x="32" y="196" fill="#047857" font-size="10.5">支持多业务项目共享同一推理底座</text>
+
+    <!-- 子卡片 B：意图判定与防误判 -->
+    <rect x="14" y="222" width="234" height="148" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="24" y="242" fill="#0f172a" font-size="12" font-weight="bold">🧭 意图分流与首帧推送 (Stage 1)</text>
+    <text x="24" y="262" fill="#0f172a" font-size="11">• 6 大意图 + 长字幕按需开关：</text>
+    <text x="32" y="278" fill="#475569" font-size="10.5">video_qa | seek_player | make_quiz</text>
+    <text x="32" y="294" fill="#475569" font-size="10.5">download | translate | chitchat</text>
+    <text x="24" y="314" fill="#0f172a" font-size="11">• 语种词后置校验防误判：</text>
+    <text x="32" y="330" fill="#475569" font-size="10.5">「三句话概括」归正为 video_qa</text>
+    <text x="24" y="352" fill="#047857" font-size="11" font-weight="bold">➔ 立即推送 SSE: event="router"</text>
+  </g>
+
+  <!-- ==================== 第 3 列：系统 2 (LLM) 流式推理层 ==================== -->
+  <g transform="translate(592, 94)" filter="url(#card-shadow)">
+    <rect width="262" height="390" rx="12" fill="#ffffff" stroke="#6366f1" stroke-width="1.5"/>
+    <rect width="262" height="38" rx="12" fill="#6366f1"/>
+    <rect y="22" width="262" height="16" fill="#6366f1"/>
+    <text x="131" y="25" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">3. 系统 2 · 大模型 SSE 流式推理</text>
+
+    <!-- 子卡片 A：流式生成管线 -->
+    <rect x="14" y="52" width="234" height="156" rx="8" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1"/>
+    <text x="24" y="72" fill="#4338ca" font-size="12" font-weight="bold">🧠 ask_routed_stream + chat_stream</text>
+    <text x="24" y="92" fill="#0f172a" font-size="11">• 动态上下文装配 (build_context)</text>
+    <text x="32" y="108" fill="#475569" font-size="10.5">needs_transcript=False 省去万字长稿</text>
+    <text x="24" y="128" fill="#0f172a" font-size="11">• OpenAI SDK stream=True 推流</text>
+    <text x="32" y="144" fill="#4338ca" font-size="10.5" font-weight="bold">主力模型：gemini-3.8-flash-high</text>
+    <text x="24" y="164" fill="#0f172a" font-size="11">• 逐块推送 SSE: event="delta"</text>
+    <text x="32" y="180" fill="#475569" font-size="10.5">前端实时渲染 Markdown 与 [mm:ss] 胶囊</text>
+    <text x="32" y="196" fill="#4338ca" font-size="10.5">彻底消除 5~15 秒白屏盲等</text>
+
+    <!-- 子卡片 B：高精度双系统计时器 -->
+    <rect x="14" y="222" width="234" height="148" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="24" y="242" fill="#0f172a" font-size="12" font-weight="bold">⏱️ 双系统全链路耗时打点 (Stage 3)</text>
+    <text x="24" y="264" fill="#0f172a" font-size="11">• jeff_ms：系统 1 意图判定耗时</text>
+    <text x="24" y="284" fill="#0f172a" font-size="11">• ttft_ms：系统 2 首字响应耗时 (TTFT)</text>
+    <text x="24" y="304" fill="#0f172a" font-size="11">• llm_ms：系统 2 完整流式生成耗时</text>
+    <text x="24" y="324" fill="#0f172a" font-size="11">• created_at：东八区 HH:MM:SS 时间戳</text>
+    <text x="24" y="352" fill="#4338ca" font-size="11" font-weight="bold">➔ 完成推送 SSE: event="done"</text>
+  </g>
+
+  <!-- ==================== 第 4 列：PostgreSQL 持久化与回放层 ==================== -->
+  <g transform="translate(878, 94)" filter="url(#card-shadow)">
+    <rect width="262" height="390" rx="12" fill="#ffffff" stroke="#d97706" stroke-width="1.5"/>
+    <rect width="262" height="38" rx="12" fill="#d97706"/>
+    <rect y="22" width="262" height="16" fill="#d97706"/>
+    <text x="131" y="25" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">4. PostgreSQL 16 持久化闭环</text>
+
+    <!-- 子卡片 A：问答记录 JSONB 持久化 -->
+    <rect x="14" y="52" width="234" height="156" rx="8" fill="#fffbeb" stroke="#fde68a" stroke-width="1"/>
+    <text x="24" y="72" fill="#b45309" font-size="12" font-weight="bold">🗄️ 问答历史自动落库与恢复</text>
+    <text x="24" y="92" fill="#0f172a" font-size="11">• append_analysis_chat() 原子更新</text>
+    <text x="32" y="108" fill="#475569" font-size="10.5">jsonb_set 追加至 analyses.result</text>
+    <text x="32" y="124" fill="#b45309" font-size="10.5" font-weight="bold">路径：result -> 'chat_history'</text>
+    <text x="24" y="144" fill="#0f172a" font-size="11">• 内存 _tasks 与 PG 双写同步</text>
+    <text x="32" y="160" fill="#475569" font-size="10.5">刷新或从「学习记录」重进自动回填</text>
+    <text x="32" y="176" fill="#475569" font-size="10.5">完整保留历史回答、动作卡片与耗时</text>
+    <text x="32" y="194" fill="#047857" font-size="10.5" font-weight="bold">✓ 零新建表 · KISS 架构原则</text>
+
+    <!-- 子卡片 B：历史回放与管理台修复 -->
+    <rect x="14" y="222" width="234" height="148" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+    <text x="24" y="242" fill="#0f172a" font-size="12" font-weight="bold">🔧 历史回放与管理控制台加固</text>
+    <text x="24" y="264" fill="#0f172a" font-size="11">• GET /api/summary/{id} 字段对齐</text>
+    <text x="32" y="280" fill="#475569" font-size="10.5">内存命中分支补齐 video_id / webpage_url</text>
+    <text x="32" y="296" fill="#047857" font-size="10.5">修复点击「查看研报与回放」停留在首页</text>
+    <text x="24" y="318" fill="#0f172a" font-size="11">• GET /api/admin/stats 类型加固</text>
+    <text x="32" y="334" fill="#475569" font-size="10.5">修复 PG Decimal / float 500 异常</text>
+    <text x="24" y="352" fill="#b45309" font-size="10.5">• 清理无效 Stripe 占位符，消除日志噪音</text>
+  </g>
+
+  <!-- 列间连接箭头 -->
+  <line x1="282" y1="289" x2="304" y2="289" stroke="#0284c7" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <line x1="568" y1="289" x2="590" y2="289" stroke="#10b981" stroke-width="2" marker-end="url(#arr-emerald)"/>
+  <line x1="854" y1="289" x2="876" y2="289" stroke="#6366f1" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+  <!-- 底部全链路 SSE 时序与量化收益横幅 -->
+  <g transform="translate(20, 500)" filter="url(#card-shadow)">
+    <rect width="1120" height="62" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <rect x="14" y="13" width="128" height="36" rx="8" fill="#0f172a"/>
+    <text x="78" y="35" fill="#ffffff" font-size="11.5" font-weight="bold" text-anchor="middle">端到端量化收益</text>
+
+    <text x="162" y="27" fill="#0369a1" font-size="11.5" font-weight="bold">① 视频时间轴点击跳转</text>
+    <text x="162" y="45" fill="#475569" font-size="11">HTTP 200 重置归零 ➔ <tspan fill="#047857" font-weight="bold">HTTP 206 秒级精准空降</tspan></text>
+
+    <line x1="415" y1="12" x2="415" y2="50" stroke="#e2e8f0" stroke-width="1.5"/>
+
+    <text x="435" y="27" fill="#047857" font-size="11.5" font-weight="bold">② 双系统问答响应体验</text>
+    <text x="435" y="45" fill="#475569" font-size="11">同步阻塞盲等 10s+ ➔ <tspan fill="#4338ca" font-weight="bold">SSE 逐字流式 + Jev/LLM 双耗时徽标</tspan></text>
+
+    <line x1="755" y1="12" x2="755" y2="50" stroke="#e2e8f0" stroke-width="1.5"/>
+
+    <text x="775" y="27" fill="#b45309" font-size="11.5" font-weight="bold">③ 研报回放与问答留存</text>
+    <text x="775" y="45" fill="#475569" font-size="11">刷新即丢 / 点击不跳转 ➔ <tspan fill="#047857" font-weight="bold">100% 自动落库恢复 + 历史直达</tspan></text>
+  </g>
+</svg>

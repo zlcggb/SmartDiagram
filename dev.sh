@@ -32,7 +32,8 @@ check_required_ports \
   "统一前端:5173" \
   "SmartDiagram 后端:8000" \
   "PPT Agent 后端:4000" \
-  "PPT Node 侧车:4010"
+  "PPT Node 侧车:4010" \
+  "Video 学习后端:4020"
 
 start_infrastructure
 wait_for_database
@@ -43,6 +44,7 @@ echo ""
 start_diagram_api --reload
 start_ppt_renderer
 start_ppt_api --reload
+start_video_api --reload
 
 echo -e "${GREEN}🚀 统一前端 (HMR)     →  http://localhost:5173${NC}"
 (cd "$FRONTEND_DIR" && $PNPM dev) &

@@ -1,4 +1,4 @@
-export type ShellArea = "desktop" | "diagram" | "recruit" | "ppt-home" | "ppt-project";
+export type ShellArea = "desktop" | "diagram" | "recruit" | "video" | "ppt-home" | "ppt-project";
 
 export type ShellAction =
   | "open-about"
@@ -133,6 +133,10 @@ function goMenu(context: ShellContext): ShellMenu {
       {
         ...navigateItem("go-ppt", "PPT 制作", "/ppt"),
         disabled: context.area === "ppt-home"
+      },
+      {
+        ...navigateItem("go-video", "视频学习", "/video"),
+        disabled: context.area === "video"
       }
     ]
   };
@@ -359,6 +363,14 @@ export function parseShellContext(pathname: string): ShellContext {
       pathname: normalizedPathname
     };
   }
+  if (normalizedPathname === "/video" || normalizedPathname.startsWith("/video/")) {
+    return {
+      area: "video",
+      appName: "视频学习",
+      projectId: null,
+      pathname: normalizedPathname
+    };
+  }
   if (normalizedPathname === "/ppt" || normalizedPathname === "/ppt/") {
     return {
       area: "ppt-home",
@@ -487,6 +499,13 @@ export function buildSpotlightResults(
       title: "PPT 制作",
       subtitle: "从资料到演示文稿的一体化工作台",
       href: "/ppt"
+    },
+    {
+      id: "app-video",
+      kind: "app",
+      title: "视频学习",
+      subtitle: "AI 视频总结、思维导图、双语字幕与互动测验",
+      href: "/video"
     }
   ];
 

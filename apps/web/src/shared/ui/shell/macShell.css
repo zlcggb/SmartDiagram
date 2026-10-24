@@ -3151,10 +3151,11 @@
   }
 }
 
-/* PPT 模块沉浸模式：自动隐藏顶部桌面菜单栏；底部的 Dock 保持 macOS 风格自动隐藏与触底唤出，仅在专注全屏模式（focus-mode）下完全隐藏 Dock */
+/* PPT / Recruit / Video 模块沉浸模式：自动隐藏顶部桌面菜单栏，使用模块自带专属导航栏 */
 .mac-app-shell[data-area='ppt-project'] .mac-menu-bar,
 .mac-app-shell[data-area='ppt-home'] .mac-menu-bar,
 .mac-app-shell[data-area='recruit'] .mac-menu-bar,
+.mac-app-shell[data-area='video'] .mac-menu-bar,
 body.has-ppt-focus-mode .mac-menu-bar {
   display: none !important;
 }
@@ -3162,6 +3163,7 @@ body.has-ppt-focus-mode .mac-menu-bar {
 .mac-app-shell[data-area='ppt-project'] .mac-app-content,
 .mac-app-shell[data-area='ppt-home'] .mac-app-content,
 .mac-app-shell[data-area='recruit'] .mac-app-content,
+.mac-app-shell[data-area='video'] .mac-app-content,
 body.has-ppt-focus-mode .mac-app-content {
   top: 0 !important;
   inset: 0 0 0 !important;
@@ -3171,4 +3173,47 @@ body.has-ppt-focus-mode .mac-app-content {
 
 body.has-ppt-focus-mode .mac-dock {
   display: none !important;
+}
+
+/* 多应用 Keep-Alive 窗口切换微动效 */
+@keyframes mac-keepalive-enter {
+  from {
+    opacity: 0.92;
+    transform: scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+[data-keepalive-module][data-active='true'] {
+  animation: mac-keepalive-enter 140ms var(--mac-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-keepalive-module][data-active='true'] {
+    animation: none !important;
+  }
+}
+
+/* 程序坞图标右键快捷菜单 */
+.mac-dock-context-menu {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3300;
+  min-width: 210px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: 14px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.95), rgba(240, 247, 251, 0.86));
+  box-shadow:
+    0 20px 48px rgba(28, 61, 88, 0.24),
+    0 3px 10px rgba(28, 61, 88, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  -webkit-backdrop-filter: blur(34px) saturate(160%);
+  backdrop-filter: blur(34px) saturate(160%);
+  animation: mac-menu-open 140ms var(--mac-ease) both;
 }

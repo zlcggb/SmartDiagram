@@ -24,6 +24,12 @@ test("识别桌面、绘图、招聘和 PPT 上下文", () => {
     projectId: null,
     pathname: "/recruit/candidates"
   });
+  assert.deepEqual(parseShellContext("/video/history"), {
+    area: "video",
+    appName: "视频学习",
+    projectId: null,
+    pathname: "/video/history"
+  });
   assert.equal(parseShellContext("/ppt").area, "ppt-home");
   assert.deepEqual(parseShellContext("/ppt/p/project-1/studio"), {
     area: "ppt-project",
@@ -209,7 +215,7 @@ test("访客 Spotlight 只展示应用入口与登录命令", () => {
     conversations: [{ conversation_id: "private", title: "不应泄露" }]
   });
 
-  assert.deepEqual(results.map((result) => result.kind), ["app", "app", "login"]);
+  assert.deepEqual(results.map((result) => result.kind), ["app", "app", "app", "login"]);
   assert.equal(results.some((result) => result.title === "不应泄露"), false);
 });
 
@@ -221,8 +227,8 @@ test("空查询时应用在前，最近工作按更新时间排序", () => {
     conversations: []
   });
 
-  assert.deepEqual(results.slice(0, 2).map((result) => result.title), ["思维导图", "PPT 制作"]);
-  assert.deepEqual(results.slice(2).map((result) => result.title), ["新绘图", "旧项目"]);
+  assert.deepEqual(results.slice(0, 3).map((result) => result.title), ["思维导图", "PPT 制作", "视频学习"]);
+  assert.deepEqual(results.slice(3).map((result) => result.title), ["新绘图", "旧项目"]);
 });
 
 test("菜单前缀检索跳过禁用项并从当前位置循环查找", () => {

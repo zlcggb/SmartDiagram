@@ -40,6 +40,9 @@ services:
         if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname='ppt_agent'" | grep -q 1; then
           psql -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ppt_agent OWNER ${HOST_DB_USER:-smartdiagram_app}'
         fi
+        if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname='vidgrab'" | grep -q 1; then
+          psql -v ON_ERROR_STOP=1 -c 'CREATE DATABASE vidgrab OWNER ${HOST_DB_USER:-smartdiagram_app}'
+        fi
 
   api-diagram:
     extra_hosts:
@@ -60,6 +63,12 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=postgresql://${HOST_DB_USER:-smartdiagram_app}:${DB_PASSWORD:?Set DB_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/ppt_agent?schema=public
+
+  api-video:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - VIDEO_DATABASE_URL=${VIDEO_DATABASE_URL:-postgresql://${HOST_DB_USER:-smartdiagram_app}:${DB_PASSWORD:?Set DB_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/vidgrab}
 
   ppt-storage-init:
     image: alpine:3.20

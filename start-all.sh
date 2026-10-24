@@ -35,7 +35,8 @@ check_required_ports \
   "聚合网关:${GATEWAY_PORT}" \
   "SmartDiagram 后端:8000" \
   "PPT Agent 后端:4000" \
-  "PPT Node 侧车:4010"
+  "PPT Node 侧车:4010" \
+  "Video 学习后端:4020"
 
 start_infrastructure
 wait_for_database
@@ -47,6 +48,7 @@ echo ""
 start_diagram_api
 start_ppt_renderer
 start_ppt_api
+start_video_api
 
 echo -e "${GREEN}🚀 聚合网关           →  http://localhost:${GATEWAY_PORT}${NC}"
 GATEWAY_PORT="$GATEWAY_PORT" node "$ROOT_DIR/gateway/dev-gateway.mjs" &

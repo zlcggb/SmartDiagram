@@ -1,0 +1,336 @@
+<svg viewBox="0 0 1200 960" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <filter id="card-shadow" x="-3%" y="-3%" width="106%" height="108%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.07"/>
+    </filter>
+    <linearGradient id="header-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="stage1-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#be123c"/>
+      <stop offset="100%" stop-color="#e11d48"/>
+    </linearGradient>
+    <linearGradient id="stage2-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="stage3-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </linearGradient>
+    <linearGradient id="stage4-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#047857"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#0284c7"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#059669"/>
+    </marker>
+    <marker id="arr-purple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7c3aed"/>
+    </marker>
+    <marker id="arr-slate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- 背景画布 -->
+  <rect width="1200" height="960" rx="16" fill="#f1f5f9"/>
+
+  <!-- 顶部总标题栏 -->
+  <g transform="translate(20, 16)" filter="url(#card-shadow)">
+    <rect width="1160" height="64" rx="14" fill="url(#header-grad)"/>
+    <circle cx="32" cy="32" r="7" fill="#10b981"/>
+    <text x="50" y="28" fill="#ffffff" font-size="16" font-weight="bold">系统 1 决策模型 (Jeff / GLiFormer) 远程服务器低内存破局与生产落地架构图</text>
+    <text x="50" y="49" fill="#94a3b8" font-size="11.5">宿主机：189.24.77.52:9322 (AMD EPYC 8C · 15GB RAM · 可用 4.9GB) ｜ 核心跨越：加载峰值从 4.81GB (OOM) 降至 ≤2.0GB (常驻 ~1.25GB)</text>
+    <rect x="976" y="16" width="164" height="32" rx="16" fill="#064e3b" stroke="#10b981" stroke-width="1.2"/>
+    <text x="1058" y="36" fill="#6ee7b7" font-size="11.5" font-weight="bold" text-anchor="middle">零硬件升级 · 100% 稳定</text>
+  </g>
+
+  <!-- ===================================================================== -->
+  <!-- 第一阶段 (左上)：问题诊断与 OOM (Exit 137) 根因剖析                      -->
+  <!-- ===================================================================== -->
+  <g transform="translate(20, 96)" filter="url(#card-shadow)">
+    <rect width="564" height="388" rx="14" fill="#ffffff" stroke="#fecdd3" stroke-width="1.5"/>
+    <rect width="564" height="38" rx="14" fill="url(#stage1-grad)"/>
+    <rect y="22" width="564" height="16" fill="url(#stage1-grad)"/>
+    <text x="16" y="24" fill="#ffffff" font-size="13.5" font-weight="bold">① 问题诊断：为什么默认启动会触发 Exit 137 (OOM)？</text>
+    <rect x="444" y="7" width="106" height="24" rx="12" fill="#881337"/>
+    <text x="497" y="23" fill="#fecdd3" font-size="11" font-weight="bold" text-anchor="middle">根因定位阶段</text>
+
+    <!-- 1.1 宿主机资源现状 -->
+    <g transform="translate(16, 50)">
+      <rect width="532" height="84" rx="10" fill="#fff1f2" stroke="#fda4af" stroke-width="1"/>
+      <text x="14" y="20" fill="#9f1239" font-size="12" font-weight="bold">🖥️ 宿主机内存现状 (总计 15 GiB) — 处于临界水位</text>
+      
+      <!-- 内存进度条 (严格控制在 x=14..334) -->
+      <rect x="14" y="28" width="320" height="22" rx="5" fill="#e2e8f0"/>
+      <rect x="14" y="28" width="215" height="22" rx="5" fill="#64748b"/>
+      <text x="121" y="43" fill="#ffffff" font-size="10.5" font-weight="bold" text-anchor="middle">30+ 容器已占 10.1 GiB (67%)</text>
+      <rect x="229" y="28" width="105" height="22" rx="4" fill="#fb7185"/>
+      <text x="281" y="43" fill="#ffffff" font-size="10.5" font-weight="bold" text-anchor="middle">仅剩 4.9 GiB</text>
+
+      <text x="14" y="70" fill="#be123c" font-size="10.5" font-weight="600">⚠️ 隐患：vm.swappiness=0 禁止换页，触线即触发 OOM</text>
+
+      <!-- 右侧参数框 (x=348..518，与左侧零重叠) -->
+      <rect x="348" y="14" width="170" height="58" rx="8" fill="#ffffff" stroke="#fecdd3"/>
+      <text x="360" y="35" fill="#334155" font-size="11">• CPU: <tspan font-weight="bold" fill="#059669">8核 EPYC (充裕)</tspan></text>
+      <text x="360" y="56" fill="#334155" font-size="11">• Swap: <tspan font-weight="bold" fill="#e11d48">4GB (未激活)</tspan></text>
+    </g>
+
+    <!-- 1.2 默认 fp32 双份加载致命链路 -->
+    <g transform="translate(16, 146)">
+      <rect width="532" height="162" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+      <text x="14" y="21" fill="#0f172a" font-size="12" font-weight="bold">💥 默认 fp32 双倍内存峰值叠加链路 (Peak RSS = 4.81 GB)</text>
+
+      <!-- 3个叠加块 -->
+      <g transform="translate(14, 30)">
+        <rect width="154" height="72" rx="8" fill="#ffffff" stroke="#f43f5e" stroke-width="1.2"/>
+        <rect width="154" height="21" rx="8" fill="#ffe4e6"/>
+        <text x="77" y="15" fill="#be123c" font-size="10.5" font-weight="bold" text-anchor="middle">Step A · 模型骨架</text>
+        <text x="77" y="38" fill="#334155" font-size="10.5" text-anchor="middle">初始化 fp32 空模型</text>
+        <text x="77" y="60" fill="#e11d48" font-size="11.5" font-weight="bold" text-anchor="middle">+ 2.20 GB RAM</text>
+      </g>
+
+      <text x="174" y="71" fill="#e11d48" font-size="15" font-weight="bold">+</text>
+
+      <g transform="translate(189, 30)">
+        <rect width="154" height="72" rx="8" fill="#ffffff" stroke="#f43f5e" stroke-width="1.2"/>
+        <rect width="154" height="21" rx="8" fill="#ffe4e6"/>
+        <text x="77" y="15" fill="#be123c" font-size="10.5" font-weight="bold" text-anchor="middle">Step B · 权重解压</text>
+        <text x="77" y="38" fill="#334155" font-size="10.5" text-anchor="middle">torch.load 全量读入</text>
+        <text x="77" y="60" fill="#e11d48" font-size="11.5" font-weight="bold" text-anchor="middle">+ 2.20 GB RAM</text>
+      </g>
+
+      <text x="349" y="71" fill="#e11d48" font-size="15" font-weight="bold">+</text>
+
+      <g transform="translate(364, 30)">
+        <rect width="154" height="72" rx="8" fill="#ffffff" stroke="#f43f5e" stroke-width="1.2"/>
+        <rect width="154" height="21" rx="8" fill="#ffe4e6"/>
+        <text x="77" y="15" fill="#be123c" font-size="10.5" font-weight="bold" text-anchor="middle">Step C · 运行开销</text>
+        <text x="77" y="38" fill="#334155" font-size="10.5" text-anchor="middle">PyTorch + 分词器</text>
+        <text x="77" y="60" fill="#e11d48" font-size="11.5" font-weight="bold" text-anchor="middle">+ 0.41 GB RAM</text>
+      </g>
+
+      <!-- 源码 Bug 说明 -->
+      <rect x="14" y="110" width="504" height="42" rx="7" fill="#fff1f2" stroke="#fecdd3"/>
+      <text x="24" y="126" fill="#9f1239" font-size="10.5" font-weight="bold">🐞 gliformer 0.1.2 源码缺陷 (导致 low_cpu_mem_usage=True 失效回退)：</text>
+      <text x="24" y="143" fill="#be123c" font-size="10.5">_validated_eps 与 frequencies 缓冲区未适配 meta 设备，回退为双份全量加载</text>
+    </g>
+
+    <!-- 1.3 内核 OOM 铁证 -->
+    <g transform="translate(16, 320)">
+      <rect width="532" height="54" rx="10" fill="#881337"/>
+      <text x="16" y="22" fill="#fecdd3" font-size="11.5" font-weight="bold">🚨 根因结论：启动峰值 4.81 GB 撞上 4.90 GB 红线 ➔ 触发 OOM Killer (Exit 137)</text>
+      <text x="16" y="42" fill="#fda4af" font-size="11" font-family="monospace">dmesg: Killed process (python), anon-rss: 4,815,380 kB (~4.81 GB)</text>
+    </g>
+  </g>
+
+  <!-- ===================================================================== -->
+  <!-- 第二阶段 (右上)：三大破局方案与技术实现 (Solutions)                      -->
+  <!-- ===================================================================== -->
+  <g transform="translate(616, 96)" filter="url(#card-shadow)">
+    <rect width="564" height="388" rx="14" fill="#ffffff" stroke="#bae6fd" stroke-width="1.5"/>
+    <rect width="564" height="38" rx="14" fill="url(#stage2-grad)"/>
+    <rect y="22" width="564" height="16" fill="url(#stage2-grad)"/>
+    <text x="16" y="24" fill="#ffffff" font-size="13.5" font-weight="bold">② 破局方案：三层协同低内存改造（Mmap + Meta 零拷贝）</text>
+    <rect x="444" y="7" width="106" height="24" rx="12" fill="#0c4a6e"/>
+    <text x="497" y="23" fill="#bae6fd" font-size="11" font-weight="bold" text-anchor="middle">核心工程改造</text>
+
+    <!-- 方案 A：权重层转换 -->
+    <g transform="translate(16, 50)">
+      <rect width="532" height="96" rx="10" fill="#f0f9ff" stroke="#7dd3fc" stroke-width="1.2"/>
+      <rect x="14" y="12" width="24" height="24" rx="6" fill="#0284c7"/>
+      <text x="26" y="29" fill="#ffffff" font-size="12.5" font-weight="bold" text-anchor="middle">A</text>
+      <text x="46" y="28" fill="#0369a1" font-size="12.5" font-weight="bold">磁盘层：fp32 权重转存为 bfloat16 Safetensors (体积减半)</text>
+
+      <rect x="14" y="44" width="220" height="42" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+      <text x="24" y="61" fill="#64748b" font-size="10.5">旧：pytorch_model.bin (fp32)</text>
+      <text x="24" y="77" fill="#e11d48" font-size="10.5" font-weight="bold">2.20 GB · 全量解压进内存</text>
+
+      <path d="M 242 65 L 276 65" fill="none" stroke="#0284c7" stroke-width="2" marker-end="url(#arr-blue)"/>
+
+      <rect x="284" y="44" width="234" height="42" rx="6" fill="#ecfdf5" stroke="#6ee7b7"/>
+      <text x="294" y="61" fill="#065f46" font-size="10.5" font-weight="bold">新：model.safetensors (bf16)</text>
+      <text x="294" y="77" fill="#059669" font-size="10.5" font-weight="bold">1.06 GB · Mmap 页缓存按需映射</text>
+    </g>
+
+    <!-- 方案 B：运行时层 Meta 零拷贝补丁 -->
+    <g transform="translate(16, 158)">
+      <rect width="532" height="114" rx="10" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.2"/>
+      <rect x="14" y="12" width="24" height="24" rx="6" fill="#7c3aed"/>
+      <text x="26" y="29" fill="#ffffff" font-size="12.5" font-weight="bold" text-anchor="middle">B</text>
+      <text x="46" y="28" fill="#5b21b6" font-size="12.5" font-weight="bold">运行时层：注入 sitecustomize.py 热补丁 (Meta 零内存建图)</text>
+
+      <rect x="14" y="44" width="504" height="58" rx="6" fill="#ffffff" stroke="#ddd6fe"/>
+      <text x="24" y="61" fill="#4c1d95" font-size="10.5" font-weight="bold">1. 修复 _validated_eps：改用 math.isfinite 避免 meta 张量报错</text>
+      <text x="24" y="78" fill="#4c1d95" font-size="10.5" font-weight="bold">2. 补齐缓冲区重建：自动初始化 Fourier1DPositionEmbedding.frequencies</text>
+      <text x="24" y="95" fill="#059669" font-size="10.5" font-weight="bold">3. 启用零拷贝挂载：low_cpu_mem_usage=True，直接省去 2.2GB 随机骨架</text>
+    </g>
+
+    <!-- 方案 C：系统与容器护栏 -->
+    <g transform="translate(16, 284)">
+      <rect width="532" height="90" rx="10" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1.2"/>
+      <rect x="14" y="12" width="24" height="24" rx="6" fill="#059669"/>
+      <text x="26" y="29" fill="#ffffff" font-size="12.5" font-weight="bold" text-anchor="middle">C</text>
+      <text x="46" y="28" fill="#065f46" font-size="12.5" font-weight="bold">系统护栏层：激活 4GB Swap 缓冲垫 + 容器资源硬限隔离</text>
+
+      <rect x="14" y="44" width="244" height="36" rx="6" fill="#ffffff" stroke="#a7f3d0"/>
+      <text x="136" y="66" fill="#065f46" font-size="11" font-weight="bold" text-anchor="middle">🛡️ vm.swappiness=10 (激活 4GB Swap)</text>
+
+      <rect x="274" y="44" width="244" height="36" rx="6" fill="#ffffff" stroke="#a7f3d0"/>
+      <text x="396" y="66" fill="#065f46" font-size="11" font-weight="bold" text-anchor="middle">📦 mem_limit: 3g + 限制 4 线程</text>
+    </g>
+  </g>
+
+  <!-- 阶段 1 -> 阶段 2 连接箭头 -->
+  <path d="M 584 290 L 614 290" fill="none" stroke="#0284c7" stroke-width="2.5" marker-end="url(#arr-blue)"/>
+
+  <!-- ===================================================================== -->
+  <!-- 第三阶段 (中通栏)：实测内存水位与性能对比看板 (Benchmark)                 -->
+  <!-- ===================================================================== -->
+  <g transform="translate(20, 500)" filter="url(#card-shadow)">
+    <rect width="1160" height="156" rx="14" fill="#ffffff" stroke="#ddd6fe" stroke-width="1.5"/>
+    <rect width="1160" height="36" rx="14" fill="url(#stage3-grad)"/>
+    <rect y="20" width="1160" height="16" fill="url(#stage3-grad)"/>
+    <text x="16" y="23" fill="#ffffff" font-size="13.5" font-weight="bold">③ 实测验证对比：三种加载模式下的启动峰值 (Peak RSS) 与常驻内存 (Current RSS)</text>
+    <text x="1142" y="23" fill="#ede9fe" font-size="11.5" font-weight="bold" text-anchor="end">服务器可用物理内存红线：4,900 MB (4.9 GiB)</text>
+
+    <!-- 方案 1 条形图 -->
+    <g transform="translate(20, 48)">
+      <text x="0" y="17" fill="#334155" font-size="11.5" font-weight="bold">1. 原始默认加载 (fp32 + bin)</text>
+      <rect x="250" y="3" width="640" height="20" rx="5" fill="#f1f5f9"/>
+      <rect x="250" y="3" width="615" height="20" rx="5" fill="#f43f5e"/>
+      <text x="262" y="17" fill="#ffffff" font-size="10.5" font-weight="bold">启动峰值 Peak RSS: 4,815 MB (4.81 GB) — 撞击 4.9GB 红线</text>
+      <text x="905" y="17" fill="#e11d48" font-size="11.5" font-weight="bold">❌ OOM Killed (Exit 137)</text>
+    </g>
+
+    <!-- 方案 2 条形图 -->
+    <g transform="translate(20, 80)">
+      <text x="0" y="17" fill="#334155" font-size="11.5" font-weight="bold">2. 仅开启半精度 (bfloat16)</text>
+      <rect x="250" y="3" width="640" height="20" rx="5" fill="#f1f5f9"/>
+      <rect x="250" y="3" width="500" height="20" rx="5" fill="#fbbf24"/>
+      <rect x="250" y="3" width="292" height="20" rx="5" fill="#f59e0b"/>
+      <text x="262" y="17" fill="#ffffff" font-size="10.5" font-weight="bold">常驻: 2,286 MB</text>
+      <text x="555" y="17" fill="#78350f" font-size="10.5" font-weight="bold">启动峰值: 3,915 MB (3.82 GB)</text>
+      <text x="905" y="17" fill="#d97706" font-size="11.5" font-weight="bold">⚠️ 峰值偏高 (仅剩 1GB 余量)</text>
+    </g>
+
+    <!-- 方案 3 条形图 (最终采用) -->
+    <g transform="translate(20, 112)">
+      <text x="0" y="18" fill="#047857" font-size="11.5" font-weight="bold">3. 终极方案 (bf16 + Meta 零拷贝)</text>
+      <rect x="250" y="3" width="640" height="22" rx="5" fill="#f1f5f9" stroke="#6ee7b7"/>
+      <rect x="250" y="3" width="256" height="22" rx="5" fill="#34d399"/>
+      <rect x="250" y="3" width="165" height="22" rx="5" fill="#059669"/>
+      <text x="262" y="18" fill="#ffffff" font-size="10.5" font-weight="bold">常驻: ~1.25 GB</text>
+      <text x="425" y="18" fill="#064e3b" font-size="10.5" font-weight="bold">峰值: ≤ 2.0 GB</text>
+      <text x="905" y="18" fill="#059669" font-size="11.5" font-weight="bold">✅ 峰值直降 58%+ (余量 >2.9GB)</text>
+    </g>
+
+    <!-- 4.9GB 红线竖线 -->
+    <line x1="876" y1="42" x2="876" y2="146" stroke="#e11d48" stroke-width="2" stroke-dasharray="4,3"/>
+    <text x="870" y="148" fill="#e11d48" font-size="10" font-weight="bold" text-anchor="end">▲ 4.9GB 可用内存红线</text>
+  </g>
+
+  <!-- ===================================================================== -->
+  <!-- 第四阶段 (底部通栏)：左➔右单向流水线生产拓扑（零交叉连线）                 -->
+  <!-- ===================================================================== -->
+  <g transform="translate(20, 672)" filter="url(#card-shadow)">
+    <rect width="1160" height="272" rx="14" fill="#ffffff" stroke="#a7f3d0" stroke-width="1.5"/>
+    <rect width="1160" height="38" rx="14" fill="url(#stage4-grad)"/>
+    <rect y="22" width="1160" height="16" fill="url(#stage4-grad)"/>
+    <text x="16" y="24" fill="#ffffff" font-size="13.5" font-weight="bold">④ 生产落地架构：宿主机 (189.24.77.52) Docker 容器协同流水线与毫秒级路由闭环</text>
+    <rect x="1002" y="7" width="144" height="24" rx="12" fill="#064e3b"/>
+    <text x="1074" y="23" fill="#6ee7b7" font-size="11" font-weight="bold" text-anchor="middle">生产运行态拓扑</text>
+
+    <!-- 节点 1：客户端与网关入口 (x=18, w=206) -->
+    <g transform="translate(18, 52)">
+      <rect width="206" height="204" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+      <rect width="206" height="28" rx="10" fill="#334155"/>
+      <text x="103" y="19" fill="#ffffff" font-size="11.5" font-weight="bold" text-anchor="middle">🌐 1. 客户端与接入网关</text>
+
+      <rect x="12" y="40" width="182" height="64" rx="8" fill="#ffffff" stroke="#94a3b8"/>
+      <text x="22" y="58" fill="#0f172a" font-size="11.5" font-weight="bold">Web 前端工作台</text>
+      <text x="22" y="75" fill="#475569" font-size="10.5">• 提问指令 (POST /api/ask)</text>
+      <text x="22" y="91" fill="#475569" font-size="10.5">• 视频解析 (/api/analyze)</text>
+
+      <path d="M 103 104 L 103 124" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arr-slate)"/>
+
+      <rect x="12" y="128" width="182" height="64" rx="8" fill="#ffffff" stroke="#94a3b8"/>
+      <text x="22" y="146" fill="#0f172a" font-size="11.5" font-weight="bold">宿主机端口映射</text>
+      <text x="22" y="164" fill="#0284c7" font-size="11" font-weight="bold">0.0.0.0:9123 ➔ :8000</text>
+      <text x="22" y="180" fill="#64748b" font-size="10">Nginx 反代转发至主容器</text>
+    </g>
+
+    <!-- 箭头 1 -> 2 -->
+    <path d="M 224 154 L 256 154" fill="none" stroke="#0284c7" stroke-width="2.2" marker-end="url(#arr-blue)"/>
+
+    <!-- 节点 2：vidgrab 主业务容器 (x=258, w=284) -->
+    <g transform="translate(258, 52)">
+      <rect width="284" height="204" rx="10" fill="#f0f9ff" stroke="#7dd3fc" stroke-width="1.5"/>
+      <rect width="284" height="28" rx="10" fill="#0284c7"/>
+      <text x="142" y="19" fill="#ffffff" font-size="11.5" font-weight="bold" text-anchor="middle">🐳 2. 主容器：vidgrab (:8000)</text>
+
+      <rect x="12" y="38" width="260" height="74" rx="8" fill="#ffffff" stroke="#bae6fd"/>
+      <text x="20" y="55" fill="#0284c7" font-size="11" font-weight="bold">A) 意图路由器 (intent_router.py)</text>
+      <text x="20" y="72" fill="#334155" font-size="10.5">• 正则先验短路 (0.1ms 极速直出)</text>
+      <text x="20" y="88" fill="#334155" font-size="10.5">• 并发调用 Jeff 三大决策原语</text>
+      <text x="20" y="104" fill="#059669" font-size="10" font-weight="bold">• 1.0s 超时自动降级，100% 不中断</text>
+
+      <rect x="12" y="120" width="260" height="72" rx="8" fill="#ffffff" stroke="#bae6fd"/>
+      <text x="20" y="137" fill="#7c3aed" font-size="11" font-weight="bold">B) 媒体转写调度 + 字幕精修</text>
+      <text x="20" y="154" fill="#334155" font-size="10.5">• 前置过滤无声视频，分流云/端 ASR</text>
+      <text x="20" y="170" fill="#334155" font-size="10.5">• 静音切分 + 繁转简 + 小数点保护</text>
+      <text x="20" y="185" fill="#059669" font-size="10" font-weight="bold">• 跨分片残句缝合 + 语气词净化</text>
+    </g>
+
+    <!-- 箭头 2 <-> 3 -->
+    <path d="M 542 144 L 584 144" fill="none" stroke="#059669" stroke-width="2.2" marker-end="url(#arr-green)"/>
+    <path d="M 584 164 L 542 164" fill="none" stroke="#059669" stroke-width="2.2" marker-end="url(#arr-green)"/>
+    <text x="563" y="136" fill="#047857" font-size="9.5" font-weight="bold" text-anchor="middle">:8001</text>
+
+    <!-- 节点 3：shared-jeff 容器 (x=586, w=292) -->
+    <g transform="translate(586, 52)">
+      <rect width="292" height="204" rx="10" fill="#ecfdf5" stroke="#34d399" stroke-width="2"/>
+      <rect width="292" height="28" rx="10" fill="#059669"/>
+      <text x="146" y="19" fill="#ffffff" font-size="11.5" font-weight="bold" text-anchor="middle">🚀 3. 决策容器：shared-jeff (:8001)</text>
+
+      <rect x="12" y="38" width="268" height="96" rx="8" fill="#ffffff" stroke="#6ee7b7"/>
+      <text x="20" y="55" fill="#047857" font-size="11" font-weight="bold">⚙️ 运行时配置 (CPU + bfloat16 零拷贝)</text>
+      <text x="20" y="73" fill="#334155" font-size="10.5">• 模型：gliformer-large-v1 (400M)</text>
+      <text x="20" y="89" fill="#334155" font-size="10.5">• 精度：JEFF_DTYPE=bfloat16 (CPU)</text>
+      <text x="20" y="105" fill="#334155" font-size="10.5">• 补丁：sitecustomize.py (Meta 建图)</text>
+      <text x="20" y="122" fill="#059669" font-size="10" font-weight="bold">• 单次推理：80~150ms ｜ 内存 ≤2.0GB</text>
+
+      <rect x="12" y="142" width="268" height="50" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-dasharray="4,2"/>
+      <text x="20" y="161" fill="#166534" font-size="10.5" font-weight="bold">💾 只读模型卷 (/www/wwwroot/shared-models)</text>
+      <text x="20" y="179" fill="#15803d" font-size="10">✓ model.safetensors (1.06GB bf16 · Mmap)</text>
+    </g>
+
+    <!-- 箭头 3 -> 4 -->
+    <path d="M 878 154 L 910 154" fill="none" stroke="#7c3aed" stroke-width="2.2" marker-end="url(#arr-purple)"/>
+
+    <!-- 节点 4：执行收益与系统 2 联动 (x=912, w=230) -->
+    <g transform="translate(912, 52)">
+      <rect width="230" height="204" rx="10" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.2"/>
+      <rect width="230" height="28" rx="10" fill="#6d28d9"/>
+      <text x="115" y="19" fill="#ffffff" font-size="11.5" font-weight="bold" text-anchor="middle">⚡ 4. 毫秒级分流与业务收益</text>
+
+      <rect x="12" y="38" width="206" height="74" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+      <text x="20" y="55" fill="#059669" font-size="11" font-weight="bold">🟢 系统 1 动作直出 (0 Token)</text>
+      <text x="20" y="72" fill="#334155" font-size="10.5">• 下载视频 ➔ 弹出下载动作卡片</text>
+      <text x="20" y="88" fill="#334155" font-size="10.5">• 出题/跳转 ➔ 联动测验与播放器</text>
+      <text x="20" y="104" fill="#334155" font-size="10.5">• 日常闲聊 ➔ 极速礼貌响应</text>
+
+      <rect x="12" y="120" width="206" height="72" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+      <text x="20" y="137" fill="#6d28d9" font-size="11" font-weight="bold">🟣 系统 2 深度问答 (动态瘦身)</text>
+      <text x="20" y="154" fill="#334155" font-size="10.5">• 无需长字幕时：仅传精简摘要</text>
+      <text x="20" y="170" fill="#059669" font-size="10" font-weight="bold">  ↳ 节省 85% Token，首字提速 3x</text>
+      <text x="20" y="185" fill="#334155" font-size="10.5">• 细节追问时：挂载全量字幕溯源</text>
+    </g>
+  </g>
+</svg>

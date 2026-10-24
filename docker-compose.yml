@@ -37,6 +37,9 @@ services:
         if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname='ppt_agent'" | grep -q 1; then
           psql -v ON_ERROR_STOP=1 -c 'CREATE DATABASE ppt_agent'
         fi
+        if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname='vidgrab'" | grep -q 1; then
+          psql -v ON_ERROR_STOP=1 -c 'CREATE DATABASE vidgrab'
+        fi
 
   redis:
     image: redis:7-alpine
@@ -264,6 +267,67 @@ services:
     expose:
       - "4000"
 
+  # ================= 视频学习助手后端（apps/api-video，内部 4020 + 可选内置 Jeff 8001） =================
+  # 服务器若已部署独立的 shared-jeff 容器，默认不启动此容器（仅在传 --profile local-jeff 时启动）
+  video-jeff:
+    build:
+      context: ./apps/api-video/vendor/jeff
+      dockerfile: Dockerfile
+    container_name: smartdiagram-video-jeff
+    profiles:
+      - local-jeff
+    restart: unless-stopped
+    environment:
+      - JEFF_HOST=0.0.0.0
+      - JEFF_PORT=8001
+      - JEFF_API_KEYS=${TYPESAFE_API_KEY:-devkey}
+      - JEFF_MODEL=/models/gliformer-large-v1
+      - JEFF_DEVICE=cpu
+    volumes:
+      - ./apps/api-video/models:/models
+    expose:
+      - "8001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  api-video:
+    build:
+      context: ./apps/api-video
+      dockerfile: Dockerfile
+    container_name: smartdiagram-api-video
+    restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      ppt-db-init:
+        condition: service_completed_successfully
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      - VIDEO_DATABASE_URL=${VIDEO_DATABASE_URL:-postgresql://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/vidgrab}
+      - VIDEO_STORAGE_DIR=/data/videos
+      - VIDEO_STORAGE_MAX_GB=${VIDEO_STORAGE_MAX_GB:-50}
+      - INTENT_ROUTER_ENABLED=${INTENT_ROUTER_ENABLED:-true}
+      - TYPESAFE_BASE_URL=${TYPESAFE_BASE_URL:-http://shared-jeff:8001}
+      - TYPESAFE_API_KEY=${TYPESAFE_API_KEY:-devkey}
+      - INTENT_ROUTER_TIMEOUT=${INTENT_ROUTER_TIMEOUT:-3.0}
+      - ASR_MODEL=${ASR_MODEL:-gemini-3.5-flash-lite}
+      - NO_PROXY=${NO_PROXY:-127.0.0.1,localhost,douyin.com,iesdouyin.com,bilibili.com,b23.tv}
+    volumes:
+      - videodata:/data
+    expose:
+      - "4020"
+
   # PPT Agent 前端已并入统一 SPA（apps/web），不再需要独立的 ppt-web 服务。
 
   # ================= 聚合网关（统一入口） =================
@@ -286,6 +350,8 @@ services:
       drawio:
         condition: service_started
       ppt-python-api:
+        condition: service_started
+      api-video:
         condition: service_started
     ports:
       # 宝塔反向代理的唯一入口；统一分流 SPA、主 API、PPT API 和 Draw.io。
@@ -336,3 +402,4 @@ volumes:
   qdrantdata:
   pptdata:
   knowledgedata:
+  videodata:
