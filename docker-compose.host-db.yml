@@ -68,7 +68,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - VIDEO_DATABASE_URL=${VIDEO_DATABASE_URL:-postgresql://${HOST_DB_USER:-smartdiagram_app}:${DB_PASSWORD:?Set DB_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/vidgrab}
+      - VIDEO_DATABASE_URL=postgresql://${HOST_DB_USER:-smartdiagram_app}:${DB_PASSWORD:?Set DB_PASSWORD}@host.docker.internal:${HOST_POSTGRES_PORT:-5432}/vidgrab
 
   ppt-storage-init:
     image: alpine:3.20

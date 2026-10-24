@@ -317,7 +317,8 @@ services:
       - path: ./.env
         required: false
     environment:
-      - VIDEO_DATABASE_URL=${VIDEO_DATABASE_URL:-postgresql://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/vidgrab}
+      # 覆盖 .env 中的本机地址，适配容器网络
+      - VIDEO_DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-smartdiagram_secret}@db:5432/vidgrab
       - VIDEO_STORAGE_DIR=/data/videos
       - VIDEO_STORAGE_MAX_GB=${VIDEO_STORAGE_MAX_GB:-50}
       - INTENT_ROUTER_ENABLED=${INTENT_ROUTER_ENABLED:-true}
