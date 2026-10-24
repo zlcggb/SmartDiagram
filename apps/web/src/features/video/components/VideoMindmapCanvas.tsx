@@ -250,17 +250,23 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
           return;
         }
 
-        const data = { nodeData: convertToMindElixir(root) };
+        const isMobileCanvas = containerRef.current.clientWidth < 640;
+        const data = {
+          nodeData: convertToMindElixir(root),
+          direction: isMobileCanvas ? MindElixir.RIGHT : MindElixir.SIDE,
+        };
         lastRenderedCodeRef.current = code;
 
         if (!mindInstanceRef.current) {
           const me = new MindElixir({
             el: containerRef.current,
-            direction: MindElixir.SIDE,
+            direction: isMobileCanvas ? MindElixir.RIGHT : MindElixir.SIDE,
             draggable: true,
             editable: true,
             contextMenu: true,
             toolBar: false,
+            scaleMin: 0.1,
+            scaleMax: 2.0,
           });
           me.init(data);
           mindInstanceRef.current = me;
@@ -342,7 +348,10 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
           me.expandNode(me.findEle(c.id), false);
         });
       }
-      updateMiniMap();
+      setTimeout(() => {
+        fitWithPadding(me);
+        updateMiniMap();
+      }, 20);
     };
 
     const expandAll = () => {

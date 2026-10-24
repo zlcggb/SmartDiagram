@@ -354,22 +354,23 @@ export function VideoDocsPage() {
       <main
         ref={contentScrollRef}
         onScroll={handleContentScroll}
-        className="flex-1 min-w-0 h-full overflow-y-auto px-4 py-6 sm:px-8 sm:py-8 lg:px-12 lg:py-10 scroll-smooth"
+        className="flex-1 min-w-0 h-full overflow-y-auto px-2.5 py-2.5 sm:px-8 sm:py-8 lg:px-12 lg:py-10 scroll-smooth"
       >
-        <div className="mx-auto max-w-4xl rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs sm:p-10">
-          {/* 移动端目录切换按钮 */}
-          <div className="mb-4 flex items-center justify-between border-b border-slate-200/70 pb-3 lg:hidden">
+        <div className="mx-auto max-w-4xl rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:rounded-3xl sm:p-10">
+          {/* 移动端紧凑目录切换顶栏 */}
+          <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5 lg:hidden">
             <button
               type="button"
               onClick={() => setMobileNavOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200/90 bg-slate-50 px-2.5 py-1 text-[11.5px] font-semibold text-slate-800 active:scale-95"
             >
               <span>📑</span>
-              <span>切换文档目录</span>
+              <span>文档目录</span>
             </button>
-            <span className="max-w-[200px] truncate text-xs text-slate-500">
-              {currentDoc.title}
-            </span>
+            <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-slate-400">
+              <span className="truncate font-medium text-slate-600">{currentDoc.title}</span>
+              <span className="shrink-0">· {readTimeMin}分钟</span>
+            </div>
           </div>
 
           {contentLoading ? (
@@ -396,9 +397,9 @@ export function VideoDocsPage() {
               </button>
             </div>
           ) : (
-            <article className="pb-16">
-              {/* 文档头部元数据 */}
-              <div className="mb-6 border-b border-slate-200/80 pb-5">
+            <article className="pb-10 sm:pb-16">
+              {/* 文档头部元数据（桌面端完整展示，移动端隐藏冗余元数据以直达正文） */}
+              <div className="mb-6 hidden border-b border-slate-200/80 pb-5 sm:block">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-[#0071e3]/10 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-[#0071e3]">
@@ -437,7 +438,7 @@ export function VideoDocsPage() {
               <div
                 ref={markdownBodyRef}
                 onClick={handleMarkdownClick}
-                className="video-docs-markdown min-w-0 max-w-none break-words text-[14px] leading-relaxed text-slate-800 [&_svg]:cursor-zoom-in [&_svg]:max-w-full [&_svg]:h-auto"
+                className="video-docs-markdown min-w-0 max-w-none break-words text-[13px] sm:text-[14px] leading-relaxed text-slate-800 [&_svg]:cursor-zoom-in [&_svg]:max-w-full [&_svg]:h-auto"
                 dangerouslySetInnerHTML={{ __html: renderedHtml }}
               />
             </article>

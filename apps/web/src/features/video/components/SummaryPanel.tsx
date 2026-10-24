@@ -945,7 +945,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
             {/* Tab: Mindmap */}
             {activeTab === 'mindmap' && (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <div className="mb-2 flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:justify-between">
+                <div className="mb-2 hidden shrink-0 flex-wrap items-center justify-between gap-1.5 sm:flex">
                   <span className="hidden text-[12px] text-slate-500 sm:inline">
                     双击节点可编辑 · 滚轮缩放 · 拖拽平移 · 右下角小地图
                   </span>

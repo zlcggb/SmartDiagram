@@ -120,24 +120,23 @@ export function convertToMarkdown(node: any, level = 1): string {
 export function fitWithPadding(me: any) {
   if (!me || !me.container) return;
 
+  // 注意：在 MindElixir v5 中，me.container 本身就是 .map-container，me.map 是 .map-canvas
   const container = me.container as HTMLElement;
+  const mapCanvas = (me.map || container.querySelector('.map-canvas')) as HTMLElement | null;
   const containerWidth = container.clientWidth;
   const containerHeight = container.clientHeight;
-  if (!containerWidth || !containerHeight || containerWidth <= 0 || containerHeight <= 0) {
+  if (!containerWidth || !containerHeight || containerWidth <= 0 || containerHeight <= 0 || !mapCanvas) {
     return;
   }
 
-  const mapContainer = container.querySelector('.map-container') as HTMLElement;
-  if (!mapContainer) {
-    return;
+  // 允许移动端缩放到更小比例以完整容纳多层级导图
+  if (typeof me.scaleMin === 'number' && me.scaleMin > 0.1) {
+    me.scaleMin = 0.1;
   }
 
-  // First pass: reset to safe finite scale=1 and center so node rects can be measured accurately without NaN
-  if (!Number.isFinite(me.scaleVal) || me.scaleVal <= 0) {
-    me.scaleVal = 1;
-  }
+  // First pass: reset to safe finite scale=1 and center so node rects can be measured accurately
+  me.scaleVal = 1;
   try {
-    me.scale(1);
     me.toCenter();
   } catch {
     // ignore
@@ -145,7 +144,7 @@ export function fitWithPadding(me: any) {
 
   // Second pass: measure actual topic positions and compute exact fit scale + center offset
   requestAnimationFrame(() => {
-    const topics = mapContainer.querySelectorAll('.topic, me-tpc');
+    const topics = container.querySelectorAll('me-tpc, .topic');
     if (!topics.length) return;
 
     const cw = container.clientWidth;
@@ -179,13 +178,12 @@ export function fitWithPadding(me: any) {
     const contentHeight = maxY - minY;
     if (contentWidth <= 0 || contentHeight <= 0) return;
 
-    const currentScale = Number.isFinite(me.scaleVal) && me.scaleVal > 0 ? me.scaleVal : 1;
     const isMobile = cw < 640;
-    const paddingRatio = isMobile ? 0.88 : 0.8;
+    const paddingRatio = isMobile ? 0.92 : 0.86;
     const requiredScaleX = (cw * paddingRatio) / contentWidth;
     const requiredScaleY = (ch * paddingRatio) / contentHeight;
-    const rawScale = Math.min(requiredScaleX, requiredScaleY, 1.05) * currentScale;
-    const newScale = Number.isFinite(rawScale) ? Math.max(0.2, Math.min(1.15, rawScale)) : 1;
+    const rawScale = Math.min(requiredScaleX, requiredScaleY, 1.0);
+    const newScale = Number.isFinite(rawScale) ? Math.max(0.15, Math.min(1.05, rawScale)) : 1;
 
     try {
       me.scale(newScale);
@@ -193,7 +191,9 @@ export function fitWithPadding(me: any) {
       // ignore
     }
 
-    requestAnimationFrame(() => {
+    // Re-measure immediately after scale transform and shift translate3d directly
+    // (avoids MindElixir me.move() boundary clamping when scaled down)
+    const applyCenterShift = () => {
       const newContainerRect = container.getBoundingClientRect();
       let nMinX = Infinity;
       let nMaxX = -Infinity;
@@ -220,13 +220,18 @@ export function fitWithPadding(me: any) {
       const dx = cw / 2 - contentCenterX;
       const dy = ch / 2 - contentCenterY;
 
-      if (Number.isFinite(dx) && Number.isFinite(dy) && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-        try {
-          me.move(dx, dy);
-        } catch {
-          // ignore
+      if (Number.isFinite(dx) && Number.isFinite(dy) && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
+        const m = (mapCanvas.style.transform || '').match(/translate3d\(([^,]+),\s*([^,]+)/);
+        const curX = m ? parseFloat(m[1]) : 0;
+        const curY = m ? parseFloat(m[2]) : 0;
+        if (Number.isFinite(curX) && Number.isFinite(curY)) {
+          mapCanvas.style.transform = `translate3d(${curX + dx}px, ${curY + dy}px, 0) scale(${me.scaleVal})`;
+          me.bus?.fire?.('move', { dx, dy });
         }
       }
-    });
+    };
+
+    applyCenterShift();
+    requestAnimationFrame(applyCenterShift);
   });
 }

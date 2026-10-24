@@ -610,12 +610,12 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                   </span>
                   <span className="flex-1 font-medium">{option}</span>
                   {isRev && isExpected && (
-                    <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                    <span className="hidden shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-700 sm:inline-block">
                       正确答案
                     </span>
                   )}
                   {isRev && isSelected && !isExpected && (
-                    <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] font-bold text-rose-600">
+                    <span className="hidden shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] font-bold text-rose-600 sm:inline-block">
                       你的选择
                     </span>
                   )}
@@ -627,7 +627,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
 
         {/* 判断题：左右并排双大卡 */}
         {question.type === 'true_false' && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
             {[
               { label: '认知正确', sub: '符合视频核心观点', value: true, icon: '✓' },
               { label: '存在误区', sub: '与视频观点相悖', value: false, icon: '✕' },
@@ -659,15 +659,15 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                   type="button"
                   disabled={isRev}
                   onClick={() => handleSelectInstant(question, item.value)}
-                  className={`flex flex-col items-center justify-center rounded-2xl border p-4 text-center transition-all duration-200 ${cardStyle} ${
+                  className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-center transition-all duration-200 sm:flex-col sm:gap-0 sm:p-4 ${cardStyle} ${
                     !isRev ? 'active:scale-[0.98]' : 'cursor-default'
                   }`}
                 >
-                  <span className={`mb-2 flex h-9 w-9 items-center justify-center rounded-full text-[15px] font-bold ${iconStyle}`}>
+                  <span className={`flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-full text-[13px] font-bold sm:mb-2 sm:h-9 sm:w-9 sm:text-[15px] ${iconStyle}`}>
                     {item.icon}
                   </span>
-                  <span className="text-[14px] font-bold">{item.label}</span>
-                  <span className="mt-0.5 text-[11.5px] opacity-70">{item.sub}</span>
+                  <span className="text-[13px] font-bold sm:text-[14px]">{item.label}</span>
+                  <span className="mt-0.5 hidden text-[11.5px] opacity-70 sm:block">{item.sub}</span>
                 </button>
               );
             })}
@@ -1096,8 +1096,12 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
         </div>
       </div>
 
-      {/* Apple Fitness 风格分段胶囊进度条（点击任意一格直接跳题） */}
-      <div className="mb-3 flex shrink-0 items-center gap-1.5">
+      {/* Apple Fitness 风格分段胶囊进度条（点击任意一格直接跳题；全卷模式下在移动端隐藏以节省空间） */}
+      <div
+        className={`mb-2.5 shrink-0 items-center gap-1.5 sm:mb-3 ${
+          viewMode === 'list' ? 'hidden sm:flex' : 'flex'
+        }`}
+      >
         {activeQuestions.map((q, idx) => {
           const isRev = Boolean(revealed[q.id]);
           const isOk = Boolean(correctnessMap[q.id]);
@@ -1143,7 +1147,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                     {TYPE_LABELS[currentQuestion.type] || '互动题'}
                   </span>
                   {currentQuestion.dimension && (
-                    <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                    <span className="hidden rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 sm:inline-block">
                       🎯 {currentQuestion.dimension}
                     </span>
                   )}
@@ -1161,7 +1165,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                       <span>{fmtTime(currentQuestion.reference_time)}</span>
                     </button>
                   )}
-                  <div className="inline-flex items-center rounded-full border border-slate-200/90 bg-slate-50/80 p-0.5 text-[11px]">
+                  <div className="hidden items-center rounded-full border border-slate-200/90 bg-slate-50/80 p-0.5 text-[11px] sm:inline-flex">
                     <button
                       type="button"
                       disabled={currentIndex === 0}
@@ -1185,7 +1189,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
               </div>
 
               {/* 题干 */}
-              <h5 className="mt-3 text-[15px] font-bold leading-relaxed text-slate-900">
+              <h5 className="mt-2.5 text-[14px] font-bold leading-relaxed text-slate-900 sm:mt-3 sm:text-[15px]">
                 {currentQuestion.stem}
               </h5>
 
@@ -1248,8 +1252,8 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
         /* 全卷全景试卷视图 (Compact Paper Sheet View —— 始终展示完整题库，紧凑排版，一屏多题顺畅滚动) */
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* 试卷顶部筛选与概览条 */}
-          <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-1.5 text-[12px]">
-            <div className="flex items-center gap-2 text-slate-600">
+          <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/90 px-2.5 py-1.5 text-[12px] sm:px-3">
+            <div className="hidden items-center gap-2 text-slate-600 sm:flex">
               <span className="font-semibold text-slate-800">
                 📄 完整考卷（共 {fullQuiz.questions.length} 题）
               </span>
@@ -1293,10 +1297,22 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 )
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const allRev: Record<string, boolean> = {};
+                for (const q of fullQuiz.questions) allRev[q.id] = true;
+                setRevealed(allRev);
+              }}
+              className="text-[11.5px] font-semibold text-[#0071e3] hover:underline sm:hidden"
+            >
+              ✨ 展开全部解析
+            </button>
           </div>
 
           {/* 试卷连贯滚动区（一整张紧凑长卷，上下顺滑滚动） */}
-          <div className="panel-scroll min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white px-4 divide-y divide-slate-100">
+          <div className="panel-scroll min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200/90 bg-white px-3 divide-y divide-slate-100 sm:px-4">
             {fullQuiz.questions
               .map((q, idx) => ({ q, idx }))
               .filter(({ q }) =>
@@ -1311,18 +1327,18 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 const expectedAns = q.correct_answer;
 
                 return (
-                  <div key={q.id} className="py-3.5 first:pt-3 last:pb-4">
+                  <div key={q.id} className="py-3 first:pt-2.5 last:pb-3.5 sm:py-3.5">
                     {/* 题干与状态行 */}
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1 text-[13.5px] font-bold leading-snug text-slate-900">
-                        <span className="mr-1.5 inline-flex items-center rounded bg-slate-900 px-1.5 py-0.5 font-mono text-[10.5px] font-bold text-white">
+                      <div className="min-w-0 flex-1 text-[13px] font-semibold leading-snug text-slate-900 sm:text-[13.5px] sm:font-bold">
+                        <span className="mr-1.5 inline-flex items-center rounded bg-slate-900 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white sm:text-[10.5px]">
                           {String(idx + 1).padStart(2, '0')}
                         </span>
-                        <span className="mr-1.5 inline-flex items-center rounded bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3]">
+                        <span className="mr-1.5 inline-flex items-center rounded bg-[#0071e3]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#0071e3] sm:text-[10.5px]">
                           {TYPE_LABELS[q.type]}
                         </span>
                         {q.dimension && (
-                          <span className="mr-1.5 inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-medium text-slate-500">
+                          <span className="mr-1.5 hidden items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-medium text-slate-500 sm:inline-flex">
                             {q.dimension}
                           </span>
                         )}
@@ -1332,7 +1348,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                       <div className="flex shrink-0 items-center gap-1.5">
                         {isRev ? (
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                            className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold sm:text-[11px] ${
                               isOk
                                 ? 'bg-emerald-500/12 text-emerald-700'
                                 : 'bg-rose-500/12 text-rose-600'
@@ -1389,9 +1405,9 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                                 if (q.type === 'single_choice') handleSelectInstant(q, opt);
                                 else handleToggleMulti(q, opt);
                               }}
-                              className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left text-[12.5px] leading-snug transition ${rowStyle}`}
+                              className={`flex items-start gap-2 rounded-xl border px-2.5 py-1.5 text-left text-[12px] leading-snug transition sm:text-[12.5px] ${rowStyle}`}
                             >
-                              <span className="font-mono text-[11px] font-bold opacity-75">
+                              <span className="mt-0.5 shrink-0 font-mono text-[11px] font-bold opacity-75">
                                 {LETTERS[oIdx]}.
                               </span>
                               <span className="min-w-0 flex-1">{opt}</span>
@@ -1428,7 +1444,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                               type="button"
                               disabled={isRev}
                               onClick={() => handleSelectInstant(q, item.val)}
-                              className={`rounded-xl border px-4 py-1 text-[12.5px] transition ${btnStyle}`}
+                              className={`rounded-xl border px-3.5 py-1 text-[12px] transition sm:px-4 sm:text-[12.5px] ${btnStyle}`}
                             >
                               {item.label}
                             </button>
@@ -1437,20 +1453,18 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                       </div>
                     ) : null}
 
-                    {/* 紧凑版解析条 */}
+                    {/* 紧凑版解析条（流式全宽排版，避免右侧按钮把解析文字挤成窄条） */}
                     {isRev && (
-                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
-                        <div className="min-w-0 flex-1 leading-relaxed">
-                          <span className="font-semibold text-slate-800">
-                            正确答案：{answerText(expectedAns)}
-                          </span>
-                          {q.explanation && <span className="ml-2 text-slate-600">｜ {q.explanation}</span>}
-                        </div>
+                      <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[12px] leading-relaxed text-slate-600">
+                        <span className="font-semibold text-slate-800">
+                          正确答案：{answerText(expectedAns)}
+                        </span>
+                        {q.explanation && <span className="ml-1.5 text-slate-600">｜ {q.explanation}</span>}
                         {q.reference_time !== undefined && q.reference_time > 0 && (
                           <button
                             type="button"
                             onClick={() => onSeek(Number(q.reference_time) || 0)}
-                            className="shrink-0 rounded-full bg-[#0071e3]/10 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-[#0071e3] hover:bg-[#0071e3] hover:text-white"
+                            className="ml-2 inline-flex items-center rounded-full bg-[#0071e3]/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-[#0071e3] align-baseline hover:bg-[#0071e3] hover:text-white"
                           >
                             ▶ {fmtTime(q.reference_time)} 听原声
                           </button>
@@ -1463,7 +1477,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
           </div>
 
           {/* 底部固定操作栏（脱离滚动区，固定在最底部） */}
-          <div className="mt-2.5 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 bg-white pt-2.5 text-[12px]">
+          <div className="mt-2 flex shrink-0 items-center justify-between gap-2 border-t border-slate-200/80 bg-white pt-2 text-[12px] sm:mt-2.5 sm:pt-2.5">
             <button
               type="button"
               onClick={() => {
@@ -1471,12 +1485,12 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 for (const q of fullQuiz.questions) allRev[q.id] = true;
                 setRevealed(allRev);
               }}
-              className="font-semibold text-[#0071e3] hover:underline"
+              className="hidden font-semibold text-[#0071e3] hover:underline sm:inline-block"
             >
               ✨ 一键展开全卷答案与解析
             </button>
 
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
               <button
                 type="button"
                 onClick={() => {
@@ -1484,14 +1498,14 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                   setIsRetryWrongMode(false);
                   setViewMode('deck');
                 }}
-                className="rounded-full border border-slate-200 px-3.5 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50"
+                className="hidden rounded-full border border-slate-200 px-3.5 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50 sm:inline-flex"
               >
                 🗂 切回卡片闯关
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('summary')}
-                className="rounded-full bg-slate-900 px-3.5 py-1.5 text-[12px] font-semibold text-white hover:bg-slate-800"
+                className="flex-1 rounded-full bg-slate-900 px-3.5 py-1.5 text-center text-[12px] font-semibold text-white hover:bg-slate-800 sm:flex-none"
               >
                 🏆 成绩奖章
               </button>
@@ -1499,7 +1513,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 <button
                   type="button"
                   onClick={isSandboxPractice ? handleRestoreOwnerResult : handleStartSandboxPractice}
-                  className="rounded-full border border-[#0071e3]/30 bg-[#0071e3]/10 px-3.5 py-1.5 text-[12px] font-semibold text-[#0071e3] hover:bg-[#0071e3] hover:text-white"
+                  className="flex-1 rounded-full border border-[#0071e3]/30 bg-[#0071e3]/10 px-3.5 py-1.5 text-center text-[12px] font-semibold text-[#0071e3] hover:bg-[#0071e3] hover:text-white sm:flex-none"
                 >
                   {isSandboxPractice ? '👁 查看原分享结果' : '🎮 本地试做一遍'}
                 </button>
@@ -1507,7 +1521,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => void onGenerateQuiz(targetCount)}
-                  className="rounded-full border border-[#0071e3]/30 bg-[#0071e3]/10 px-3.5 py-1.5 text-[12px] font-semibold text-[#0071e3] hover:bg-[#0071e3] hover:text-white"
+                  className="flex-1 rounded-full border border-[#0071e3]/30 bg-[#0071e3]/10 px-3.5 py-1.5 text-center text-[12px] font-semibold text-[#0071e3] hover:bg-[#0071e3] hover:text-white sm:flex-none"
                 >
                   🔄 重新生成新题
                 </button>

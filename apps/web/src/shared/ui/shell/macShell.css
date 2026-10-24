@@ -45,9 +45,11 @@
   -webkit-user-drag: none;
 }
 
-.mac-shell button,
-.mac-window button {
-  font: inherit;
+@layer base {
+  .mac-shell button,
+  .mac-window button {
+    font: inherit;
+  }
 }
 
 .mac-menu-bar {

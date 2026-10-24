@@ -99,21 +99,21 @@ export function VideoChangelogPage() {
   };
 
   return (
-    <div className="panel-scroll min-h-0 flex-1 bg-[#f2f2f7] text-slate-900 pb-16 lg:bg-[#f5f5f7] lg:pb-24">
-      {/* 顶部面包屑与操作条 */}
-      <div className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-2 px-3.5 py-2 sm:px-6 sm:py-2.5">
-          <div className="flex items-center gap-1.5 text-[12px] text-slate-500 sm:gap-2 sm:text-[12.5px]">
+    <div className="panel-scroll min-h-0 flex-1 bg-[#f2f2f7] text-slate-900 pb-12 lg:bg-[#f5f5f7] lg:pb-24">
+      {/* 顶部面包屑与操作条（仅桌面端显示，移动端由顶栏与底部 Tab 导航承接） */}
+      <div className="sticky top-0 z-20 hidden border-b border-slate-200/80 bg-white/85 backdrop-blur-md lg:block">
+        <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-2 px-6 py-2.5">
+          <div className="flex items-center gap-2 text-[12.5px] text-slate-500">
             <Link to="/video" className="hover:text-[#0071e3] transition">
               视频学习助手
             </Link>
             <span>/</span>
             <span className="font-semibold text-slate-900">更新记录</span>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-2">
             <Link
               to="/video/docs"
-              className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-medium text-slate-700 transition hover:border-[#0071e3]/40 hover:text-[#0071e3] sm:inline-flex"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-medium text-slate-700 transition hover:border-[#0071e3]/40 hover:text-[#0071e3]"
             >
               <span>📖</span>
               <span>打开文档中心 (30篇)</span>
@@ -121,7 +121,7 @@ export function VideoChangelogPage() {
             <button
               type="button"
               onClick={handleCopyChangelog}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-medium text-slate-800 transition hover:bg-slate-50 active:scale-95 cursor-pointer sm:px-3.5 sm:text-[12px]"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3.5 py-1 text-[12px] font-medium text-slate-800 transition hover:bg-slate-50 active:scale-95 cursor-pointer"
             >
               <span>{copySuccess ? '✓ 已复制' : '📋 复制 Markdown'}</span>
             </button>
@@ -130,27 +130,36 @@ export function VideoChangelogPage() {
       </div>
 
       {/* 主标题与分类过滤 */}
-      <div className="mx-auto max-w-[1240px] px-4 pt-5 pb-4 sm:px-6 sm:pt-8 sm:pb-6">
+      <div className="mx-auto max-w-[1240px] px-3 pt-3 pb-2.5 sm:px-6 sm:pt-8 sm:pb-6">
         <div className="max-w-3xl">
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[#0071e3]/10 px-2.5 py-0.5 text-[11px] font-bold text-[#0071e3] sm:px-3 sm:py-1 sm:text-[11.5px]">
+          <div className="mb-2 hidden items-center gap-2 rounded-full bg-[#0071e3]/10 px-3 py-1 text-[11.5px] font-bold text-[#0071e3] sm:inline-flex">
             <span>🚀 SmartDiagram Unified Platform · Video Learning v2.7.0</span>
           </div>
-          <h1 className="text-[24px] font-bold tracking-tight text-slate-900 sm:text-[32px] md:text-[38px]">
-            更新记录与全栈架构演进
-          </h1>
-          <p className="mt-2.5 text-[14.5px] leading-relaxed text-slate-600">
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-[18px] font-bold tracking-tight text-slate-900 sm:text-[32px] md:text-[38px]">
+              更新记录与架构演进
+            </h1>
+            <button
+              type="button"
+              onClick={handleToggleAll}
+              className="shrink-0 rounded-full bg-[#0071e3]/10 px-2.5 py-1 text-[11px] font-semibold text-[#0071e3] active:scale-95 sm:hidden"
+            >
+              {expandAll ? '折叠详情' : '展开详情'}
+            </button>
+          </div>
+          <p className="mt-2.5 hidden text-[14.5px] leading-relaxed text-slate-600 sm:block">
             实时追踪视频学习助手从独立终端到融合进 SmartDiagram 统一工作台的特性升级、并发性能基准与底层架构演进。
           </p>
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
-          <div className="flex flex-wrap items-center gap-1.5">
+        <div className="mt-2.5 flex items-center justify-between gap-3 border-b border-slate-200/80 pb-2.5 sm:mt-6 sm:flex-wrap sm:gap-4 sm:pb-4">
+          <div className="no-scrollbar flex flex-nowrap items-center gap-1.5 overflow-x-auto sm:flex-wrap">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategory(cat.id)}
-                className={`rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition cursor-pointer ${
+                className={`shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-medium transition cursor-pointer sm:px-3.5 sm:py-1.5 sm:text-[12.5px] ${
                   activeCategory === cat.id
                     ? 'bg-slate-900 text-white shadow-xs font-semibold'
                     : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/70'
@@ -161,7 +170,7 @@ export function VideoChangelogPage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-3 text-[12px] text-slate-500">
+          <div className="hidden items-center gap-3 text-[12px] text-slate-500 sm:flex">
             <button
               type="button"
               onClick={handleToggleAll}
@@ -174,53 +183,77 @@ export function VideoChangelogPage() {
       </div>
 
       {/* 正文双栏：左侧版本时间轴 + 右侧 Sticky 版本导航 */}
-      <div className="mx-auto grid max-w-[1240px] grid-cols-1 gap-10 px-6 lg:grid-cols-[minmax(0,1fr)_220px]">
-        <div className="min-w-0 space-y-14">
+      <div className="mx-auto grid max-w-[1240px] grid-cols-1 gap-4 px-3 sm:gap-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="min-w-0 space-y-3.5 sm:space-y-10 lg:space-y-14">
           {/* ================= v2.7.0 (最新重大版本) ================= */}
           {shouldShowVersion('v2.7.0') && (
             <section
               id="v2.7.0"
-              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-6 md:gap-8 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xs"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-3 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-3.5 sm:p-6 shadow-xs"
             >
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[20px] font-bold text-slate-900">v2.7.0</span>
-                  <span className="rounded-full bg-[#0071e3] px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.7.0</span>
+                  <span className="rounded-full bg-[#0071e3] px-1.5 py-0.5 text-[9.5px] font-bold text-white uppercase tracking-wider sm:px-2 sm:text-[10px]">
                     LATEST
                   </span>
+                  <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3] md:hidden">
+                    🏛️ 平台融合与极速版
+                  </span>
                 </div>
-                <p className="text-[12.5px] text-slate-500 font-mono">2026年10月24日</p>
-                <p className="text-[11.5px] text-[#0071e3] font-semibold">
+                <p className="text-[11.5px] text-slate-400 font-mono sm:text-[12.5px] sm:text-slate-500">2026-10-24</p>
+                <p className="hidden text-[11.5px] text-[#0071e3] font-semibold md:block">
                   🏛️ SmartDiagram 平台融合与极速大版本
                 </p>
               </div>
 
-              <div className="min-w-0 space-y-5">
+              <div className="min-w-0 space-y-3 sm:space-y-5">
                 <div>
-                  <h2 className="text-[20px] font-bold tracking-tight text-slate-900">
+                  <h2 className="text-[15px] font-bold leading-snug tracking-tight text-slate-900 sm:text-[20px]">
                     SmartDiagram 统一平台融合、四点并发极速总结 (35.4s)、高置信意图门控与 Apple 闯关/全卷测验双持久化
                   </h2>
-                  <p className="mt-2 text-[13.5px] leading-relaxed text-slate-600">
-                    将视频学习助手全面合入 SmartDiagram 统一架构（<code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[12px]">/video</code>），定制专属单行毛玻璃顶栏并支持思维导图一键移交 <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[12px]">/diagram</code> 画布编辑；通过 6 线程并发 ASR 与主研报/双语字幕并行推理，将 210s 视频端到端耗时从 58.8s 压降至 <strong>35.4s</strong>；引入 Jeff 0.78 高置信度三层门控消除引导词误触；重构学习测验为「🎴 闯关卡片 + 📋 紧凑电子全卷」双视图并实现 PostgreSQL + 本地双重持久化。
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 sm:mt-2 sm:text-[13.5px]">
+                    将视频学习助手全面合入 SmartDiagram 统一架构（<code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">/video</code>），定制专属单行毛玻璃顶栏并支持思维导图一键移交 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">/diagram</code> 画布编辑；通过 6 线程并发 ASR 与主研报/双语字幕并行推理，将 210s 视频端到端耗时从 58.8s 压降至 <strong>35.4s</strong>；引入 Jeff 0.78 高置信度三层门控消除引导词误触；重构学习测验为「🎴 闯关卡片 + 📋 紧凑电子全卷」双视图并实现 PostgreSQL + 本地双重持久化。
                   </p>
                 </div>
 
-                {/* v2.7.0 原生 SVG 架构图 */}
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0071e3]/10 text-[#0071e3]">
+                {/* v2.7.0 架构图：移动端渲染紧凑 2x2 Bento 卡片，桌面端渲染完整原生 SVG */}
+                <div className="rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/70 p-2.5 sm:p-4 space-y-2.5 sm:space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 pb-2 sm:pb-2.5">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-lg bg-[#0071e3]/10 text-[11px] sm:text-sm text-[#0071e3]">
                         🏛️
                       </span>
-                      <span className="text-[13.5px] font-bold text-slate-900">
-                        v2.7.0 SmartDiagram 统一平台融合与四点并发极速总结架构图
+                      <span className="text-[12px] sm:text-[13.5px] font-bold text-slate-900">
+                        v2.7.0 统一平台融合与四点并发架构全景
                       </span>
                     </div>
-                    <span className="rounded-full bg-[#0071e3]/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#0071e3]">
+                    <span className="hidden rounded-full bg-[#0071e3]/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#0071e3] sm:inline-flex">
                       Unified Monorepo · 35.4s Pipeline
                     </span>
                   </div>
-                  <div className="overflow-x-auto">
+
+                  {/* 移动端专属 2x2 紧凑 Bento 架构矩阵 */}
+                  <div className="grid grid-cols-2 gap-2 text-[11.5px] sm:hidden">
+                    <div className="rounded-xl border border-[#0071e3]/25 bg-white p-2.5 space-y-1">
+                      <div className="font-bold text-[#0071e3]">1. 专属融合工作台</div>
+                      <p className="text-slate-600 leading-snug">单行毛玻璃顶栏 + 导图一键移交 /diagram 画布</p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-500/25 bg-white p-2.5 space-y-1">
+                      <div className="font-bold text-emerald-600">2. 35.4s 极速总结</div>
+                      <p className="text-slate-600 leading-snug">6 线程 ASR (6.7s) + 主总结与双语翻译并行</p>
+                    </div>
+                    <div className="rounded-xl border border-indigo-500/25 bg-white p-2.5 space-y-1">
+                      <div className="font-bold text-indigo-600">3. 闯关 + 电子全卷</div>
+                      <p className="text-slate-600 leading-snug">6 题 9s 极速生成，即选即判与全卷错题筛选</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-500/25 bg-white p-2.5 space-y-1">
+                      <div className="font-bold text-amber-600">4. 双重持久化闭环</div>
+                      <p className="text-slate-600 leading-snug">PostgreSQL + Local 双写，重开自动恢复成绩</p>
+                    </div>
+                  </div>
+
+                  <div className="hidden overflow-x-auto sm:block">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       viewBox="0 0 1160 480"
@@ -360,31 +393,31 @@ export function VideoChangelogPage() {
                 </div>
 
                 {/* v2.7.0 可折叠特性 */}
-                <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden">
+                <div className="rounded-xl sm:rounded-2xl border border-slate-200/80 bg-white overflow-hidden">
                   <button
                     type="button"
                     onClick={() => toggleCollapse('v2.7.0-features')}
-                    className="flex w-full items-center justify-between p-4 text-left transition hover:bg-slate-50 cursor-pointer"
+                    className="flex w-full items-center justify-between px-3 py-2.5 sm:p-4 text-left transition hover:bg-slate-50 cursor-pointer"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[14px] font-bold text-slate-900">
-                        ⭐ 核心特性与架构融合 (New Features)
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="text-[12.5px] sm:text-[14px] font-bold text-slate-900">
+                        ⭐ 核心特性与架构融合
                       </span>
-                      <span className="rounded-full bg-[#0071e3]/10 px-2 py-0.5 text-[11px] font-semibold text-[#0071e3]">
-                        5项重磅升级
+                      <span className="rounded-full bg-[#0071e3]/10 px-2 py-0.5 text-[10.5px] sm:text-[11px] font-semibold text-[#0071e3]">
+                        5项升级
                       </span>
                     </div>
-                    <span className="text-[12.5px] text-slate-400">
+                    <span className="text-[11.5px] sm:text-[12.5px] text-slate-400">
                       {collapseState['v2.7.0-features'] ? '收起 ▲' : '展开 ▼'}
                     </span>
                   </button>
                   {collapseState['v2.7.0-features'] && (
-                    <div className="border-t border-slate-100 p-4 space-y-2.5 text-[13.5px] text-slate-700 leading-relaxed">
+                    <div className="border-t border-slate-100 p-3 sm:p-4 space-y-2 sm:space-y-2.5 text-[12px] sm:text-[13.5px] text-slate-700 leading-relaxed">
                       <div>
                         <strong className="font-semibold text-[#0071e3]">
                           1. SmartDiagram 专属单行顶栏与跨模块导图联动：
                         </strong>
-                        隐藏模拟桌面顶栏，点击左侧「视频学习助手」即刻重置返回首页；已解析视频切换条通过 Portal 嵌入顶栏中央；思维导图支持一键发送至 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px]">/diagram</code> 画布深度编辑。
+                        隐藏模拟桌面顶栏，点击左侧「视频学习助手」即刻重置返回首页；已解析视频切换条通过 Portal 嵌入顶栏中央；思维导图支持一键发送至 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">/diagram</code> 画布深度编辑。
                       </div>
                       <div>
                         <strong className="font-semibold text-[#0071e3]">
@@ -396,19 +429,19 @@ export function VideoChangelogPage() {
                         <strong className="font-semibold text-[#0071e3]">
                           3. CJK 中文标点兼容与可视化流程卡片渲染引擎：
                         </strong>
-                        自研 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px]">markdown.ts</code>，完美解析中文引号紧邻的 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px]">**加粗**</code>、单星号 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px]">*话术示范*</code> 胶囊徽章，并将 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px]">[阶段一] -&gt; [阶段二]</code> 自动升维渲染为横向递进流程卡片。
+                        自研 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">markdown.ts</code>，完美解析中文引号紧邻的 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">**加粗**</code>、单星号 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">*话术示范*</code> 胶囊徽章，并将 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">[阶段一] -&gt; [阶段二]</code> 自动升维渲染为横向递进流程卡片。
                       </div>
                       <div>
                         <strong className="font-semibold text-[#0071e3]">
                           4. 系统 1 (Jeff) 三层高置信意图门控：
                         </strong>
-                        引入知识总结硬优先白名单、功能动作特征词二次核验与 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px]">0.78</code> 置信度门控，预设引导词与模糊提问 100% 稳定触发总结型问答。
+                        引入知识总结硬优先白名单、功能动作特征词二次核验与 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">0.78</code> 置信度门控，预设引导词与模糊提问 100% 稳定触发总结型问答。
                       </div>
                       <div>
                         <strong className="font-semibold text-[#0071e3]">
                           5. Apple Study Deck 闯关卡片 + 紧凑电子全卷 + 双重持久化：
                         </strong>
-                        支持「🎴 闯关卡片」（底部固定切题栏、即选即判）与「📋 全卷模式」（6 题同屏流式滚动、全部/错题筛选）自由切换；题目、作答进度与成绩在 PostgreSQL 与 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px]">localStorage</code> 双重持久化。
+                        支持「🎴 闯关卡片」（底部固定切题栏、即选即判）与「📋 全卷模式」（6 题同屏流式滚动、全部/错题筛选）自由切换；题目、作答进度与成绩在 PostgreSQL 与 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">localStorage</code> 双重持久化。
                       </div>
                     </div>
                   )}
@@ -421,45 +454,50 @@ export function VideoChangelogPage() {
           {shouldShowVersion('v2.6.0') && (
             <section
               id="v2.6.0"
-              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-6 md:gap-8 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-3 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-6 shadow-xs"
             >
-              <div className="space-y-1.5">
-                <span className="text-[20px] font-bold text-slate-900">v2.6.0</span>
-                <p className="text-[12.5px] text-slate-500 font-mono">2026年10月23日</p>
-                <p className="text-[11.5px] text-emerald-600 font-medium">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.6.0</span>
+                  <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-700 md:hidden">
+                    ⚡ 双系统流式与云端版
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-slate-400 font-mono sm:text-[12.5px] sm:text-slate-500">2026-10-23</p>
+                <p className="hidden text-[11.5px] text-emerald-600 font-medium md:block">
                   ⚡ 双系统流式与云端生产大版本
                 </p>
               </div>
 
-              <div className="min-w-0 space-y-4">
+              <div className="min-w-0 space-y-3 sm:space-y-4">
                 <div>
-                  <h2 className="text-[19px] font-bold tracking-tight text-slate-900">
+                  <h2 className="text-[15px] font-bold leading-snug tracking-tight text-slate-900 sm:text-[19px]">
                     双系统 SSE 流式问答、秒级 Range 时间轴跳转、云端共享 Jeff 低内存部署与 PostgreSQL 持久化闭环
                   </h2>
-                  <p className="mt-2 text-[13.5px] leading-relaxed text-slate-600">
-                    完成系统 1 决策模型 Jeff (<code className="font-mono text-[12px]">gliformer-large-v1</code>) 的云服务器低内存改造与容器网络打通，内存峰值从 4.81 GB 降至 685 MiB；将 AI 问答升级为三阶段 SSE 实时流式输出，精细化展示「⚡ Jev系统1耗时 + 🧠 大模型耗时(含首字TTFT) + 🕒 消息时间戳」；解决 Nginx 全局缓存剥离 Range 导致点击视频时间轴重置归零的顽疾。
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 sm:mt-2 sm:text-[13.5px]">
+                    完成系统 1 决策模型 Jeff (<code className="font-mono text-[11.5px]">gliformer-large-v1</code>) 的云服务器低内存改造与容器网络打通，内存峰值从 4.81 GB 降至 685 MiB；将 AI 问答升级为三阶段 SSE 实时流式输出，精细化展示「⚡ Jev系统1耗时 + 🧠 大模型耗时(含首字TTFT) + 🕒 消息时间戳」；解决 Nginx 全局缓存剥离 Range 导致点击视频时间轴重置归零的顽疾。
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 overflow-hidden">
+                <div className="rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/50 overflow-hidden">
                   <button
                     type="button"
                     onClick={() => toggleCollapse('v2.6.0-features')}
-                    className="flex w-full items-center justify-between p-4 text-left transition hover:bg-slate-100/70 cursor-pointer"
+                    className="flex w-full items-center justify-between px-3 py-2.5 sm:p-4 text-left transition hover:bg-slate-100/70 cursor-pointer"
                   >
-                    <span className="text-[13.5px] font-bold text-slate-900">
+                    <span className="text-[12.5px] sm:text-[13.5px] font-bold text-slate-900">
                       ⭐ v2.6.0 核心特性与网关加固明细
                     </span>
-                    <span className="text-[12.5px] text-slate-400">
+                    <span className="text-[11.5px] sm:text-[12.5px] text-slate-400">
                       {collapseState['v2.6.0-features'] ? '收起 ▲' : '展开 ▼'}
                     </span>
                   </button>
                   {collapseState['v2.6.0-features'] && (
-                    <div className="border-t border-slate-200/70 p-4 space-y-2 text-[13px] text-slate-700 leading-relaxed bg-white">
-                      <div>• <strong>三阶段 SSE 实时流式问答引擎：</strong>新增 <code className="font-mono text-[12px]">POST /api/ask/stream</code>，按 <code className="font-mono text-[12px]">router ➔ delta ➔ done</code> 实时推送。</div>
-                      <div>• <strong>云端共享 Jeff 零拷贝低内存部署：</strong>权重转为 <code className="font-mono text-[12px]">model.safetensors</code> 实现 <code className="font-mono text-[12px]">mmap</code> 零拷贝映射，常驻内存从 4.81 GB 降至 <strong>685 MiB</strong>。</div>
-                      <div>• <strong>秒级 Range 时间轴跳转：</strong>配置 <code className="font-mono text-[12px]">proxy_cache off; proxy_buffering off;</code> 恢复 <code className="font-mono text-[12px]">HTTP/2 206 Partial Content</code>，配合播放器 <code className="font-mono text-[12px]">readyState</code> 初始态校准实现秒级空降。</div>
-                      <div>• <strong>问答对话历史 PostgreSQL JSONB 自动持久化：</strong>新增 <code className="font-mono text-[12px]">append_analysis_chat()</code> 原子追加至 <code className="font-mono text-[12px]">analyses.result.chat_history</code>。</div>
+                    <div className="border-t border-slate-200/70 p-3 sm:p-4 space-y-1.5 sm:space-y-2 text-[12px] sm:text-[13px] text-slate-700 leading-relaxed bg-white">
+                      <div>• <strong>三阶段 SSE 实时流式问答引擎：</strong>新增 <code className="font-mono text-[11.5px]">POST /api/ask/stream</code>，按 <code className="font-mono text-[11.5px]">router ➔ delta ➔ done</code> 实时推送。</div>
+                      <div>• <strong>云端共享 Jeff 零拷贝低内存部署：</strong>权重转为 <code className="font-mono text-[11.5px]">model.safetensors</code> 实现 <code className="font-mono text-[11.5px]">mmap</code> 零拷贝映射，常驻内存从 4.81 GB 降至 <strong>685 MiB</strong>。</div>
+                      <div>• <strong>秒级 Range 时间轴跳转：</strong>配置 <code className="font-mono text-[11.5px]">proxy_cache off; proxy_buffering off;</code> 恢复 <code className="font-mono text-[11.5px]">HTTP/2 206 Partial Content</code>，配合播放器 <code className="font-mono text-[11.5px]">readyState</code> 初始态校准实现秒级空降。</div>
+                      <div>• <strong>问答对话历史 PostgreSQL JSONB 自动持久化：</strong>新增 <code className="font-mono text-[11.5px]">append_analysis_chat()</code> 原子追加至 <code className="font-mono text-[11.5px]">analyses.result.chat_history</code>。</div>
                     </div>
                   )}
                 </div>
@@ -471,35 +509,40 @@ export function VideoChangelogPage() {
           {shouldShowVersion('v2.5.0') && (
             <section
               id="v2.5.0"
-              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-6 md:gap-8 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-3 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-6 shadow-xs"
             >
-              <div className="space-y-1.5">
-                <span className="text-[20px] font-bold text-slate-900">v2.5.0</span>
-                <p className="text-[12.5px] text-slate-500 font-mono">2026年10月11日</p>
-                <p className="text-[11.5px] text-emerald-600 font-medium">⚡ 性能与研报大版本</p>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.5.0</span>
+                  <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-700 md:hidden">
+                    ⚡ 性能与研报大版本
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-slate-400 font-mono sm:text-[12.5px] sm:text-slate-500">2026-10-11</p>
+                <p className="hidden text-[11.5px] text-emerald-600 font-medium md:block">⚡ 性能与研报大版本</p>
               </div>
 
-              <div className="min-w-0 space-y-4">
+              <div className="min-w-0 space-y-3 sm:space-y-4">
                 <div>
-                  <h2 className="text-[19px] font-bold tracking-tight text-slate-900">
+                  <h2 className="text-[15px] font-bold leading-snug tracking-tight text-slate-900 sm:text-[19px]">
                     流式切片转写、动态领域先验编译器与四大篇章战略智库研报重塑
                   </h2>
-                  <p className="mt-2 text-[13.5px] leading-relaxed text-slate-600">
-                    引入全自动动态领域先验编译器（<code className="font-mono text-[12px]">build_asr_system_prompt</code>），消除口音与中英专业术语同音错别字；180 秒音频切片并发识别与渐进式流式字幕推流，首批字幕 3.5 秒即出；输出四大篇章深度研报、TL;DR 破局卡片与落地行动指南。
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 sm:mt-2 sm:text-[13.5px]">
+                    引入全自动动态领域先验编译器（<code className="font-mono text-[11.5px]">build_asr_system_prompt</code>），消除口音与中英专业术语同音错别字；180 秒音频切片并发识别与渐进式流式字幕推流，首批字幕 3.5 秒即出；输出四大篇章深度研报、TL;DR 破局卡片与落地行动指南。
                   </p>
                 </div>
 
                 {/* v2.5.0 交互式架构切换面板 */}
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5">
-                    <span className="text-[13px] font-bold text-slate-900">
+                <div className="rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/70 p-2.5 sm:p-4 space-y-2.5 sm:space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 pb-2 sm:pb-2.5">
+                    <span className="text-[12px] sm:text-[13px] font-bold text-slate-900">
                       🏛️ v2.5.0 流式转写拓扑与基准对照
                     </span>
-                    <div className="inline-flex rounded-full bg-slate-200/70 p-0.5 text-[11.5px]">
+                    <div className="inline-flex rounded-full bg-slate-200/70 p-0.5 text-[11px] sm:text-[11.5px]">
                       <button
                         type="button"
                         onClick={() => setArchMode('architecture')}
-                        className={`rounded-full px-2.5 py-0.5 font-medium cursor-pointer ${
+                        className={`rounded-full px-2 sm:px-2.5 py-0.5 font-medium cursor-pointer ${
                           archMode === 'architecture' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
                         }`}
                       >
@@ -508,16 +551,16 @@ export function VideoChangelogPage() {
                       <button
                         type="button"
                         onClick={() => setArchMode('sequence')}
-                        className={`rounded-full px-2.5 py-0.5 font-medium cursor-pointer ${
+                        className={`rounded-full px-2 sm:px-2.5 py-0.5 font-medium cursor-pointer ${
                           archMode === 'sequence' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
                         }`}
                       >
-                        流式时序 (3.5s)
+                        流式时序
                       </button>
                       <button
                         type="button"
                         onClick={() => setArchMode('benchmark')}
-                        className={`rounded-full px-2.5 py-0.5 font-medium cursor-pointer ${
+                        className={`rounded-full px-2 sm:px-2.5 py-0.5 font-medium cursor-pointer ${
                           archMode === 'benchmark' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
                         }`}
                       >
@@ -527,20 +570,20 @@ export function VideoChangelogPage() {
                   </div>
 
                   {archMode === 'architecture' && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[12px]">
-                      <div className="rounded-xl border border-[#0071e3]/20 bg-white p-3 space-y-1">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3 text-[11.5px] sm:text-[12px]">
+                      <div className="rounded-xl border border-[#0071e3]/20 bg-white p-2.5 sm:p-3 space-y-0.5 sm:space-y-1">
                         <div className="font-bold text-[#0071e3]">🖥️ 客户端交互层</div>
                         <p className="text-slate-600">• 时间戳 Seek 联动与实时秒表计时</p>
                         <p className="text-slate-600">• 实时转写流式字幕预览窗口</p>
                         <p className="text-slate-600">• 四大篇章深度研报卡片</p>
                       </div>
-                      <div className="rounded-xl border border-purple-500/20 bg-white p-3 space-y-1">
+                      <div className="rounded-xl border border-purple-500/20 bg-white p-2.5 sm:p-3 space-y-0.5 sm:space-y-1">
                         <div className="font-bold text-purple-600">⚡ 编排与先验编译器</div>
                         <p className="text-slate-600">• 动态领域专业词库编译器</p>
                         <p className="text-slate-600">• 180s 音频语义分块与实时回调</p>
                         <p className="text-slate-600">• Audio / ASR / LLM 全链路耗时打点</p>
                       </div>
-                      <div className="rounded-xl border border-emerald-500/20 bg-white p-3 space-y-1">
+                      <div className="rounded-xl border border-emerald-500/20 bg-white p-2.5 sm:p-3 space-y-0.5 sm:space-y-1">
                         <div className="font-bold text-emerald-600">🧠 高并发模型推理</div>
                         <p className="text-slate-600">• SenseVoice 多切片并发识别</p>
                         <p className="text-slate-600">• 战略咨询架构师 JSON Schema</p>
@@ -550,7 +593,7 @@ export function VideoChangelogPage() {
                   )}
 
                   {archMode === 'sequence' && (
-                    <div className="rounded-xl border border-slate-200 bg-white p-3.5 text-[12px] space-y-2 font-mono">
+                    <div className="rounded-xl border border-slate-200 bg-white p-2.5 sm:p-3.5 text-[11.5px] sm:text-[12px] space-y-1.5 sm:space-y-2 font-mono">
                       <div><strong className="text-[#0071e3]">0.0s</strong> 任务提交：注册异步任务并激活前端毫秒级动态秒表。</div>
                       <div><strong className="text-[#0071e3]">1.2s</strong> 音频切片：FFmpeg 极速抽音并按 180s 划分子切片派发线程池。</div>
                       <div><strong className="text-emerald-600">3.5s</strong> 首片就绪：切片 1 识别完成触发 <code className="bg-slate-100 px-1 rounded">on_chunk_done</code>，前端立即滚动渲染字幕。</div>
@@ -560,27 +603,27 @@ export function VideoChangelogPage() {
 
                   {archMode === 'benchmark' && (
                     <div className="overflow-x-auto bg-white rounded-xl border border-slate-200 p-2">
-                      <table className="w-full text-left text-[12px] border-collapse">
+                      <table className="w-full text-left text-[11.5px] sm:text-[12px] border-collapse">
                         <thead>
                           <tr className="border-b border-slate-200 text-slate-500">
-                            <th className="py-1.5 px-2">评测维度</th>
-                            <th className="py-1.5 px-2">优化前</th>
-                            <th className="py-1.5 px-2">优化后</th>
-                            <th className="py-1.5 px-2 text-emerald-600">提升幅度</th>
+                            <th className="py-1.5 px-2 whitespace-nowrap">评测维度</th>
+                            <th className="py-1.5 px-2 whitespace-nowrap">优化前</th>
+                            <th className="py-1.5 px-2 whitespace-nowrap">优化后</th>
+                            <th className="py-1.5 px-2 text-emerald-600 whitespace-nowrap">提升幅度</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           <tr>
-                            <td className="py-1.5 px-2 font-medium">首句字幕延迟</td>
-                            <td className="py-1.5 px-2 text-slate-500">60~70s 全量等待</td>
-                            <td className="py-1.5 px-2 font-semibold text-[#0071e3]">3.5s 首片即出</td>
-                            <td className="py-1.5 px-2 font-bold text-emerald-600">⚡ 提速 15x+</td>
+                            <td className="py-1.5 px-2 font-medium whitespace-nowrap">首句字幕延迟</td>
+                            <td className="py-1.5 px-2 text-slate-500 whitespace-nowrap">60~70s</td>
+                            <td className="py-1.5 px-2 font-semibold text-[#0071e3] whitespace-nowrap">3.5s 即出</td>
+                            <td className="py-1.5 px-2 font-bold text-emerald-600 whitespace-nowrap">⚡ 15x+</td>
                           </tr>
                           <tr>
-                            <td className="py-1.5 px-2 font-medium">专业术语识别率</td>
-                            <td className="py-1.5 px-2 text-slate-500">约 70%（同音错字）</td>
-                            <td className="py-1.5 px-2 font-semibold">100% 领域词库校准</td>
-                            <td className="py-1.5 px-2 font-bold text-emerald-600">🎯 0 错别字</td>
+                            <td className="py-1.5 px-2 font-medium whitespace-nowrap">术语识别率</td>
+                            <td className="py-1.5 px-2 text-slate-500 whitespace-nowrap">约 70%</td>
+                            <td className="py-1.5 px-2 font-semibold whitespace-nowrap">100% 词库校准</td>
+                            <td className="py-1.5 px-2 font-bold text-emerald-600 whitespace-nowrap">🎯 0 错字</td>
                           </tr>
                         </tbody>
                       </table>
@@ -595,17 +638,17 @@ export function VideoChangelogPage() {
           {shouldShowVersion('v2.4.0') && (
             <section
               id="v2.4.0"
-              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-6 md:gap-8 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-2.5 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-6 shadow-xs"
             >
-              <div className="space-y-1">
-                <span className="text-[19px] font-bold text-slate-900">v2.4.0</span>
-                <p className="text-[12px] text-slate-500 font-mono">2026年8月7日</p>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 md:block md:space-y-1 md:border-none md:pb-0">
+                <span className="text-[15.5px] sm:text-[19px] font-bold text-slate-900">v2.4.0</span>
+                <p className="text-[11.5px] sm:text-[12px] text-slate-400 sm:text-slate-500 font-mono">2026-08-07</p>
               </div>
-              <div className="space-y-2">
-                <h2 className="text-[18px] font-bold text-slate-900">
+              <div className="space-y-1.5 sm:space-y-2">
+                <h2 className="text-[14.5px] sm:text-[18px] font-bold leading-snug text-slate-900">
                   视频学习助手本地上传工作台与 AI 智能测验系统上线
                 </h2>
-                <p className="text-[13px] leading-relaxed text-slate-600">
+                <p className="text-[12px] sm:text-[13px] leading-relaxed text-slate-600">
                   引入本地音视频（MP4/MOV/MKV/MP3）优先上传模式；基于视频内容自动生成单选、多选、判断智能题库，支持自动批改评分、视频原话依据解析与错题一键跳转对应时间戳回看。
                 </p>
               </div>
@@ -615,17 +658,17 @@ export function VideoChangelogPage() {
           {shouldShowVersion('v2.3.0') && (
             <section
               id="v2.3.0"
-              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-6 md:gap-8 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-2.5 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-6 shadow-xs"
             >
-              <div className="space-y-1">
-                <span className="text-[19px] font-bold text-slate-900">v2.3.0</span>
-                <p className="text-[12px] text-slate-500 font-mono">2026年6月25日</p>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 md:block md:space-y-1 md:border-none md:pb-0">
+                <span className="text-[15.5px] sm:text-[19px] font-bold text-slate-900">v2.3.0</span>
+                <p className="text-[11.5px] sm:text-[12px] text-slate-400 sm:text-slate-500 font-mono">2026-06-25</p>
               </div>
-              <div className="space-y-2">
-                <h2 className="text-[18px] font-bold text-slate-900">
+              <div className="space-y-1.5 sm:space-y-2">
+                <h2 className="text-[14.5px] sm:text-[18px] font-bold leading-snug text-slate-900">
                   全链路稳定性加固、多通道大模型容灾与跨源播放矩阵
                 </h2>
-                <p className="text-[13px] leading-relaxed text-slate-600">
+                <p className="text-[12px] sm:text-[13px] leading-relaxed text-slate-600">
                   接入双通道大模型自动故障切换；重构 B站、抖音、小红书、YouTube 跨源流媒体代理播放与 TikTok HEVC 兼容转码策略。
                 </p>
               </div>
@@ -635,17 +678,17 @@ export function VideoChangelogPage() {
           {shouldShowVersion('v2.0.0') && (
             <section
               id="v2.0.0"
-              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-6 md:gap-8 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-2.5 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-6 shadow-xs"
             >
-              <div className="space-y-1">
-                <span className="text-[19px] font-bold text-slate-900">v2.0.0</span>
-                <p className="text-[12px] text-slate-500 font-mono">2026年6月20日</p>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 md:block md:space-y-1 md:border-none md:pb-0">
+                <span className="text-[15.5px] sm:text-[19px] font-bold text-slate-900">v2.0.0</span>
+                <p className="text-[11.5px] sm:text-[12px] text-slate-400 sm:text-slate-500 font-mono">2026-06-20</p>
               </div>
-              <div className="space-y-2">
-                <h2 className="text-[18px] font-bold text-slate-900">
+              <div className="space-y-1.5 sm:space-y-2">
+                <h2 className="text-[14.5px] sm:text-[18px] font-bold leading-snug text-slate-900">
                   AI 视频总结、思维导图、双语对照字幕与交互式问答上线
                 </h2>
-                <p className="text-[13px] leading-relaxed text-slate-600">
+                <p className="text-[12px] sm:text-[13px] leading-relaxed text-slate-600">
                   从纯视频解析下载工具演进为 AI 视频学习工作台，新增结构化章节总结、MindElixir 思维导图、中英双语字幕及基于视频上下文的多轮 AI 问答。
                 </p>
               </div>
@@ -655,17 +698,17 @@ export function VideoChangelogPage() {
           {shouldShowVersion('v1.0.0') && (
             <section
               id="v1.0.0"
-              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-6 md:gap-8 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-2.5 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-6 shadow-xs"
             >
-              <div className="space-y-1">
-                <span className="text-[19px] font-bold text-slate-900">v1.0.0</span>
-                <p className="text-[12px] text-slate-500 font-mono">2026年6月10日</p>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 md:block md:space-y-1 md:border-none md:pb-0">
+                <span className="text-[15.5px] sm:text-[19px] font-bold text-slate-900">v1.0.0</span>
+                <p className="text-[11.5px] sm:text-[12px] text-slate-400 sm:text-slate-500 font-mono">2026-06-10</p>
               </div>
-              <div className="space-y-2">
-                <h2 className="text-[18px] font-bold text-slate-900">
+              <div className="space-y-1.5 sm:space-y-2">
+                <h2 className="text-[14.5px] sm:text-[18px] font-bold leading-snug text-slate-900">
                   VidGrab 初版发布：多平台高清音视频解析与流式下载引擎
                 </h2>
-                <p className="text-[13px] leading-relaxed text-slate-600">
+                <p className="text-[12px] sm:text-[13px] leading-relaxed text-slate-600">
                   基于 FastAPI + yt-dlp + FFmpeg 构建全平台视频嗅探、清晰度选择、PO Token 免登录校验与高速下载管线。
                 </p>
               </div>

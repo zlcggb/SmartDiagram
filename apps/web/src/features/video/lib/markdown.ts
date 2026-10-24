@@ -81,17 +81,17 @@ function tryRenderFlowFence(code: string): string | null {
       const subText = subLabels[idx] || '';
 
       const cardHtml = `
-        <div class="flex min-w-[165px] flex-1 flex-col justify-between rounded-2xl border border-[#0071e3]/20 bg-white p-3.5 shadow-sm">
+        <div class="flex min-w-[92px] flex-1 flex-col justify-between rounded-xl border border-[#0071e3]/20 bg-white p-2 shadow-2xs sm:min-w-[160px] sm:rounded-2xl sm:p-3.5 sm:shadow-sm">
           <div>
-            <div class="mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-[#0071e3]/10 px-2.5 py-0.5 text-[11px] font-bold text-[#0071e3]">
-              <span class="h-1.5 w-1.5 rounded-full bg-[#0071e3]"></span>
-              <span>${escapeHtml(badgeText)}</span>
+            <div class="mb-1 inline-flex items-center gap-1 rounded-full bg-[#0071e3]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#0071e3] sm:mb-1.5 sm:gap-1.5 sm:px-2.5 sm:text-[11px]">
+              <span class="h-1 w-1 rounded-full bg-[#0071e3] sm:h-1.5 sm:w-1.5"></span>
+              <span class="whitespace-nowrap">${escapeHtml(badgeText)}</span>
             </div>
-            <div class="text-[13.5px] font-bold leading-snug text-slate-900">${escapeHtml(mainTitle)}</div>
+            <div class="text-[12px] font-bold leading-tight text-slate-900 sm:text-[13.5px] sm:leading-snug">${escapeHtml(mainTitle)}</div>
           </div>
           ${
             subText
-              ? `<div class="mt-2 border-t border-slate-100 pt-2 text-[12px] leading-relaxed text-slate-500">${escapeHtml(subText)}</div>`
+              ? `<div class="mt-1 border-t border-slate-100 pt-1 text-[10.5px] leading-snug text-slate-500 sm:mt-2 sm:pt-2 sm:text-[12px] sm:leading-relaxed">${escapeHtml(subText)}</div>`
               : ''
           }
         </div>
@@ -99,8 +99,8 @@ function tryRenderFlowFence(code: string): string | null {
 
       const arrowHtml =
         idx < rawSteps.length - 1
-          ? `<div class="flex shrink-0 items-center justify-center px-1 text-[#0071e3]/60">
-               <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          ? `<div class="flex shrink-0 items-center justify-center px-0 text-[#0071e3]/60 sm:px-1">
+               <svg class="h-3.5 w-3.5 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                  <path d="M5 12h14" />
                  <path d="m13 6 6 6-6 6" />
                </svg>
@@ -116,12 +116,12 @@ function tryRenderFlowFence(code: string): string | null {
     lines.length > (subLabels.length > 0 ? 2 : 1)
       ? lines
           .slice(subLabels.length > 0 ? 2 : 1)
-          .map((l) => `<div class="mt-2 text-center text-[12px] text-slate-500">${parseInline(l)}</div>`)
+          .map((l) => `<div class="mt-1.5 text-center text-[11px] text-slate-500 sm:mt-2 sm:text-[12px]">${parseInline(l)}</div>`)
           .join('')
       : '';
 
-  return `<div class="my-4 overflow-x-auto rounded-2xl border border-[#0071e3]/15 bg-gradient-to-br from-[#0071e3]/[0.05] via-slate-50/80 to-white p-4">
-    <div class="flex flex-wrap items-stretch gap-2 sm:flex-nowrap">${stepCards}</div>
+  return `<div class="my-3 overflow-x-auto rounded-2xl border border-[#0071e3]/15 bg-gradient-to-br from-[#0071e3]/[0.05] via-slate-50/80 to-white p-2.5 sm:my-4 sm:p-4">
+    <div class="flex flex-nowrap items-stretch gap-1 sm:gap-2">${stepCards}</div>
     ${extraLines}
   </div>`;
 }
@@ -200,21 +200,21 @@ function renderIdeCodeWindow(code: string, lang: string): string {
   const highlighted = highlightCodeSyntax(code, lang);
   const encodedRaw = encodeURIComponent(code);
 
-  return `<div class="not-prose my-4 overflow-hidden rounded-2xl border border-slate-800 bg-[#1c2128] shadow-md">
-    <div class="flex items-center justify-between border-b border-slate-700/70 bg-[#161b22] px-4 py-2 select-none">
-      <div class="flex items-center gap-2">
+  return `<div class="not-prose my-3 sm:my-4 overflow-hidden rounded-xl sm:rounded-2xl border border-slate-800 bg-[#1c2128] shadow-md">
+    <div class="flex items-center justify-between border-b border-slate-700/70 bg-[#161b22] px-3 py-1.5 sm:px-4 sm:py-2 select-none">
+      <div class="flex items-center gap-1.5 sm:gap-2">
         <div class="flex items-center gap-1.5">
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-[#ff5f56]"></span>
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-[#ffbd2e]"></span>
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-[#27c93f]"></span>
+          <span class="inline-block h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full bg-[#ff5f56]"></span>
+          <span class="inline-block h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full bg-[#ffbd2e]"></span>
+          <span class="inline-block h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full bg-[#27c93f]"></span>
         </div>
-        <span class="ml-1.5 rounded-md bg-slate-800 px-2 py-0.5 font-mono text-[10.5px] font-bold tracking-wider text-sky-400 uppercase">${escapeHtml(displayLang)}</span>
+        <span class="ml-1 rounded-md bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] sm:text-[10.5px] font-bold tracking-wider text-sky-400 uppercase">${escapeHtml(displayLang)}</span>
       </div>
-      <button type="button" data-copy-code="${encodedRaw}" class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/90 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition hover:border-sky-500/50 hover:text-white cursor-pointer">
-        <span>📋 复制代码</span>
+      <button type="button" data-copy-code="${encodedRaw}" class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/90 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10.5px] sm:text-[11px] font-medium text-slate-300 transition hover:border-sky-500/50 hover:text-white cursor-pointer">
+        <span>📋 复制</span>
       </button>
     </div>
-    <pre class="overflow-x-auto p-4 font-mono text-[12.5px] leading-relaxed text-slate-100"><code>${highlighted}</code></pre>
+    <pre class="overflow-x-auto p-3 sm:p-4 font-mono text-[11.5px] sm:text-[12.5px] leading-relaxed text-slate-100"><code>${highlighted}</code></pre>
   </div>`;
 }
 
@@ -731,22 +731,36 @@ export function renderMarkdown(md: string): string {
         inTable = true;
         tableHeaderDone = false;
         html.push(
-          '<div class="my-4 overflow-x-auto rounded-2xl border border-slate-200/80 shadow-2xs"><table class="w-full text-left border-collapse text-[12.5px]">',
+          '<div class="my-3.5 overflow-x-auto rounded-2xl border border-slate-200/80 shadow-2xs sm:my-4"><table class="w-full text-left border-collapse text-[12px] sm:text-[12.5px]">',
         );
       }
 
       if (!tableHeaderDone) {
         html.push('<thead class="bg-slate-100/90 border-b border-slate-200/80"><tr>');
-        for (const cell of cells) {
-          html.push(`<th class="px-3.5 py-2.5 font-semibold text-slate-900">${parseInline(cell)}</th>`);
-        }
+        cells.forEach((cell, colIdx) => {
+          const plainLen = cell.replace(/\*\*/g, '').trim().length;
+          const colClass =
+            colIdx === 0 && plainLen <= 12
+              ? 'whitespace-nowrap w-[1%] bg-slate-100/95'
+              : 'min-w-[118px] sm:min-w-[150px]';
+          html.push(
+            `<th class="px-2.5 py-2 font-semibold text-slate-900 sm:px-3.5 sm:py-2.5 ${colClass}">${parseInline(cell)}</th>`,
+          );
+        });
         html.push('</tr></thead><tbody class="divide-y divide-slate-100 bg-white">');
         tableHeaderDone = true;
       } else {
         html.push('<tr class="hover:bg-slate-50/80 transition-colors">');
-        for (const cell of cells) {
-          html.push(`<td class="px-3.5 py-2.5 text-slate-700 leading-relaxed align-top">${parseInline(cell)}</td>`);
-        }
+        cells.forEach((cell, colIdx) => {
+          const plainLen = cell.replace(/\*\*/g, '').trim().length;
+          const colClass =
+            colIdx === 0 && plainLen <= 12
+              ? 'whitespace-nowrap font-semibold text-slate-900 bg-slate-50/50'
+              : 'min-w-[118px] sm:min-w-[150px] text-slate-700';
+          html.push(
+            `<td class="px-2.5 py-2 leading-snug align-top sm:px-3.5 sm:py-2.5 sm:leading-relaxed ${colClass}">${parseInline(cell)}</td>`,
+          );
+        });
         html.push('</tr>');
       }
       continue;
@@ -768,7 +782,7 @@ export function renderMarkdown(md: string): string {
       const title = parseInline(rawTitle);
       const id = toAnchorId(rawTitle);
       html.push(
-        `<h1 id="${id}" class="mt-6 mb-3 text-[20px] font-bold tracking-tight text-slate-900 scroll-mt-20">${title}</h1>`,
+        `<h1 id="${id}" class="mt-4 mb-2 text-[17px] leading-snug font-bold tracking-tight text-slate-900 scroll-mt-20 sm:mt-6 sm:mb-3 sm:text-[20px]">${title}</h1>`,
       );
       continue;
     }
@@ -780,7 +794,7 @@ export function renderMarkdown(md: string): string {
       const title = parseInline(rawTitle);
       const id = toAnchorId(rawTitle);
       html.push(
-        `<h2 id="${id}" class="mt-6 mb-3 flex items-center gap-2 text-[16px] font-bold tracking-tight text-slate-900 border-b border-slate-200/70 pb-2 scroll-mt-20"><span class="inline-block h-4 w-1 shrink-0 rounded-full bg-[#0071e3]"></span><span>${title}</span></h2>`,
+        `<h2 id="${id}" class="mt-4 mb-2 flex items-center gap-2 text-[14.5px] leading-snug font-bold tracking-tight text-slate-900 border-b border-slate-200/70 pb-1.5 scroll-mt-20 sm:mt-6 sm:mb-3 sm:text-[16px] sm:pb-2"><span class="inline-block h-3.5 w-1 shrink-0 rounded-full bg-[#0071e3] sm:h-4"></span><span>${title}</span></h2>`,
       );
       continue;
     }
@@ -792,7 +806,7 @@ export function renderMarkdown(md: string): string {
       const title = parseInline(rawTitle);
       const id = toAnchorId(rawTitle);
       html.push(
-        `<h3 id="${id}" class="mt-4 mb-2 text-[14.5px] font-bold text-slate-900 scroll-mt-20">${title}</h3>`,
+        `<h3 id="${id}" class="mt-3 mb-1.5 text-[13.5px] font-bold text-slate-900 scroll-mt-20 sm:mt-4 sm:mb-2 sm:text-[14.5px]">${title}</h3>`,
       );
       continue;
     }

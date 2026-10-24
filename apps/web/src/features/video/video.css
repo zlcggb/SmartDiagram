@@ -214,6 +214,33 @@
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06) !important;
 }
 
+@media (max-width: 639px) {
+  .vidgrab-shell .mindmap-elixir-host .map-container {
+    --map-padding: 20px 24px !important;
+    --main-gap-x: 20px !important;
+    --main-gap-y: 10px !important;
+    --node-gap-x: 14px !important;
+    --node-gap-y: 5px !important;
+    --topic-padding: 4px 8px !important;
+    font-size: 13px !important;
+  }
+
+  .vidgrab-shell .mindmap-elixir-host .map-container me-root me-tpc {
+    font-size: 16px !important;
+    padding: 8px 14px !important;
+    max-width: 12em !important;
+  }
+
+  .vidgrab-shell .mindmap-elixir-host .map-container me-main > me-wrapper > me-parent > me-tpc {
+    padding: 6px 12px !important;
+    max-width: 13em !important;
+  }
+
+  .vidgrab-shell .mindmap-elixir-host .map-container me-tpc {
+    max-width: 14em !important;
+  }
+}
+
 .vidgrab-shell .prose-chat p {
   margin-bottom: 0.5rem;
 }
@@ -273,4 +300,24 @@
 .vidgrab-shell .timestamp-pill:hover {
   background: #0071e3;
   color: #ffffff;
+}
+
+/* 响应式研报内嵌 SVG 与图表容器（避免移动端大图撑破或文字挤压） */
+.vidgrab-shell .prose-report > div > svg,
+.vidgrab-shell .mermaid-render-slot svg {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+@media (max-width: 639px) {
+  .vidgrab-shell .video-docs-markdown .not-prose {
+    padding: 0.75rem !important;
+    border-radius: 0.875rem !important;
+  }
+
+  .vidgrab-shell .video-docs-markdown .not-prose h2,
+  .vidgrab-shell .video-docs-markdown .not-prose h3 {
+    font-size: 14px !important;
+    line-height: 1.35 !important;
+  }
 }
