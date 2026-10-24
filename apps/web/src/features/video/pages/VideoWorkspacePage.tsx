@@ -96,6 +96,8 @@ export const VideoWorkspacePage: React.FC = () => {
 
   const pollTimerRef = useRef<any>(null);
   const summaryTimerRef = useRef<any>(null);
+  const summaryPollInFlightRef = useRef<boolean>(false);
+  const summaryPollFailCountRef = useRef<number>(0);
   const translateTimerRef = useRef<any>(null);
   const videoPlayerRef = useRef<VideoPlayerHandle | null>(null);
   const prevAnalysisParamRef = useRef<string>(analysisParam);
@@ -139,6 +141,8 @@ export const VideoWorkspacePage: React.FC = () => {
       clearInterval(summaryTimerRef.current);
       summaryTimerRef.current = null;
     }
+    summaryPollInFlightRef.current = false;
+    summaryPollFailCountRef.current = 0;
     setSummaryTaskId('');
     setSummary({
       status: 'idle',
@@ -172,8 +176,11 @@ export const VideoWorkspacePage: React.FC = () => {
   };
 
   const pollSummary = async (taskId: string, currentTitle?: string, currentSourceUrl?: string) => {
+    if (summaryPollInFlightRef.current) return;
+    summaryPollInFlightRef.current = true;
     try {
       const p = await getSummary(taskId);
+      summaryPollFailCountRef.current = 0;
       setSummary((prev) => ({
         ...prev,
         status: (p.status as any) || prev.status,
@@ -225,15 +232,21 @@ export const VideoWorkspacePage: React.FC = () => {
         }
       }
     } catch (err: any) {
-      if (summaryTimerRef.current) {
-        clearInterval(summaryTimerRef.current);
-        summaryTimerRef.current = null;
+      summaryPollFailCountRef.current += 1;
+      // 容忍网关重载、瞬时 502/504 或切后台导致的短时网络抖动，连续失败超过 10 次才终止轮询
+      if (summaryPollFailCountRef.current >= 10) {
+        if (summaryTimerRef.current) {
+          clearInterval(summaryTimerRef.current);
+          summaryTimerRef.current = null;
+        }
+        setSummary((prev) => ({
+          ...prev,
+          status: 'error',
+          error: err?.message || '查询总结进度失败',
+        }));
       }
-      setSummary((prev) => ({
-        ...prev,
-        status: 'error',
-        error: err?.message || '查询总结进度失败',
-      }));
+    } finally {
+      summaryPollInFlightRef.current = false;
     }
   };
 
