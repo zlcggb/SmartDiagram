@@ -23,6 +23,34 @@ export interface AuthSession {
 }
 
 const AUTH_STORAGE_KEY = 'smartdiagram.auth.session';
+const AUTH_EXPIRED_FLAG_KEY = 'smartdiagram.auth.expired_notice';
+
+export class AuthExpiredError extends Error {
+  constructor(message = 'Session expired') {
+    super(message);
+    this.name = 'AuthExpiredError';
+  }
+}
+
+export function markAuthExpiredNotice() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(AUTH_EXPIRED_FLAG_KEY, '1');
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function consumeAuthExpiredNotice(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const flagged = window.sessionStorage.getItem(AUTH_EXPIRED_FLAG_KEY) === '1';
+    if (flagged) window.sessionStorage.removeItem(AUTH_EXPIRED_FLAG_KEY);
+    return flagged;
+  } catch {
+    return false;
+  }
+}
 
 export function readAuthSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
@@ -33,6 +61,7 @@ export function readAuthSession(): AuthSession | null {
     if (!session?.access_token || !session?.user) return null;
     if (session.expires_at && session.expires_at * 1000 <= Date.now()) {
       clearAuthSession();
+      markAuthExpiredNotice();
       return null;
     }
     return session;
@@ -88,21 +117,50 @@ export async function loginWithPassword(email: string, password: string, captcha
 }
 
 export async function validateAuthSession(session: AuthSession): Promise<AuthSession> {
-  const res = await fetch(`${API_BASE}/api/auth/me`, {
-    headers: { Authorization: `Bearer ${session.access_token}` },
-  });
-  if (!res.ok) {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+  } catch {
+    // 网络瞬断或页面刷新取消请求时，若本地 Token 仍在有效期内则保留会话，防止误踢下线
+    if (!session.expires_at || session.expires_at * 1000 > Date.now()) {
+      return session;
+    }
     clearAuthSession();
-    throw new Error('Session expired');
+    throw new AuthExpiredError('Session expired');
   }
-  const payload = (await res.json()) as { kind?: string; user?: AuthUser };
+
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      clearAuthSession();
+      throw new AuthExpiredError('Session expired');
+    }
+    // 5xx / 429 等服务端临时异常不清除本地有效登录态
+    if (!session.expires_at || session.expires_at * 1000 > Date.now()) {
+      return session;
+    }
+    clearAuthSession();
+    throw new AuthExpiredError('Session expired');
+  }
+
+  const payload = (await res.json()) as {
+    kind?: string;
+    user?: AuthUser;
+    access_token?: string;
+    token_type?: 'bearer';
+    expires_at?: number;
+  };
   if (payload.kind === 'guest') {
     clearAuthSession();
-    throw new Error('Session expired');
+    throw new AuthExpiredError('Session expired');
   }
-  const refreshed = payload.user
-    ? { ...session, user: { ...session.user, ...payload.user } }
-    : session;
+  const refreshed: AuthSession = {
+    ...session,
+    ...(payload.access_token ? { access_token: payload.access_token } : {}),
+    ...(typeof payload.expires_at === 'number' ? { expires_at: payload.expires_at } : {}),
+    user: payload.user ? { ...session.user, ...payload.user } : session.user,
+  };
   writeAuthSession(refreshed);
   return refreshed;
 }

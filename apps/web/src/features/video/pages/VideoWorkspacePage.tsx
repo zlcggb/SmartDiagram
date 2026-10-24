@@ -61,6 +61,7 @@ export const VideoWorkspacePage: React.FC = () => {
   const [uploadMeta, setUploadMeta] = useState<UploadMeta | null>(null);
 
   const [guestQuota, setGuestQuota] = useState<VideoGuestQuota | null>(null);
+  const [mobilePlayerCollapsed, setMobilePlayerCollapsed] = useState(false);
 
   const [download, setDownload] = useState<DownloadState>({
     status: 'idle',
@@ -691,7 +692,7 @@ export const VideoWorkspacePage: React.FC = () => {
   }, [cookieBrowser, download.downloadUrl, download.ready, info?.webpage_url, uploadMeta?.file_id, useCookies]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
       {!isReadOnlyShare && (
         <HeroInputSection
           urlValue={url}
@@ -719,15 +720,17 @@ export const VideoWorkspacePage: React.FC = () => {
       )}
 
       {hasWorkspace && (
-        <div className="mx-auto grid min-h-0 w-full max-w-[1600px] flex-1 grid-cols-1 gap-4 overflow-hidden px-4 pt-3 pb-3.5 lg:grid-cols-[minmax(360px,0.88fr)_minmax(0,1.38fr)] lg:px-6">
-          {/* Left Column: Media Player + Download/Meta Card */}
-          <div className="panel-scroll flex min-h-0 flex-col gap-3 pr-1">
-            <VideoPlayer
-              ref={videoPlayerRef}
-              config={playerConfig}
-              poster={info?.thumbnail || ''}
-              title={info?.title || uploadMeta?.filename || ''}
-            />
+        <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-2 overflow-hidden px-2.5 pt-2 pb-2 sm:px-4 lg:grid lg:grid-cols-[minmax(360px,0.88fr)_minmax(0,1.38fr)] lg:gap-4 lg:px-6 lg:pt-3 lg:pb-3.5">
+          {/* Left Column (Desktop) / Sticky Top Player & Compact Info Drawer (Mobile) */}
+          <div className="flex shrink-0 flex-col gap-1.5 lg:panel-scroll lg:min-h-0 lg:gap-3 lg:pr-1">
+            <div className={mobilePlayerCollapsed ? 'hidden lg:block' : 'block'}>
+              <VideoPlayer
+                ref={videoPlayerRef}
+                config={playerConfig}
+                poster={info?.thumbnail || ''}
+                title={info?.title || uploadMeta?.filename || ''}
+              />
+            </div>
             {info ? (
               <VideoDownloadCard
                 embedded
@@ -735,6 +738,8 @@ export const VideoWorkspacePage: React.FC = () => {
                 selectedFormat={selectedFormat}
                 onSelectFormat={setSelectedFormat}
                 download={download}
+                mobilePlayerCollapsed={mobilePlayerCollapsed}
+                onToggleMobilePlayer={() => setMobilePlayerCollapsed((v) => !v)}
                 onStart={() => void handleStartDownload()}
                 onCancel={() => {
                   if (download.taskId) void cancelDownload(download.taskId);
@@ -753,11 +758,15 @@ export const VideoWorkspacePage: React.FC = () => {
                 }}
               />
             ) : uploadMeta ? (
-              <UploadMetaCard meta={uploadMeta} />
+              <UploadMetaCard
+                meta={uploadMeta}
+                mobilePlayerCollapsed={mobilePlayerCollapsed}
+                onToggleMobilePlayer={() => setMobilePlayerCollapsed((v) => !v)}
+              />
             ) : null}
           </div>
 
-          {/* Right Column: AI Summary / Mindmap / Subtitles / Quiz / Q&A */}
+          {/* Right Column (Desktop) / Bottom Main Card Workspace (Mobile) */}
           <SummaryPanel
             embedded
             summary={summary}
@@ -777,7 +786,10 @@ export const VideoWorkspacePage: React.FC = () => {
             }}
             onTranslate={(lang) => void handleTranslate(lang)}
             onCancel={() => void handleCancelSummary()}
-            onSeek={(sec) => videoPlayerRef.current?.seekTo(sec)}
+            onSeek={(sec) => {
+              setMobilePlayerCollapsed(false);
+              videoPlayerRef.current?.seekTo(sec);
+            }}
           />
         </div>
       )}

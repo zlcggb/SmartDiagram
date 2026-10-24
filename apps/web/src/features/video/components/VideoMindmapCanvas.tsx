@@ -38,9 +38,13 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
     const containerRef = useRef<HTMLDivElement | null>(null);
     const mindInstanceRef = useRef<any>(null);
     const lastSizeRef = useRef({ width: 0, height: 0 });
+    const lastRenderedCodeRef = useRef('');
     const [hasInstance, setHasInstance] = useState(false);
     const [layoutReadyTick, setLayoutReadyTick] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    const [showMiniMap, setShowMiniMap] = useState(() =>
+      typeof window !== 'undefined' ? window.innerWidth >= 640 : true,
+    );
 
     const [miniMapNodes, setMiniMapNodes] = useState<MiniMapNode[]>([]);
     const [miniMapLines, setMiniMapLines] = useState<MiniMapLine[]>([]);
@@ -53,6 +57,7 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
     const destroyMind = () => {
       if (containerRef.current) containerRef.current.innerHTML = '';
       mindInstanceRef.current = null;
+      lastRenderedCodeRef.current = '';
       setHasInstance(false);
     };
 
@@ -179,18 +184,36 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
         const prev = lastSizeRef.current;
         lastSizeRef.current = { width, height };
 
-        if (width > 0 && height > 0 && (prev.width === 0 || prev.height === 0)) {
-          setLayoutReadyTick((tick) => tick + 1);
-        }
-
-        if (mindInstanceRef.current && width > 0 && height > 0) {
-          try {
-            mindInstanceRef.current.linkDiv?.();
-          } catch {
-            // ignore
+        if (width > 0 && height > 0) {
+          if (prev.width === 0 || prev.height === 0) {
+            if (!mindInstanceRef.current) {
+              setLayoutReadyTick((tick) => tick + 1);
+            } else {
+              requestAnimationFrame(() => {
+                if (!mindInstanceRef.current) return;
+                try {
+                  mindInstanceRef.current.linkDiv?.();
+                } catch {
+                  // ignore
+                }
+                fitWithPadding(mindInstanceRef.current);
+                updateMiniMap();
+              });
+            }
+            return;
           }
-          fitWithPadding(mindInstanceRef.current);
-          updateMiniMap();
+          if (
+            mindInstanceRef.current &&
+            (Math.abs(width - prev.width) > 4 || Math.abs(height - prev.height) > 4)
+          ) {
+            try {
+              mindInstanceRef.current.linkDiv?.();
+            } catch {
+              // ignore
+            }
+            fitWithPadding(mindInstanceRef.current);
+            updateMiniMap();
+          }
         }
       });
       resizeObs.observe(el);
@@ -215,6 +238,10 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
         return;
       }
 
+      if (mindInstanceRef.current && code === lastRenderedCodeRef.current) {
+        return;
+      }
+
       try {
         const transformer = new Transformer();
         const { root } = transformer.transform(code);
@@ -224,6 +251,7 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
         }
 
         const data = { nodeData: convertToMindElixir(root) };
+        lastRenderedCodeRef.current = code;
 
         if (!mindInstanceRef.current) {
           const me = new MindElixir({
@@ -251,10 +279,6 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
           }, 50);
         } else {
           mindInstanceRef.current.init(data);
-          mindInstanceRef.current.bus.addListener('operation', () => requestAnimationFrame(updateMiniMap));
-          mindInstanceRef.current.bus.addListener('move', () => requestAnimationFrame(updateMiniMap));
-          mindInstanceRef.current.bus.addListener('scale', () => requestAnimationFrame(updateMiniMap));
-          fitWithPadding(mindInstanceRef.current);
           setTimeout(() => {
             try {
               mindInstanceRef.current?.linkDiv?.();
@@ -342,11 +366,11 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
           <>
             <div ref={containerRef} className="mindmap-elixir-host h-full w-full min-h-0" />
             {hasInstance && (
-              <div className="absolute bottom-4 right-4 z-20 flex flex-col items-end gap-2.5">
-                <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white/85 px-2.5 py-1.5 text-slate-600 shadow-lg backdrop-blur-md">
+              <div className="absolute bottom-3 right-3 z-20 flex flex-col items-end gap-2 sm:bottom-4 sm:right-4 sm:gap-2.5">
+                <div className="flex items-center gap-0.5 rounded-2xl border border-slate-200/90 bg-white/90 px-2 py-1 text-slate-600 shadow-lg backdrop-blur-xl sm:gap-1 sm:px-2.5 sm:py-1.5">
                   <button
                     type="button"
-                    className="rounded-lg p-1 transition-colors hover:bg-slate-100"
+                    className="rounded-lg p-1 transition-colors hover:bg-slate-100 active:scale-95"
                     title="放大"
                     onClick={zoomIn}
                   >
@@ -356,7 +380,7 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg p-1 transition-colors hover:bg-slate-100"
+                    className="rounded-lg p-1 transition-colors hover:bg-slate-100 active:scale-95"
                     title="缩小"
                     onClick={zoomOut}
                   >
@@ -366,7 +390,7 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg p-1 transition-colors hover:bg-slate-100"
+                    className="rounded-lg p-1 transition-colors hover:bg-slate-100 active:scale-95"
                     title="适应画布"
                     onClick={fitView}
                   >
@@ -379,10 +403,10 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
                       />
                     </svg>
                   </button>
-                  <div className="mx-1 h-3.5 w-px bg-slate-300" />
+                  <div className="mx-0.5 h-3.5 w-px bg-slate-300 sm:mx-1" />
                   <button
                     type="button"
-                    className="rounded-lg p-1 transition-colors hover:bg-slate-100"
+                    className="rounded-lg p-1 transition-colors hover:bg-slate-100 active:scale-95"
                     title="全部折叠"
                     onClick={collapseAll}
                   >
@@ -392,7 +416,7 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg p-1 transition-colors hover:bg-slate-100"
+                    className="rounded-lg p-1 transition-colors hover:bg-slate-100 active:scale-95"
                     title="全部展开"
                     onClick={expandAll}
                   >
@@ -400,10 +424,24 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                     </svg>
                   </button>
+                  <div className="mx-0.5 h-3.5 w-px bg-slate-300 sm:mx-1" />
+                  <button
+                    type="button"
+                    className={`rounded-lg p-1 transition-colors active:scale-95 ${
+                      showMiniMap ? 'bg-[#0071e3]/12 text-[#0071e3]' : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                    title={showMiniMap ? '隐藏小地图' : '展开小地图'}
+                    onClick={() => setShowMiniMap((v) => !v)}
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                  </button>
                 </div>
 
-                <div
-                  className="relative h-[120px] w-40 cursor-grab overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-xl backdrop-blur-md active:cursor-grabbing"
+                {showMiniMap && (
+                  <div
+                    className="relative h-[108px] w-36 cursor-grab overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-xl backdrop-blur-md active:cursor-grabbing sm:h-[120px] sm:w-40"
                   onPointerDown={(e) => {
                     e.stopPropagation();
                     isDraggingRef.current = true;
@@ -493,7 +531,8 @@ export const VideoMindmapCanvas = forwardRef<VideoMindmapCanvasHandle, VideoMind
                       />
                     )}
                   </svg>
-                </div>
+                  </div>
+                )}
               </div>
             )}
           </>

@@ -244,9 +244,13 @@ async def current_user(
     token_user, db_user = await _authenticated_db_user(request, session)
     public_user = _auth_payload_from_db(db_user, token_user)
     public_user = await enrich_user_roles_from_db(session, public_user)
+    refreshed_session = issue_auth_session(public_user)
     return {
         "kind": "user",
-        "user": serialize_public_user(public_user),
+        "user": refreshed_session["user"],
+        "access_token": refreshed_session["access_token"],
+        "token_type": refreshed_session["token_type"],
+        "expires_at": refreshed_session["expires_at"],
     }
 
 

@@ -88,12 +88,17 @@ export const HeroInputSection: React.FC<HeroInputSectionProps> = ({
   const [localUploadError, setLocalUploadError] = useState('');
   const [showLogin, setShowLogin] = useState(false);
   const [navSlot, setNavSlot] = useState<HTMLElement | null>(null);
+  const [mobileActionSlot, setMobileActionSlot] = useState<HTMLElement | null>(null);
+  const [mobileSubheaderSlot, setMobileSubheaderSlot] = useState<HTMLElement | null>(null);
+  const [mobileSwitcherOpen, setMobileSwitcherOpen] = useState(false);
 
   const isLoginError = GUIDED_CODES.includes(errorCode);
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
       setNavSlot(document.getElementById('vidgrab-navbar-center-slot'));
+      setMobileActionSlot(document.getElementById('vidgrab-navbar-mobile-action-slot'));
+      setMobileSubheaderSlot(document.getElementById('vidgrab-mobile-subheader-slot'));
     }
   }, [compact]);
 
@@ -161,7 +166,10 @@ export const HeroInputSection: React.FC<HeroInputSectionProps> = ({
             <button
               type="button"
               disabled={uploadLoading || !pendingFileName}
-              onClick={onParseUpload}
+              onClick={() => {
+                setMobileSwitcherOpen(false);
+                onParseUpload();
+              }}
               className="shrink-0 rounded-full bg-[#0071e3] px-3.5 py-1 text-[12px] font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-40"
             >
               {uploadLoading ? `${uploadProgress}%` : '解析'}
@@ -176,13 +184,19 @@ export const HeroInputSection: React.FC<HeroInputSectionProps> = ({
               placeholder="粘贴新视频链接直接切换…"
               className="h-7 min-w-0 flex-1 rounded-full bg-transparent px-2.5 text-[12px] text-slate-800 outline-none placeholder:text-slate-400"
               onKeyDown={(e) => {
-                if (e.key === 'Enter') onParseUrl();
+                if (e.key === 'Enter') {
+                  setMobileSwitcherOpen(false);
+                  onParseUrl();
+                }
               }}
             />
             <button
               type="button"
               disabled={loading || !urlValue.trim()}
-              onClick={onParseUrl}
+              onClick={() => {
+                setMobileSwitcherOpen(false);
+                onParseUrl();
+              }}
               className="shrink-0 rounded-full bg-[#0071e3] px-3.5 py-1 text-[12px] font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-40"
             >
               {loading ? '解析中…' : '解析'}
@@ -192,43 +206,67 @@ export const HeroInputSection: React.FC<HeroInputSectionProps> = ({
       </div>
     );
 
-    if (navSlot) {
-      return createPortal(compactPill, navSlot);
-    }
+    const mobileTriggerBtn = (
+      <button
+        type="button"
+        onClick={() => setMobileSwitcherOpen((v) => !v)}
+        className={`inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[11.5px] font-semibold transition active:scale-95 ${
+          mobileSwitcherOpen
+            ? 'border-[#0071e3]/30 bg-[#0071e3] text-white'
+            : 'border-black/[0.08] bg-white/90 text-[#0071e3] shadow-2xs'
+        }`}
+      >
+        <span>{mobileSwitcherOpen ? '✕' : '＋'}</span>
+        <span>{mobileSwitcherOpen ? '收起' : '换视频'}</span>
+      </button>
+    );
 
-    return <div className="flex shrink-0 justify-center px-4 pt-2 pb-1">{compactPill}</div>;
+    const mobileDrawer = mobileSwitcherOpen ? (
+      <div className="border-b border-black/[0.08] bg-white/95 px-3 py-2 shadow-sm backdrop-blur-xl">
+        {compactPill}
+      </div>
+    ) : null;
+
+    return (
+      <>
+        {navSlot ? createPortal(compactPill, navSlot) : null}
+        {mobileActionSlot ? createPortal(mobileTriggerBtn, mobileActionSlot) : null}
+        {mobileSubheaderSlot && mobileDrawer ? createPortal(mobileDrawer, mobileSubheaderSlot) : null}
+      </>
+    );
   }
 
   return (
-    <section className="flex flex-1 flex-col justify-center px-5 py-8 sm:px-8 lg:py-12">
-      <div className="mx-auto grid w-full max-w-[1160px] items-center gap-10 md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] lg:gap-14">
+    <section className="flex flex-1 flex-col justify-start px-4 py-4 sm:justify-center sm:px-8 sm:py-8 lg:py-12">
+      <div className="mx-auto grid w-full max-w-[1160px] items-center gap-5 md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] md:gap-10 lg:gap-14">
         {/* Left Hero Pitch */}
         <div className="text-left">
-          <div className="mb-3 flex flex-wrap items-center gap-2.5">
-            <div className="inline-flex items-center gap-2 rounded-full bg-[#0071e3]/10 px-3 py-1 text-[12px] font-medium text-[#0071e3]">
+          <div className="mb-2.5 flex flex-wrap items-center gap-2 sm:mb-3 sm:gap-2.5">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-[#0071e3]/10 px-2.5 py-0.5 text-[11.5px] font-semibold text-[#0071e3] sm:px-3 sm:py-1 sm:text-[12px]">
               <span>✨ AI 视频学习工作台</span>
             </div>
             <Link
               to="/video/history"
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-white px-3 py-1 text-[12px] font-medium text-slate-700 shadow-2xs transition hover:border-[#0071e3]/40 hover:text-[#0071e3]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/90 bg-white px-2.5 py-0.5 text-[11.5px] font-medium text-slate-700 shadow-2xs transition hover:border-[#0071e3]/40 hover:text-[#0071e3] sm:px-3 sm:py-1 sm:text-[12px]"
             >
               <span>📚 我的学习记录</span>
               <span>→</span>
             </Link>
           </div>
-          <h1 className="text-[34px] font-semibold leading-[1.15] tracking-tight text-slate-900 sm:text-[42px] lg:text-[48px]">
+          <h1 className="text-[26px] font-bold leading-[1.16] tracking-tight text-slate-900 sm:text-[40px] sm:font-semibold lg:text-[48px]">
             上传视频，
-            <br />
+            <br className="hidden sm:inline" />
+            <span className="sm:hidden"> </span>
             快速掌握核心内容
           </h1>
-          <p className="mt-4 max-w-[460px] text-[15px] leading-7 text-slate-600 sm:text-[16px]">
+          <p className="mt-2 max-w-[460px] text-[13.5px] leading-relaxed text-slate-600 sm:mt-4 sm:text-[16px] sm:leading-7">
             自动生成深度内容总结、MindElixir 知识导图、双语字幕与互动学习测验，让培训与课程视频更易吸收。
           </p>
-          <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2.5 text-[13px] text-slate-600">
+          <div className="mt-3.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px] text-slate-600 sm:mt-6 sm:flex sm:flex-wrap sm:gap-x-5 sm:gap-y-2.5 sm:text-[13px]">
             {['深度研报总结', '思维导图拆解', '逐句双语字幕', 'AI 互动测验与问答'].map((feat) => (
               <span key={feat} className="inline-flex items-center gap-1.5">
                 <svg
-                  className="h-4 w-4 text-[#0071e3]"
+                  className="h-3.5 w-3.5 shrink-0 text-[#0071e3] sm:h-4 sm:w-4"
                   viewBox="0 0 20 20"
                   fill="none"
                   stroke="currentColor"
@@ -236,7 +274,7 @@ export const HeroInputSection: React.FC<HeroInputSectionProps> = ({
                 >
                   <path d="M4 10.5l4 4 8-9" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                {feat}
+                <span className="truncate">{feat}</span>
               </span>
             ))}
           </div>

@@ -99,25 +99,21 @@ export function VideoChangelogPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-3rem)] bg-[#f5f5f7] text-slate-900 pb-24">
+    <div className="panel-scroll min-h-0 flex-1 bg-[#f2f2f7] text-slate-900 pb-16 lg:bg-[#f5f5f7] lg:pb-24">
       {/* 顶部面包屑与操作条 */}
       <div className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1240px] items-center justify-between px-6 py-2.5">
-          <div className="flex items-center gap-2 text-[12.5px] text-slate-500">
+        <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-2 px-3.5 py-2 sm:px-6 sm:py-2.5">
+          <div className="flex items-center gap-1.5 text-[12px] text-slate-500 sm:gap-2 sm:text-[12.5px]">
             <Link to="/video" className="hover:text-[#0071e3] transition">
               视频学习助手
             </Link>
             <span>/</span>
-            <Link to="/video/docs" className="hover:text-[#0071e3] transition">
-              文档中心
-            </Link>
-            <span>/</span>
-            <span className="font-semibold text-slate-900">更新记录 (Changelog)</span>
+            <span className="font-semibold text-slate-900">更新记录</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <Link
               to="/video/docs"
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-medium text-slate-700 transition hover:border-[#0071e3]/40 hover:text-[#0071e3]"
+              className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-medium text-slate-700 transition hover:border-[#0071e3]/40 hover:text-[#0071e3] sm:inline-flex"
             >
               <span>📖</span>
               <span>打开文档中心 (30篇)</span>
@@ -125,21 +121,21 @@ export function VideoChangelogPage() {
             <button
               type="button"
               onClick={handleCopyChangelog}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1 text-[12px] font-medium text-slate-800 transition hover:bg-slate-50 active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-medium text-slate-800 transition hover:bg-slate-50 active:scale-95 cursor-pointer sm:px-3.5 sm:text-[12px]"
             >
-              <span>{copySuccess ? '✓ 已复制 Markdown' : '📋 复制 Markdown'}</span>
+              <span>{copySuccess ? '✓ 已复制' : '📋 复制 Markdown'}</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* 主标题与分类过滤 */}
-      <div className="mx-auto max-w-[1240px] px-6 pt-8 pb-6">
+      <div className="mx-auto max-w-[1240px] px-4 pt-5 pb-4 sm:px-6 sm:pt-8 sm:pb-6">
         <div className="max-w-3xl">
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[#0071e3]/10 px-3 py-1 text-[11.5px] font-bold text-[#0071e3]">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[#0071e3]/10 px-2.5 py-0.5 text-[11px] font-bold text-[#0071e3] sm:px-3 sm:py-1 sm:text-[11.5px]">
             <span>🚀 SmartDiagram Unified Platform · Video Learning v2.7.0</span>
           </div>
-          <h1 className="text-[32px] font-bold tracking-tight text-slate-900 md:text-[38px]">
+          <h1 className="text-[24px] font-bold tracking-tight text-slate-900 sm:text-[32px] md:text-[38px]">
             更新记录与全栈架构演进
           </h1>
           <p className="mt-2.5 text-[14.5px] leading-relaxed text-slate-600">

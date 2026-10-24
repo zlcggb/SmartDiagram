@@ -240,10 +240,10 @@ export function VideoDocsPage() {
   }, [renderedHtml]);
 
   return (
-    <div className="relative flex h-[calc(100vh-3rem)] w-full overflow-hidden bg-[#f5f5f7] text-slate-900">
+    <div className="relative flex min-h-0 flex-1 w-full overflow-hidden bg-[#f2f2f7] text-slate-900 lg:bg-[#f5f5f7]">
       {/* ================= 1. 左侧分类目录树 ================= */}
       <aside
-        className={`fixed inset-y-12 left-0 z-40 flex w-72 shrink-0 flex-col border-r border-slate-200/80 bg-white/95 backdrop-blur-xl transition-transform duration-300 lg:static lg:h-full lg:translate-x-0 ${
+        className={`fixed top-12 bottom-13 left-0 z-40 flex w-72 shrink-0 flex-col border-r border-slate-200/80 bg-white/95 backdrop-blur-xl transition-transform duration-300 lg:static lg:h-full lg:translate-x-0 ${
           mobileNavOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
       >

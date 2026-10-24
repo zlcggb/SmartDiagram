@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, type PointerEvent } from 'react'
 import gsap from 'gsap'
-import { BarChart3, BrainCircuit, BriefcaseBusiness, CalendarClock, FilePenLine, LayoutDashboard, ScanSearch, Settings, UsersRound } from 'lucide-react'
+import { BarChart3, BrainCircuit, BriefcaseBusiness, CalendarClock, FilePenLine, LayoutDashboard, LogIn, LogOut, ScanSearch, Settings, UserCheck, UsersRound } from 'lucide-react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { prefersReducedMotion, usePageMotion } from '@/features/recruit/lib/motion'
+import { usePlatformAuth } from '@/shared/store/authStore'
 
 import '../recruit.css'
 import '../recruit-theme.css'
@@ -42,6 +43,9 @@ function moveIndicator(container: HTMLElement | null, axis: 'y' | 'x', immediate
 
 export function RecruitShell() {
   const location = useLocation()
+  const session = usePlatformAuth((state) => state.session)
+  const openLogin = usePlatformAuth((state) => state.openLogin)
+  const logout = usePlatformAuth((state) => state.logout)
   const contentRef = useRef<HTMLElement>(null)
   const navRef = useRef<HTMLElement>(null)
   const mobileNavRef = useRef<HTMLDivElement>(null)
@@ -120,6 +124,128 @@ export function RecruitShell() {
             <p>评估引擎 · rubric-v3</p>
             <strong>证据锚定评分</strong>
             <span>JD 生成评分卡 → 逐项 0-4 行为锚定 → 原文证据核验 → 代码计分。</span>
+          </div>
+          <div
+            style={{
+              marginTop: '10px',
+              padding: '10px 12px',
+              borderRadius: '14px',
+              background: session ? 'rgba(255, 255, 255, 0.06)' : 'rgba(216, 243, 102, 0.12)',
+              border: session ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(216, 243, 102, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '8px',
+            }}
+          >
+            {session ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                  <span
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      background: 'rgba(216, 243, 102, 0.2)',
+                      color: '#d8f366',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <UserCheck size={14} />
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: '#f8fafc',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {session.user.display_name || session.user.email}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '10px',
+                        color: 'rgba(248, 250, 252, 0.55)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      已登录 · 7天自动续期
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={logout}
+                  title="退出登录并返回桌面"
+                  style={{
+                    flexShrink: 0,
+                    padding: '6px',
+                    borderRadius: '8px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: 'none',
+                    color: 'rgba(248, 250, 252, 0.75)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <LogOut size={14} />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => openLogin()}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#d8f366' }}>
+                    未登录（访客模式）
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'rgba(248, 250, 252, 0.7)', marginTop: '2px' }}>
+                    点击登录以访问您的候选人库
+                  </div>
+                </div>
+                <span
+                  style={{
+                    flexShrink: 0,
+                    padding: '5px 10px',
+                    borderRadius: '8px',
+                    background: '#d8f366',
+                    color: '#111827',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <LogIn size={13} />
+                  登录
+                </span>
+              </button>
+            )}
           </div>
         </aside>
 

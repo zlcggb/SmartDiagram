@@ -1,4 +1,5 @@
 import { API_BASE, enterpriseHeaders } from '@/shared/lib/config/enterpriseContext'
+import { usePlatformAuth } from '@/shared/store/authStore'
 import type {
   CreateInterviewInput,
   CreateRecruitCandidateInput,
@@ -49,6 +50,17 @@ async function throwResponseError(response: Response): Promise<never> {
   } catch {
     message = responseText || message
   }
+
+  if (response.status === 401 || message === 'authentication_required' || message === 'Invalid or expired session') {
+    usePlatformAuth.getState().notifySessionExpired('您的登录状态已过期，请重新登录以继续访问招聘工作台')
+    throw new Error('登录状态已过期，请在弹出的窗口中重新登录')
+  }
+
+  if (response.status === 404 && message.endsWith('_not_found') && !usePlatformAuth.getState().session) {
+    usePlatformAuth.getState().openLogin('您当前处于未登录状态，请登录您的账户以查看该候选人或岗位数据')
+    throw new Error('当前处于未登录状态，无法访问您账号下的记录，请在弹出的窗口中登录')
+  }
+
   throw new Error(message)
 }
 

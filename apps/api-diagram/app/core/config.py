@@ -78,7 +78,7 @@ class Settings:
         "AUTH_SESSION_SECRET",
         "smartdiagram-dev-session-secret-change-me",
     )
-    AUTH_SESSION_TTL_SECONDS: int = int(os.getenv("AUTH_SESSION_TTL_SECONDS", "43200"))
+    AUTH_SESSION_TTL_SECONDS: int = int(os.getenv("AUTH_SESSION_TTL_SECONDS", "604800"))
     AUTH_DEMO_USER_EMAIL: str = os.getenv("AUTH_DEMO_USER_EMAIL", "user@smartdiagram.local")
     AUTH_DEMO_USER_PASSWORD: str = os.getenv("AUTH_DEMO_USER_PASSWORD", "user123456")
     AUTH_DEMO_ADMIN_EMAIL: str = os.getenv("AUTH_DEMO_ADMIN_EMAIL", "admin@smartdiagram.local")

@@ -1027,19 +1027,20 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* 顶部控制栏 */}
-      <div className="mb-2.5 flex shrink-0 flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h4 className="truncate text-[14.5px] font-bold text-slate-900">
-            {isRetryWrongMode ? '🎯 错题专项突破' : fullQuiz.title}
+      <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2 lg:mb-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <h4 className="truncate text-[13.5px] font-bold text-slate-900 lg:text-[14.5px]">
+            <span className="sm:hidden">{isRetryWrongMode ? '🎯 错题突破' : '随堂测验'}</span>
+            <span className="hidden sm:inline">{isRetryWrongMode ? '🎯 错题专项突破' : fullQuiz.title}</span>
           </h4>
           {stats.currentStreak >= 2 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11.5px] font-bold text-amber-700">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-700 lg:px-2.5 lg:text-[11.5px]">
               🔥 {stats.currentStreak} 连对
             </span>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5 lg:gap-2">
           {readOnly ? (
             !isSandboxPractice ? (
               <button
@@ -1062,7 +1063,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
             )
           ) : (
             <span
-              className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700"
+              className="hidden items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 lg:inline-flex"
               title="测验题目与您的作答进度已自动保存，重新打开本视频随时恢复"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -1462,7 +1463,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
           </div>
 
           {/* 底部固定操作栏（脱离滚动区，固定在最底部） */}
-          <div className="mt-2.5 flex shrink-0 items-center justify-between border-t border-slate-200/80 bg-white pt-2.5 text-[12.5px]">
+          <div className="mt-2.5 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 bg-white pt-2.5 text-[12px]">
             <button
               type="button"
               onClick={() => {
@@ -1475,7 +1476,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
               ✨ 一键展开全卷答案与解析
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={() => {

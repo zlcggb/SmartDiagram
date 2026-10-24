@@ -529,13 +529,59 @@ function Dock({
 }
 
 function LoginWindow() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const loginOpen = usePlatformAuth((state) => state.loginOpen);
+  const loginNotice = usePlatformAuth((state) => state.loginNotice);
+  const expiredPromptActive = usePlatformAuth((state) => state.expiredPromptActive);
   const closeLogin = usePlatformAuth((state) => state.closeLogin);
   const setSession = usePlatformAuth((state) => state.setSession);
   if (!loginOpen) return null;
   return (
-    <MacWindow title="登录桌面" onClose={closeLogin}>
+    <MacWindow title={expiredPromptActive ? "登录已过期 — 请重新登录" : "登录桌面"} onClose={closeLogin}>
       <div className="mac-login-content">
+        {loginNotice ? (
+          <div
+            style={{
+              margin: "0 0 12px 0",
+              padding: "10px 14px",
+              borderRadius: "12px",
+              background: "rgba(245, 158, 11, 0.14)",
+              border: "1px solid rgba(245, 158, 11, 0.35)",
+              color: "#fef3c7",
+              fontSize: "12.5px",
+              lineHeight: 1.5,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px",
+            }}
+          >
+            <span>{loginNotice}</span>
+            {location.pathname !== "/" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  closeLogin();
+                  navigate("/");
+                }}
+                style={{
+                  flexShrink: 0,
+                  padding: "4px 10px",
+                  borderRadius: "8px",
+                  background: "rgba(255, 255, 255, 0.14)",
+                  border: "1px solid rgba(255, 255, 255, 0.22)",
+                  color: "#ffffff",
+                  fontSize: "11.5px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                返回桌面首页
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <LoginScreen displayMode="modal" onLogin={setSession} />
       </div>
     </MacWindow>
@@ -727,6 +773,31 @@ function AppShell() {
   }), [canvasMode, context, desktopIconsVisible, fullscreen, session, widgetsVisible]);
 
   useEffect(() => { void bootstrapAuth(); }, [bootstrapAuth]);
+  useEffect(() => {
+    const handleNavigateHome = () => {
+      if (window.location.pathname !== "/") {
+        navigate("/");
+      }
+    };
+    const handleVisibilityOrRenewal = () => {
+      if (document.visibilityState === "visible" && usePlatformAuth.getState().session) {
+        void bootstrapAuth();
+      }
+    };
+    const renewalTimer = window.setInterval(() => {
+      if (usePlatformAuth.getState().session) {
+        void bootstrapAuth();
+      }
+    }, 30 * 60 * 1000);
+
+    window.addEventListener("smartdiagram:navigate-home", handleNavigateHome);
+    document.addEventListener("visibilitychange", handleVisibilityOrRenewal);
+    return () => {
+      window.clearInterval(renewalTimer);
+      window.removeEventListener("smartdiagram:navigate-home", handleNavigateHome);
+      document.removeEventListener("visibilitychange", handleVisibilityOrRenewal);
+    };
+  }, [bootstrapAuth, navigate]);
   useEffect(() => {
     const rememberEditable = (event: FocusEvent) => {
       const editable = editableSurfaceFor(event.target);

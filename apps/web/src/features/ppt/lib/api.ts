@@ -43,6 +43,7 @@ import { guestProjectRepository } from "./guestProjectStore";
 import { isPptApiError, PptApiError, shouldUseGuestProjectFallback } from "./pptApiError";
 import { createPptRequestHeaders, isPptGuest } from "./pptRequestContext";
 import { readAuthSession } from "@/shared/lib/config/auth";
+import { usePlatformAuth } from "@/shared/store/authStore";
 
 export { isPptApiError, PptApiError };
 import {
@@ -275,6 +276,9 @@ async function requestWith<T>(
     throw new Error("服务返回了无法解析的响应");
   }
   if (!response.ok || !payload.success) {
+    if (response.status === 401 && readAuthSession()) {
+      usePlatformAuth.getState().notifySessionExpired("您的登录状态已过期，请重新登录以继续操作");
+    }
     throw new PptApiError(payload.message || "请求失败", response.status, payload.data);
   }
   return payload.data;

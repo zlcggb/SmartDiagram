@@ -1,10 +1,70 @@
 .vidgrab-shell {
+  /* Apple 四级语义色彩令牌 (apple-design-patterns) */
+  --systemPrimary: #1d1d1f;
+  --systemSecondary: #86868b;
+  --systemTertiary: #d2d2d7;
+  --systemQuaternary: #e8e8ed;
+  --keyColor: #0071e3;
+
+  /* Apple 排版 shortcuts */
+  --large-title-emphasized: 600 clamp(26px, 5vw, 34px)/1.12 "SF Pro Display", -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
+  --title-1-emphasized: 600 clamp(20px, 4vw, 28px)/1.16 "SF Pro Display", -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
+  --header-emphasized: 600 16px/1.29 "SF Pro Text", -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
+  --body: 400 15px/1.47 "SF Pro Text", -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
+  --footnote-emphasized: 600 12px/1.35 "SF Pro Text", -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
+
   --vg-canvas: #ffffff;
-  --vg-mist: #f5f5f7;
-  --vg-ink: #1d1d1f;
-  --vg-subtle: #6e6e73;
-  --vg-appleblue: #0071e3;
+  --vg-mist: #f2f2f7;
+  --vg-ink: var(--systemPrimary);
+  --vg-subtle: var(--systemSecondary);
+  --vg-appleblue: var(--keyColor);
   --vg-appleblue-hover: #0077ed;
+  --vg-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* iOS 原生毛玻璃材质 */
+.vidgrab-shell .ios-glass-header {
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+.vidgrab-shell .ios-glass-tabbar {
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 隐藏移动端分段控制器的横向滚动条 */
+.vidgrab-shell .no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.vidgrab-shell .no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 容器查询支持 (size-aware-styling) */
+.vidgrab-shell .vg-card-container {
+  container-type: inline-size;
+  container-name: vg-card;
+}
+
+@container vg-card (max-width: 420px) {
+  .vidgrab-shell .vg-compact-hide {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vidgrab-shell *,
+  .vidgrab-shell *::before,
+  .vidgrab-shell *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .vidgrab-shell .panel-scroll {

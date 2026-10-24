@@ -3175,6 +3175,14 @@ body.has-ppt-focus-mode .mac-dock {
   display: none !important;
 }
 
+/* 视频学习模块移动端采用专属 iOS 底部 Tab Bar，隐藏桌面悬浮 Dock 避免遮挡 */
+@media (max-width: 1023px) {
+  .mac-app-shell[data-area='video'] .mac-dock,
+  .mac-app-shell[data-area='video'] .mac-dock-peek {
+    display: none !important;
+  }
+}
+
 /* 多应用 Keep-Alive 窗口切换微动效 */
 @keyframes mac-keepalive-enter {
   from {

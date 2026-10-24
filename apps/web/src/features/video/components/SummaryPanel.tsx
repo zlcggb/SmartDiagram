@@ -515,15 +515,15 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
     <div
       className={
         embedded
-          ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-sm'
+          ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-white shadow-2xs lg:rounded-3xl lg:border-slate-200/80 lg:shadow-sm'
           : 'mx-auto mt-5 max-w-3xl rounded-3xl border border-slate-200/80 bg-white text-left shadow-lg'
       }
     >
       {/* Header */}
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 px-4 py-2.5">
-        <div className="flex items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-black/[0.06] px-3 py-2 lg:border-slate-200/80 lg:px-4 lg:py-2.5">
+        <div className="flex min-w-0 items-center gap-1.5 lg:gap-2">
           <svg
-            className="h-4.5 w-4.5 text-[#0071e3]"
+            className="h-4 w-4 shrink-0 text-[#0071e3] lg:h-4.5 lg:w-4.5"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -533,15 +533,15 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
           >
             <path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z" />
           </svg>
-          <h3 className="text-[15px] font-semibold text-slate-900">AI 视频总结</h3>
+          <h3 className="shrink-0 text-[14px] font-semibold text-slate-900 lg:text-[15px]">AI 视频总结</h3>
           {sourceText && (
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] text-slate-600">
+            <span className="hidden truncate rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] text-slate-600 lg:inline-block">
               {sourceText}
             </span>
           )}
           {isDone && timingBadge && (
             <span
-              className="hidden sm:inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 font-mono text-[11px] font-medium text-amber-700"
+              className="hidden lg:inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 font-mono text-[11px] font-medium text-amber-700"
               title="端到端处理耗时"
             >
               ⚡ {timingBadge}
@@ -550,12 +550,12 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
         </div>
 
         {!readOnly && (
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 lg:gap-2">
             {isDone && summaryTaskId && shareToken && (
               <button
                 type="button"
                 onClick={handleCopyShareLink}
-                className={`inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition ${
+                className={`inline-flex h-6.5 items-center gap-1 rounded-full border px-2 text-[11.5px] font-medium transition lg:h-7 lg:px-2.5 lg:text-[12px] ${
                   copiedShareLink
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-[#0071e3]/40 hover:text-[#0071e3]'
@@ -563,7 +563,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                 title="复制免登录只读分享链接"
               >
                 <span>{copiedShareLink ? '✓' : '🔗'}</span>
-                <span>{copiedShareLink ? '已复制链接' : '分享'}</span>
+                <span>{copiedShareLink ? '已复制' : '分享'}</span>
               </button>
             )}
             <div className="relative">
@@ -571,7 +571,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                 value={targetLang}
                 disabled={isRunning}
                 onChange={(e) => setTargetLang(e.target.value)}
-                className="field-pill appearance-none !h-7 !px-3 pr-7 !text-[12px]"
+                className="field-pill appearance-none !h-6.5 !px-2.5 pr-6 !text-[11.5px] lg:!h-7 lg:!px-3 lg:pr-7 lg:!text-[12px]"
               >
                 {LANGS.map((l) => (
                   <option key={l.id} value={l.id}>
@@ -580,7 +580,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                 ))}
               </select>
               <svg
-                className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 lg:right-2.5"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -590,13 +590,17 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
               </svg>
             </div>
             {isRunning ? (
-              <button type="button" className="btn-pill-danger !h-7 !px-3 !text-[12px]" onClick={onCancel}>
-                取消总结
+              <button
+                type="button"
+                className="btn-pill-danger !h-6.5 !px-2.5 !text-[11.5px] lg:!h-7 lg:!px-3 lg:!text-[12px]"
+                onClick={onCancel}
+              >
+                取消
               </button>
             ) : (
               <button
                 type="button"
-                className="btn-pill-outline-sm !h-7 !px-3 !text-[12px]"
+                className="btn-pill-outline-sm !h-6.5 !px-2.5 !text-[11.5px] lg:!h-7 lg:!px-3 lg:!text-[12px]"
                 onClick={() => onGenerate({ targetLang, prompt: customPrompt.trim() })}
               >
                 {isDone || summary.status === 'error' || isCancelled ? '重新生成' : '开始总结'}
@@ -748,8 +752,8 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
 
       {/* Done or Progressive Streaming Results */}
       {showResultTabs && result && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3">
-          <div className="mb-2.5 flex shrink-0 gap-1 overflow-x-auto rounded-full bg-slate-100 p-1 text-[12.5px]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-2.5 lg:px-4 lg:py-3">
+          <div className="no-scrollbar mb-2 flex shrink-0 gap-1 overflow-x-auto rounded-full bg-[#767680]/[0.12] p-1 text-[12px] lg:mb-2.5 lg:bg-slate-100 lg:text-[12.5px]">
             {(
               [
                 ['summary', '研报总结'],
@@ -770,10 +774,17 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                 <button
                   key={id}
                   type="button"
-                  className={`flex flex-1 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 transition ${
-                    activeTab === id ? 'bg-white font-semibold text-slate-900 shadow-sm' : 'text-slate-600'
+                  className={`flex flex-1 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1.5 transition active:scale-[0.98] lg:gap-1.5 lg:px-3 ${
+                    activeTab === id
+                      ? 'bg-white font-semibold text-slate-900 shadow-[0_1px_4px_rgba(0,0,0,0.08)]'
+                      : 'text-slate-600'
                   }`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.currentTarget.scrollIntoView({
+                      behavior: 'smooth',
+                      inline: 'center',
+                      block: 'nearest',
+                    });
                     setActiveTab(id);
                     if (id === 'mindmap') {
                       setTimeout(() => mindmapCanvasRef.current?.refreshLayout(), 40);
@@ -878,7 +889,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                   )}
                 </div>
 
-                <div className="mt-3 flex shrink-0 items-center justify-between border-t border-slate-200/80 pt-3">
+                <div className="mt-3 hidden shrink-0 items-center justify-between border-t border-slate-200/80 pt-3 lg:flex">
                   <button
                     type="button"
                     className="text-[13px] font-medium text-[#0071e3] hover:underline"
@@ -934,12 +945,14 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
             {/* Tab: Mindmap */}
             {activeTab === 'mindmap' && (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
-                  <span className="text-[12px] text-slate-500">双击节点可编辑 · 滚轮缩放 · 拖拽平移 · 右下角小地图</span>
-                  <div className="flex items-center gap-2">
+                <div className="mb-2 flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:justify-between">
+                  <span className="hidden text-[12px] text-slate-500 sm:inline">
+                    双击节点可编辑 · 滚轮缩放 · 拖拽平移 · 右下角小地图
+                  </span>
+                  <div className="flex items-center gap-1.5 sm:gap-2">
                     <button
                       type="button"
-                      className="rounded-lg border border-[#0071e3]/30 bg-[#0071e3]/10 px-2.5 py-1 text-[12px] font-medium text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white"
+                      className="hidden rounded-lg border border-[#0071e3]/30 bg-[#0071e3]/10 px-2.5 py-1 text-[12px] font-medium text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white active:scale-95 lg:inline-flex"
                       onClick={handleOpenInDiagramStudio}
                       title="发送至 SmartDiagram 图表工作台进行 AI 深度改图"
                     >
@@ -947,7 +960,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                     </button>
                     <button
                       type="button"
-                      className="rounded-lg border border-slate-200 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
+                      className="rounded-full border border-slate-200 px-2.5 py-1 text-[11.5px] text-slate-600 hover:bg-slate-50 active:scale-95 sm:rounded-lg sm:text-[12px]"
                       onClick={async () => {
                         const el = mindmapBoxRef.current;
                         if (!el) return;
@@ -965,7 +978,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                 </div>
                 <div
                   ref={mindmapBoxRef}
-                  className="flex min-h-[360px] flex-1 overflow-hidden rounded-2xl border border-slate-200/80"
+                  className="flex min-h-[200px] flex-1 overflow-hidden rounded-2xl border border-slate-200/80 lg:min-h-[360px]"
                 >
                   <VideoMindmapCanvas
                     ref={mindmapCanvasRef}
@@ -973,7 +986,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                     className="h-full min-h-0 w-full"
                   />
                 </div>
-                <div className="mt-3 flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-200/80 pt-3">
+                <div className="mt-3 hidden shrink-0 flex-wrap items-center gap-2 border-t border-slate-200/80 pt-3 lg:flex">
                   <select
                     value={mindmapExportFormat}
                     onChange={(e) => setMindmapExportFormat(e.target.value)}
@@ -1088,7 +1101,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                   })}
                 </div>
 
-                <div className="mt-3 flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-200/80 pt-3">
+                <div className="mt-3 hidden shrink-0 flex-wrap items-center gap-2 border-t border-slate-200/80 pt-3 lg:flex">
                   <select
                     value={subtitleExportFormat}
                     onChange={(e) => setSubtitleExportFormat(e.target.value)}
@@ -1125,7 +1138,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                     导出字幕
                   </button>
                 </div>
-                <div className="mt-2 flex shrink-0 items-center justify-between text-[12px] text-slate-500">
+                <div className="mt-2 hidden shrink-0 items-center justify-between text-[12px] text-slate-500 lg:flex">
                   <span>全文 {transcriptLines.length} 段</span>
                   <button
                     type="button"
@@ -1226,7 +1239,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
 
                             {/* 双系统智能路由与真实性能监控栏 */}
                             {msg.router && !msg.streaming && (
-                              <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-slate-200/70 pt-2 text-[11px] text-slate-500">
+                              <div className="mt-2.5 hidden flex-wrap items-center gap-1.5 border-t border-slate-200/70 pt-2 text-[11px] text-slate-500 lg:flex">
                                 <span className="inline-flex items-center gap-1 rounded-md bg-white/80 px-1.5 py-0.5 font-medium text-slate-700 shadow-sm">
                                   <span>{INTENT_LABELS[msg.router.intent || ''] || msg.router.intent}</span>
                                 </span>

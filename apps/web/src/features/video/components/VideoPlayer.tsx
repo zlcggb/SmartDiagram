@@ -49,8 +49,16 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const mode = playback?.mode || '';
   const provider = playback?.provider || '';
   const videoSrc = resolveVideoMediaUrl(playback?.src || '');
+  const urlLower = (config?.url || '').toLowerCase();
+  const isPortraitByUrl =
+    urlLower.includes('douyin') ||
+    urlLower.includes('iesdouyin') ||
+    urlLower.includes('tiktok');
   const isPortrait =
-    playback?.orientation === 'portrait' || PORTRAIT_PROVIDERS.has(provider) || portraitByMeta;
+    playback?.orientation === 'portrait' ||
+    PORTRAIT_PROVIDERS.has(provider) ||
+    isPortraitByUrl ||
+    portraitByMeta;
 
   const buildEmbedUrl = (p: any, t = 0): string => {
     if (!p) return '';
@@ -238,8 +246,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     <div
       className={`relative overflow-hidden rounded-2xl bg-black shadow-sm ${
         isPortrait
-          ? 'mx-auto aspect-[9/16] w-full max-w-[min(100%,390px)] max-h-[66vh]'
-          : 'aspect-video w-full max-h-[54vh]'
+          ? 'mx-auto h-[200px] w-full sm:h-[240px] lg:h-auto lg:aspect-[9/16] lg:max-w-[min(100%,390px)] lg:max-h-[66vh]'
+          : 'h-[200px] w-full sm:h-[240px] lg:h-auto lg:aspect-video lg:max-h-[54vh]'
       }`}
     >
       {(loading || recovering) && (

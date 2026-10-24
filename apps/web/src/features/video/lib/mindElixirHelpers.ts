@@ -115,27 +115,42 @@ export function convertToMarkdown(node: any, level = 1): string {
 }
 
 /**
- * SmartDiagram 原生二阶自适应缩放与居中算法
+ * SmartDiagram 原生二阶自适应缩放与居中算法（防 NaN 强化版）
  */
 export function fitWithPadding(me: any) {
   if (!me || !me.container) return;
 
   const container = me.container as HTMLElement;
-  const mapContainer = container.querySelector('.map-container') as HTMLElement;
-  if (!mapContainer) {
-    me.scaleFit();
-    me.toCenter();
+  const containerWidth = container.clientWidth;
+  const containerHeight = container.clientHeight;
+  if (!containerWidth || !containerHeight || containerWidth <= 0 || containerHeight <= 0) {
     return;
   }
 
-  // First pass: built-in fit
-  me.scaleFit();
-  me.toCenter();
+  const mapContainer = container.querySelector('.map-container') as HTMLElement;
+  if (!mapContainer) {
+    return;
+  }
 
-  // Second pass: measure actual topic positions and re-adjust if clipped
+  // First pass: reset to safe finite scale=1 and center so node rects can be measured accurately without NaN
+  if (!Number.isFinite(me.scaleVal) || me.scaleVal <= 0) {
+    me.scaleVal = 1;
+  }
+  try {
+    me.scale(1);
+    me.toCenter();
+  } catch {
+    // ignore
+  }
+
+  // Second pass: measure actual topic positions and compute exact fit scale + center offset
   requestAnimationFrame(() => {
     const topics = mapContainer.querySelectorAll('.topic, me-tpc');
     if (!topics.length) return;
+
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    if (cw <= 0 || ch <= 0) return;
 
     const containerRect = container.getBoundingClientRect();
     let minX = Infinity;
@@ -145,59 +160,73 @@ export function fitWithPadding(me: any) {
 
     topics.forEach((topic) => {
       const rect = topic.getBoundingClientRect();
+      if (!rect.width && !rect.height) return;
       const left = rect.left - containerRect.left;
       const top = rect.top - containerRect.top;
-      minX = Math.min(minX, left);
-      maxX = Math.max(maxX, left + rect.width);
-      minY = Math.min(minY, top);
-      maxY = Math.max(maxY, top + rect.height);
+      if (Number.isFinite(left) && Number.isFinite(top)) {
+        minX = Math.min(minX, left);
+        maxX = Math.max(maxX, left + rect.width);
+        minY = Math.min(minY, top);
+        maxY = Math.max(maxY, top + rect.height);
+      }
     });
 
-    if (minX === Infinity) return;
+    if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+      return;
+    }
 
     const contentWidth = maxX - minX;
     const contentHeight = maxY - minY;
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
+    if (contentWidth <= 0 || contentHeight <= 0) return;
 
-    const isClipped =
-      minX < 0 || maxX > containerWidth || minY < 0 || maxY > containerHeight;
+    const currentScale = Number.isFinite(me.scaleVal) && me.scaleVal > 0 ? me.scaleVal : 1;
+    const isMobile = cw < 640;
+    const paddingRatio = isMobile ? 0.88 : 0.8;
+    const requiredScaleX = (cw * paddingRatio) / contentWidth;
+    const requiredScaleY = (ch * paddingRatio) / contentHeight;
+    const rawScale = Math.min(requiredScaleX, requiredScaleY, 1.05) * currentScale;
+    const newScale = Number.isFinite(rawScale) ? Math.max(0.2, Math.min(1.15, rawScale)) : 1;
 
-    if (isClipped && contentWidth > 0 && contentHeight > 0) {
-      const currentScale = me.scaleVal || 1;
-      const paddingRatio = 0.78;
-      const requiredScaleX = (containerWidth * paddingRatio) / contentWidth;
-      const requiredScaleY = (containerHeight * paddingRatio) / contentHeight;
-      const newScale = Math.min(requiredScaleX, requiredScaleY, currentScale) * currentScale;
+    try {
+      me.scale(newScale);
+    } catch {
+      // ignore
+    }
 
-      me.scale(Math.max(0.15, newScale));
+    requestAnimationFrame(() => {
+      const newContainerRect = container.getBoundingClientRect();
+      let nMinX = Infinity;
+      let nMaxX = -Infinity;
+      let nMinY = Infinity;
+      let nMaxY = -Infinity;
 
-      requestAnimationFrame(() => {
-        const newContainerRect = container.getBoundingClientRect();
-        let nMinX = Infinity;
-        let nMaxX = -Infinity;
-        let nMinY = Infinity;
-        let nMaxY = -Infinity;
-
-        topics.forEach((topic) => {
-          const rect = topic.getBoundingClientRect();
-          const left = rect.left - newContainerRect.left;
-          const top = rect.top - newContainerRect.top;
+      topics.forEach((topic) => {
+        const rect = topic.getBoundingClientRect();
+        if (!rect.width && !rect.height) return;
+        const left = rect.left - newContainerRect.left;
+        const top = rect.top - newContainerRect.top;
+        if (Number.isFinite(left) && Number.isFinite(top)) {
           nMinX = Math.min(nMinX, left);
           nMaxX = Math.max(nMaxX, left + rect.width);
           nMinY = Math.min(nMinY, top);
           nMaxY = Math.max(nMaxY, top + rect.height);
-        });
-
-        const contentCenterX = (nMinX + nMaxX) / 2;
-        const contentCenterY = (nMinY + nMaxY) / 2;
-        const dx = containerWidth / 2 - contentCenterX;
-        const dy = containerHeight / 2 - contentCenterY;
-
-        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-          me.move(dx, dy);
         }
       });
-    }
+
+      if (!Number.isFinite(nMinX) || !Number.isFinite(nMinY)) return;
+
+      const contentCenterX = (nMinX + nMaxX) / 2;
+      const contentCenterY = (nMinY + nMaxY) / 2;
+      const dx = cw / 2 - contentCenterX;
+      const dy = ch / 2 - contentCenterY;
+
+      if (Number.isFinite(dx) && Number.isFinite(dy) && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+        try {
+          me.move(dx, dy);
+        } catch {
+          // ignore
+        }
+      }
+    });
   });
 }
