@@ -488,10 +488,11 @@ export async function getGuestQuota(): Promise<VideoGuestQuota | null> {
 export interface VideoDocCategory {
   id: string;
   title: string;
-  items: Array<{ path: string; title: string }>;
+  items: Array<{ id?: string; path: string; title: string }>;
 }
 
 export interface VideoDocContentResponse {
+  id?: string;
   title: string;
   path: string;
   filename?: string;

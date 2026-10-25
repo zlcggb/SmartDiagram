@@ -13,6 +13,42 @@ interface ZoomDiagramState {
   html: string;
 }
 
+const LEGACY_FILE_TO_ID: Record<string, string> = {
+  '产品发布会说明书与架构全景.md': 'product-overview',
+  '系统架构与技术全景.md': 'system-architecture',
+  '方案设计.md': 'system-design',
+  '需求分析.md': 'requirements-sla',
+  '优化记录与技术演进.md': 'performance-evolution',
+  'ai智能测验与双源出题架构.md': 'ai-quiz-architecture',
+  '四点并发与极速总结管线.md': 'concurrent-pipeline',
+  '执行记录.md': 'engineering-log',
+  'jeff毫秒级意图路由引擎.md': 'jeff-intent-router',
+  '无旁白视频多模态总结方案.md': 'multimodal-summary',
+  '播放能力调研与方案.md': 'streaming-playback',
+  'hevc转码与跨平台兼容方案.md': 'hevc-transcoding',
+  '多平台统一策略.md': 'multi-platform-strategy',
+  'docker内部部署.md': 'docker-deployment',
+  '阿里云ecs部署指南.md': 'aliyun-ecs-guide',
+  '宝塔域名https与github自动部署.md': 'baota-https-deploy',
+  '宝塔面板部署指南.md': 'baota-reverse-proxy',
+  '平台接入与运维指南.md': 'platform-ops-guide',
+  'postgresql持久化与双写存储架构.md': 'postgres-storage',
+  '会员支付-stripe方案设计.md': 'stripe-billing-design',
+  '会员支付-开发与验收指南.md': 'stripe-sandbox-guide',
+};
+
+function toCanonicalDocId(raw?: string | null): string {
+  if (!raw) return 'product-overview';
+  const cleaned = decodeURIComponent(raw)
+    .trim()
+    .replace(/^(?:\.\/|docs\/video\/|docs\/)+/i, '')
+    .replace(/^\/+/, '');
+  const lower = cleaned.toLowerCase();
+  if (LEGACY_FILE_TO_ID[lower]) return LEGACY_FILE_TO_ID[lower];
+  if (LEGACY_FILE_TO_ID[`${lower}.md`]) return LEGACY_FILE_TO_ID[`${lower}.md`];
+  return cleaned.replace(/\.md$/i, '');
+}
+
 function formatTime(ts?: number | null): string {
   if (!ts) return '';
   const d = new Date(ts * 1000);
@@ -65,22 +101,35 @@ export function VideoDocsPage() {
   const wordCount = currentDoc.content ? currentDoc.content.length : 0;
   const readTimeMin = Math.max(1, Math.ceil(wordCount / 400));
 
-  const loadDocContent = useCallback(async (docPath: string) => {
-    if (!docPath) return;
-    setContentLoading(true);
-    setError('');
-    try {
-      const data = await fetchVideoDocContent(docPath);
-      setCurrentDoc(data);
-      if (contentScrollRef.current) {
-        contentScrollRef.current.scrollTop = 0;
+  const loadDocContent = useCallback(
+    async (docPath: string) => {
+      if (!docPath) return;
+      const canonicalReqId = toCanonicalDocId(docPath);
+      setContentLoading(true);
+      setError('');
+      try {
+        const data = await fetchVideoDocContent(canonicalReqId);
+        const finalId = toCanonicalDocId(data.id || data.path || canonicalReqId);
+        setCurrentDoc({
+          ...data,
+          id: finalId,
+          path: finalId,
+          filename: finalId,
+        });
+        if (routeDocPath !== finalId) {
+          navigate(`/video/docs/${finalId}`, { replace: true });
+        }
+        if (contentScrollRef.current) {
+          contentScrollRef.current.scrollTop = 0;
+        }
+      } catch (err: any) {
+        setError(err?.message || `未找到文档: ${canonicalReqId}`);
+      } finally {
+        setContentLoading(false);
       }
-    } catch (err: any) {
-      setError(err?.message || `未找到文档: ${docPath}`);
-    } finally {
-      setContentLoading(false);
-    }
-  }, []);
+    },
+    [navigate, routeDocPath],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -88,10 +137,17 @@ export function VideoDocsPage() {
       try {
         const listRes = await fetchVideoDocsList();
         if (cancelled) return;
-        setCategories(listRes.categories || []);
+        const normalizedCats = (listRes.categories || []).map((cat) => ({
+          ...cat,
+          items: (cat.items || []).map((it) => {
+            const cid = toCanonicalDocId(it.id || it.path);
+            return { ...it, id: cid, path: cid };
+          }),
+        }));
+        setCategories(normalizedCats);
         const target = routeDocPath
-          ? decodeURIComponent(routeDocPath)
-          : listRes.default_doc || '产品发布会说明书与架构全景.md';
+          ? toCanonicalDocId(routeDocPath)
+          : toCanonicalDocId(listRes.default_doc || 'product-overview');
         await loadDocContent(target);
       } catch (err: any) {
         if (!cancelled) {
@@ -115,7 +171,8 @@ export function VideoDocsPage() {
 
   const handleSelectDoc = (path: string) => {
     setMobileNavOpen(false);
-    navigate(`/video/docs/${encodeURIComponent(path)}`);
+    const cid = toCanonicalDocId(path);
+    navigate(`/video/docs/${cid}`);
   };
 
   const scrollToHeading = (id: string) => {
@@ -174,6 +231,17 @@ export function VideoDocsPage() {
         // ignore
       }
       return;
+    }
+
+    // 1.5 拦截文内指向其他本地文档的链接，自动转为英文 ID 路由跳转
+    const anchor = target.closest('a') as HTMLAnchorElement | null;
+    if (anchor) {
+      const href = anchor.getAttribute('href') || '';
+      if (href && !/^https?:\/\//i.test(href) && !href.startsWith('#')) {
+        e.preventDefault();
+        handleSelectDoc(href);
+        return;
+      }
     }
 
     // 2. 点击 SVG 架构图全屏放大
@@ -295,13 +363,16 @@ export function VideoDocsPage() {
               </div>
               <ul className="space-y-0.5">
                 {cat.items.map((item) => {
+                  const itemId = item.id || item.path;
                   const isActive =
-                    currentDoc.path === item.path || currentDoc.filename === item.path;
+                    currentDoc.id === itemId ||
+                    currentDoc.path === itemId ||
+                    currentDoc.filename === itemId;
                   return (
-                    <li key={item.path}>
+                    <li key={itemId}>
                       <button
                         type="button"
-                        onClick={() => handleSelectDoc(item.path)}
+                        onClick={() => handleSelectDoc(itemId)}
                         className={`group flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-left text-[12px] transition-all cursor-pointer ${
                           isActive
                             ? 'bg-[#0071e3]/10 font-semibold text-[#0071e3] shadow-2xs'
@@ -390,7 +461,7 @@ export function VideoDocsPage() {
               <p className="mb-4 text-xs text-rose-500">{error}</p>
               <button
                 type="button"
-                onClick={() => loadDocContent(currentDoc.path || '系统架构与技术全景.md')}
+                onClick={() => loadDocContent(currentDoc.id || currentDoc.path || 'product-overview')}
                 className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 cursor-pointer"
               >
                 重新加载
@@ -428,8 +499,8 @@ export function VideoDocsPage() {
                   <span>·</span>
                   <span>预计阅读 {readTimeMin} 分钟</span>
                   <span>·</span>
-                  <span className="font-mono text-slate-600">
-                    docs/video/{currentDoc.filename || currentDoc.path}
+                  <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-600">
+                    /video/docs/{currentDoc.id || currentDoc.path}
                   </span>
                 </div>
               </div>

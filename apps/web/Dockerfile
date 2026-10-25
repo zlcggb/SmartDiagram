@@ -4,10 +4,13 @@
 ARG NODE_IMAGE=node:22-bookworm-slim
 ARG NGINX_IMAGE=nginx:stable-alpine
 ARG CN_MIRROR=false
+ARG VITE_PUBLIC_FILE_BASE=https://file-smartdiagram.unilumin-gtm.com
 
 FROM ${NODE_IMAGE} AS build
 
 ARG CN_MIRROR
+ARG VITE_PUBLIC_FILE_BASE
+ENV VITE_PUBLIC_FILE_BASE=${VITE_PUBLIC_FILE_BASE}
 ENV PNPM_HOME=/pnpm
 ENV PATH=${PNPM_HOME}:${PATH}
 

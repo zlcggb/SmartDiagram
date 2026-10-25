@@ -13,7 +13,8 @@ const CATEGORIES: Array<{ id: CategoryId; label: string }> = [
 ];
 
 const VERSIONS = [
-  { id: 'v2.8.0', label: 'v2.8.0', latest: true, date: '2026年10月25日' },
+  { id: 'v2.8.1', label: 'v2.8.1', latest: true, date: '2026年10月25日' },
+  { id: 'v2.8.0', label: 'v2.8.0', date: '2026年10月25日' },
   { id: 'v2.7.0', label: 'v2.7.0', date: '2026年10月24日' },
   { id: 'v2.6.0', label: 'v2.6.0', date: '2026年10月23日' },
   { id: 'v2.5.0', label: 'v2.5.0', date: '2026年10月11日' },
@@ -26,10 +27,11 @@ const VERSIONS = [
 export function VideoChangelogPage() {
   const [activeCategory, setActiveCategory] = useState<CategoryId>('all');
   const [expandAll, setExpandAll] = useState(true);
-  const [activeVersion, setActiveVersion] = useState('v2.8.0');
+  const [activeVersion, setActiveVersion] = useState('v2.8.1');
   const [copySuccess, setCopySuccess] = useState(false);
   const [archMode, setArchMode] = useState<'architecture' | 'sequence' | 'benchmark'>('architecture');
   const [collapseState, setCollapseState] = useState<Record<string, boolean>>({
+    'v2.8.1-features': true,
     'v2.8.0-features': true,
     'v2.8.0-fixes': true,
     'v2.7.0-features': true,
@@ -60,11 +62,11 @@ export function VideoChangelogPage() {
 
   const shouldShowVersion = (vId: string): boolean => {
     if (activeCategory === 'all') return true;
-    if (activeCategory === 'ai' && ['v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.0.0'].includes(vId)) return true;
+    if (activeCategory === 'ai' && ['v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.0.0'].includes(vId)) return true;
     if (activeCategory === 'asr' && ['v2.7.0', 'v2.5.0', 'v2.3.0'].includes(vId)) return true;
-    if (activeCategory === 'arch' && ['v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v1.0.0'].includes(vId)) return true;
-    if (activeCategory === 'quiz' && ['v2.8.0', 'v2.7.0', 'v2.4.0'].includes(vId)) return true;
-    if (activeCategory === 'platform' && ['v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.3.0', 'v1.0.0'].includes(vId)) return true;
+    if (activeCategory === 'arch' && ['v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v1.0.0'].includes(vId)) return true;
+    if (activeCategory === 'quiz' && ['v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.4.0'].includes(vId)) return true;
+    if (activeCategory === 'platform' && ['v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.3.0', 'v1.0.0'].includes(vId)) return true;
     return false;
   };
 
@@ -79,9 +81,13 @@ export function VideoChangelogPage() {
   const handleCopyChangelog = async () => {
     const md = `# 视频学习助手 (SmartDiagram /video) 更新记录与架构全景
 
-## v2.8.0 (2026-10-25 · LATEST)
+## v2.8.1 (2026-10-25 · LATEST)
+- ☁️ MediaPipe 模型与 WASM 迁移至 Cloudflare R2 边缘 CDN（file-smartdiagram.unilumin-gtm.com/mediapipe/）：前端构建产物立减 44MB，1 年强缓存 + 浏览器 CacheStorage 二次访问 0MB 流量瞬时启动。
+- 🔗 文档中心纯英文 Canonical ID 路由（/video/docs/:docId）与移动端测验面板自适应滚动优化。
+
+## v2.8.0 (2026-10-25)
 - 🎯 AI 视觉分析教练工作台 (/video/coach)：浏览器端 MediaPipe WebGL 三合一高精度感知（全身33点+双手42指关节+面部478点3D朝向）+ 2×2 时序四格拼图 + Gemini 3.5/3.8 Flash 流式动作诊断。
-- 🚀 服务端 0 GPU 成本与本地持久化缓存：模型同源静态托管（Gzip 19.58MB）+ 浏览器 CacheStorage 持久化，二次加载 0MB 流量、<150ms 瞬时启动。
+- 🚀 服务端 0 GPU 成本与持久化缓存：端侧 WebGL 推理 + 浏览器 CacheStorage 持久化，二次加载 0MB 流量、<150ms 瞬时启动。
 - 📱 桌面端双向独立滚动 + 移动端专属 4-Tab 教练工作台：互斥二选一输入源（开启镜头/选择视频即刻自动分析，防误触隐藏另一输入源），移动端专属「实时诊断 / 骨骼手势 / 教练提示词 / 复盘报告」底栏。
 - 🛡️ 单次防呆自动熔断 + 访客/登录分级每日配额：访客单次限 1 分钟、全天限 5 分钟（前后端双重计量）；已登录用户连续 2 分钟无操作自动暂停分析，防止忘关浪费 AI 算力。
 
@@ -194,7 +200,63 @@ export function VideoChangelogPage() {
       {/* 正文双栏：左侧版本时间轴 + 右侧 Sticky 版本导航 */}
       <div className="mx-auto grid max-w-[1240px] grid-cols-1 gap-4 px-3 sm:gap-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="min-w-0 space-y-3.5 sm:space-y-10 lg:space-y-14">
-          {/* ================= v2.8.0 (最新重大版本：AI 视觉分析教练) ================= */}
+          {/* ================= v2.8.1 (最新架构升级：Cloudflare R2 边缘存储迁移与英文文档路由) ================= */}
+          {shouldShowVersion('v2.8.1') && (
+            <section
+              id="v2.8.1"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-3 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-3.5 sm:p-6 shadow-xs"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.8.1</span>
+                  <span className="rounded-full bg-[#0071e3] px-1.5 py-0.5 text-[9.5px] font-bold text-white uppercase tracking-wider sm:px-2 sm:text-[10px]">
+                    LATEST
+                  </span>
+                  <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3] md:hidden">
+                    ☁️ R2 边缘存储与路由优化
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-slate-400 font-mono sm:text-[12.5px] sm:text-slate-500">2026-10-25</p>
+                <p className="hidden text-[11.5px] text-[#0071e3] font-semibold md:block">
+                  ☁️ R2 边缘存储 CDN 与体验精修
+                </p>
+              </div>
+
+              <div className="min-w-0 space-y-3 sm:space-y-5">
+                <div>
+                  <h2 className="text-[15px] font-bold leading-snug tracking-tight text-slate-900 sm:text-[20px]">
+                    Cloudflare R2 边缘对象存储迁移、前端构建立减 44MB、文档中心英文 ID 路由与移动端测验优化
+                  </h2>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 sm:mt-2 sm:text-[13.5px]">
+                    将三大 MediaPipe 端侧视觉模型（<code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">.task</code>）与 WebAssembly 运行时全面迁移至 Cloudflare R2 对象存储（公开 CDN 域名 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">file-smartdiagram.unilumin-gtm.com/mediapipe/</code>），移除前端静态目录大文件，<strong>构建包体积立减 44MB</strong>；统一文档中心路由为语义化英文短横线 ID（<code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">/video/docs/:docId</code>），并优化移动端测验空状态面板自适应滚动体验。
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 text-[11.5px] sm:grid-cols-3 sm:gap-3 sm:text-[12px]">
+                  <div className="rounded-xl border border-[#0071e3]/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-[#0071e3]">1. R2 边缘 CDN + 1 年强缓存</div>
+                    <p className="text-slate-600 leading-snug">
+                      S3 兼容签名上传 + immutable 强缓存 + 浏览器 CacheStorage 二次访问 0MB 流量瞬时就绪
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-500/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-emerald-600">2. 纯英文 Canonical 文档路由</div>
+                    <p className="text-slate-600 leading-snug">
+                      文档中心 URL 统一为 /video/docs/ai-visual-coach 等英文 ID，自动兼容旧中文路径跳转
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-indigo-500/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-indigo-600">3. 移动端测验空状态自适应</div>
+                    <p className="text-slate-600 leading-snug">
+                      紧凑卡片间距与独立纵向滚动容器，小屏手机无需遮挡即可直接点击「一键生成测验」
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ================= v2.8.0 (AI 视觉分析教练) ================= */}
           {shouldShowVersion('v2.8.0') && (
             <section
               id="v2.8.0"
@@ -203,9 +265,6 @@ export function VideoChangelogPage() {
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.8.0</span>
-                  <span className="rounded-full bg-[#0071e3] px-1.5 py-0.5 text-[9.5px] font-bold text-white uppercase tracking-wider sm:px-2 sm:text-[10px]">
-                    LATEST
-                  </span>
                   <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3] md:hidden">
                     🎯 AI 视觉分析教练
                   </span>

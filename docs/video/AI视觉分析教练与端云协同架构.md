@@ -29,7 +29,7 @@
 
 ### 2.1 模型体积与 Gzip 传输实测表
 
-所有视觉模型均作为纯静态文件托管于前端 `apps/web/public/mediapipe/` 目录，由 Nginx 开启 `gzip_static` 与 `Cache-Control: public, max-age=31536000, immutable` 分发：
+所有视觉模型与 WASM 运行时均统一托管于 Cloudflare R2 对象存储桶 `smartdiagram`（公开自定义域名 `https://file-smartdiagram.unilumin-gtm.com/mediapipe/`，由 `VITE_PUBLIC_FILE_BASE` 配置），并附带 `Cache-Control: public, max-age=31536000, immutable` 边缘强缓存：
 
 | 静态资产文件 | 作用说明 | 原始大小 (Raw) | **Gzip 实际传输大小** | 首次加载后二次访问 |
 | :--- | :--- | :---: | :---: | :---: |
@@ -42,8 +42,8 @@
 ### 2.2 为什么服务端完全不需要 GPU？
 
 1. **视频流与骨骼/手势/面部识别 100% 运行在用户终端显卡（电脑/手机浏览器 WebGL）**：原始摄像头视频流不上传服务器，服务端 CPU/GPU 负载为 **0**。
-2. **自建同源静态托管 + 浏览器 `CacheStorage` 永久持久化**：
-   - 模型文件直接随前端构建产物部署在自有服务器 `/mediapipe/` 路径下，国内及全球用户直连下载，彻底消除对 Google 海外 스토리지（`storage.googleapis.com`）的网络依赖。
+2. **Cloudflare R2 边缘 CDN 托管 + 浏览器 `CacheStorage` 永久持久化**：
+   - 模型文件通过 `scripts/upload_mediapipe_to_r2.py` 统一上传至自有 Cloudflare R2 存储桶并通过 `https://file-smartdiagram.unilumin-gtm.com/mediapipe/` 分发，既避免了前端仓库与容器镜像膨胀，又彻底消除对 Google 海外存储（`storage.googleapis.com`）的网络依赖。
    - [`edgePerceptionEngine.ts`](/apps/web/src/features/video-coach-lab/lib/edgePerceptionEngine.ts) 在模型就绪后自动将 `.task` 权重写入浏览器 `window.caches.open('smartdiagram-mediapipe-models-v1')`，后续刷新或重开页面实现 **`0 MB` 网络流量、`< 150ms` 瞬时启动**。
 
 ---

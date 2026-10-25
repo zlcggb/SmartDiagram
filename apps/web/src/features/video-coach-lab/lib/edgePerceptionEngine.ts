@@ -1,11 +1,18 @@
 /**
  * AI 视觉分析教练 — 浏览器端高精度三合一感知引擎（Holistic 教练级）
  *
- * 集成 Google MediaPipe 官方三大高精度本地模型（位于 /public/mediapipe/）：
+ * 集成 Google MediaPipe 官方三大高精度模型（托管于 Cloudflare R2 公开 CDN `${VITE_PUBLIC_FILE_BASE}/mediapipe/`）：
  * 1. PoseLandmarker Full (pose_landmarker_full.task)：33 个高精度全身骨骼关键点 + EMA 平滑防抖
  * 2. HandLandmarker (hand_landmarker.task)：双手 21×2 = 42 个精细手指关节（拇指/食指/中指/无名指/小指每一节指骨与指尖）
  * 3. FaceLandmarker (face_landmarker.task)：面部 478 个 3D 网格点 + 52 维表情肌肉系数（头部 Yaw/Pitch/Roll 3D 朝向、视线、说话/微笑状态）
  */
+
+const PUBLIC_FILE_BASE = (
+  ((import.meta as any).env?.VITE_PUBLIC_FILE_BASE as string | undefined) ||
+  'https://file-smartdiagram.unilumin-gtm.com'
+).replace(/\/+$/, '');
+
+export const MEDIAPIPE_BASE_URL = `${PUBLIC_FILE_BASE}/mediapipe`;
 
 export interface LandmarkPoint {
   x: number;
@@ -221,9 +228,9 @@ class RealMediaPipeHolisticService {
       const t0 = performance.now();
       try {
         const nativeImport = new Function('url', 'return import(url)') as (url: string) => Promise<any>;
-        const vision: any = await nativeImport('/mediapipe/vision_bundle.mjs');
+        const vision: any = await nativeImport(`${MEDIAPIPE_BASE_URL}/vision_bundle.mjs`);
         const { FilesetResolver, PoseLandmarker, HandLandmarker, FaceLandmarker } = vision;
-        const fileset = await FilesetResolver.forVisionTasks('/mediapipe/wasm');
+        const fileset = await FilesetResolver.forVisionTasks(`${MEDIAPIPE_BASE_URL}/wasm`);
 
         const createWithFallback = async (Creator: any, optionsGpu: any, optionsCpu: any) => {
           try {
@@ -234,9 +241,9 @@ class RealMediaPipeHolisticService {
         };
 
         const MODEL_PATHS = {
-          pose: '/mediapipe/pose_landmarker_full.task',
-          hand: '/mediapipe/hand_landmarker.task',
-          face: '/mediapipe/face_landmarker.task',
+          pose: `${MEDIAPIPE_BASE_URL}/pose_landmarker_full.task`,
+          hand: `${MEDIAPIPE_BASE_URL}/hand_landmarker.task`,
+          face: `${MEDIAPIPE_BASE_URL}/face_landmarker.task`,
         };
 
         const [pose, hand, face] = await Promise.all([
@@ -311,7 +318,7 @@ class RealMediaPipeHolisticService {
                   MODEL_PATHS.pose,
                   MODEL_PATHS.hand,
                   MODEL_PATHS.face,
-                  '/mediapipe/wasm/vision_wasm_internal.wasm',
+                  `${MEDIAPIPE_BASE_URL}/wasm/vision_wasm_internal.wasm`,
                 ]),
               )
               .catch(() => {});

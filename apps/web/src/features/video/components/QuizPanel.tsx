@@ -867,71 +867,73 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
       );
     }
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-5 py-6 text-center">
-        <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0071e3] to-[#409cff] text-white shadow-md shadow-[#0071e3]/20">
-          <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-
-        <h4 className="mt-4 text-[17px] font-bold tracking-tight text-slate-900">
-          动态卡片闯关 · 巩固核心认知
-        </h4>
-        <p className="mt-1.5 max-w-md text-[13px] leading-relaxed text-slate-500">
-          AI 基于视频核心方法论与实战案例生成互动卡片。即点即判、0 延迟展开原理解析，并支持一键跳回原视频对应秒数复盘。
-        </p>
-
-        {/* 特性徽章 */}
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-[11.5px] font-medium text-slate-600">
-          <span className="rounded-full bg-slate-100 px-3 py-1">✨ 即点即判零等待</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1">🎯 实战情景单选 & 认知辨析</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1">▶ 原片时间戳精准溯源</span>
-        </div>
-
-        {/* 题量档位选择器 */}
-        <div className="mt-5 inline-flex rounded-full bg-slate-100 p-1 text-[12.5px]">
-          <button
-            type="button"
-            disabled={generating}
-            onClick={() => setTargetCount(6)}
-            className={`rounded-full px-4 py-1.5 transition ${
-              targetCount === 6 ? 'bg-white font-semibold text-slate-900 shadow-2xs' : 'text-slate-600'
-            }`}
-          >
-            ⚡ 6 题快刷（约 3 分钟 · 极速）
-          </button>
-          <button
-            type="button"
-            disabled={generating}
-            onClick={() => setTargetCount(10)}
-            className={`rounded-full px-4 py-1.5 transition ${
-              targetCount === 10 ? 'bg-white font-semibold text-slate-900 shadow-2xs' : 'text-slate-600'
-            }`}
-          >
-            🏆 10 题深度挑战
-          </button>
-        </div>
-
-        <button
-          type="button"
-          className="btn-pill mt-5 !px-7 !py-2.5 !text-[13.5px] shadow-sm shadow-[#0071e3]/20"
-          disabled={generating}
-          onClick={() => void onGenerateQuiz(targetCount)}
-        >
-          {generating ? `正在构建学习卡片 (${(genElapsedMs / 1000).toFixed(1)}s)…` : '开始卡片闯关'}
-        </button>
-
-        {generating && (
-          <div className="mt-4 flex items-center gap-2 text-[12px] text-[#0071e3]">
-            <span className="h-2 w-2 animate-ping rounded-full bg-[#0071e3]" />
-            <span>
-              {genElapsedMs < 2500
-                ? '正在提炼视频核心考点与实战场景…'
-                : '正在生成干扰项解析并锚定原片时间戳…'}
-            </span>
+      <div className="panel-scroll flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-3 py-3 text-center sm:px-5 sm:py-6">
+        <div className="my-auto flex flex-col items-center">
+          <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0071e3] to-[#409cff] text-white shadow-md shadow-[#0071e3]/20 sm:h-14 sm:w-14">
+            <svg className="h-6 w-6 sm:h-7 sm:w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
-        )}
-        {error && <p className="mt-3 text-[13px] text-red-500">{error}</p>}
+
+          <h4 className="mt-3 text-[15.5px] font-bold tracking-tight text-slate-900 sm:mt-4 sm:text-[17px]">
+            动态卡片闯关 · 巩固核心认知
+          </h4>
+          <p className="mt-1 max-w-md text-[12px] leading-relaxed text-slate-500 sm:mt-1.5 sm:text-[13px]">
+            AI 基于视频核心方法论与实战案例生成互动卡片。即点即判、0 延迟展开原理解析，并支持一键跳回原视频对应秒数复盘。
+          </p>
+
+          {/* 特性徽章 */}
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-[11px] font-medium text-slate-600 sm:mt-4 sm:gap-2 sm:text-[11.5px]">
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 sm:px-3 sm:py-1">✨ 即点即判零等待</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 sm:px-3 sm:py-1">🎯 实战情景单选</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 sm:px-3 sm:py-1">▶ 时间戳溯源</span>
+          </div>
+
+          {/* 题量档位选择器 */}
+          <div className="mt-4 inline-flex rounded-full bg-slate-100 p-1 text-[11.5px] sm:mt-5 sm:text-[12.5px]">
+            <button
+              type="button"
+              disabled={generating}
+              onClick={() => setTargetCount(6)}
+              className={`whitespace-nowrap rounded-full px-3 py-1.5 transition sm:px-4 ${
+                targetCount === 6 ? 'bg-white font-semibold text-slate-900 shadow-2xs' : 'text-slate-600'
+              }`}
+            >
+              ⚡ 6 题快刷（极速）
+            </button>
+            <button
+              type="button"
+              disabled={generating}
+              onClick={() => setTargetCount(10)}
+              className={`whitespace-nowrap rounded-full px-3 py-1.5 transition sm:px-4 ${
+                targetCount === 10 ? 'bg-white font-semibold text-slate-900 shadow-2xs' : 'text-slate-600'
+              }`}
+            >
+              🏆 10 题深度挑战
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className="btn-pill mt-4 !px-7 !py-2.5 !text-[13px] shadow-sm shadow-[#0071e3]/20 sm:mt-5 sm:!text-[13.5px]"
+            disabled={generating}
+            onClick={() => void onGenerateQuiz(targetCount)}
+          >
+            {generating ? `正在构建学习卡片 (${(genElapsedMs / 1000).toFixed(1)}s)…` : '开始卡片闯关'}
+          </button>
+
+          {generating && (
+            <div className="mt-3 flex items-center gap-2 text-[11.5px] text-[#0071e3] sm:mt-4 sm:text-[12px]">
+              <span className="h-2 w-2 animate-ping rounded-full bg-[#0071e3]" />
+              <span>
+                {genElapsedMs < 2500
+                  ? '正在提炼视频核心考点与实战场景…'
+                  : '正在生成干扰项解析并锚定原片时间戳…'}
+              </span>
+            </div>
+          )}
+          {error && <p className="mt-3 text-[12.5px] text-red-500">{error}</p>}
+        </div>
       </div>
     );
   }
@@ -948,52 +950,56 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
           : { title: '渐入佳境 · 值得二次复盘！', sub: '点击下方「仅重练错题」或回看对应时间戳即可快速突破。', emoji: '💪' };
 
     return (
-      <div className="panel-scroll flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-6 text-center">
-        <div className="w-full max-w-md rounded-3xl border border-slate-200/90 bg-gradient-to-b from-[#0071e3]/[0.05] via-white to-white p-6 shadow-sm">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#0071e3]/10 text-[32px]">
+      <div className="panel-scroll flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-2 py-2 text-center sm:px-5 sm:py-6">
+        <div className="my-auto w-full max-w-md rounded-2xl border border-slate-200/90 bg-gradient-to-b from-[#0071e3]/[0.05] via-white to-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0071e3]/10 text-[24px] sm:h-16 sm:w-16 sm:text-[32px]">
             {badgeInfo.emoji}
           </div>
-          <div className="mt-3 font-mono text-[34px] font-extrabold tracking-tight text-slate-900">
+          <div className="mt-2 font-mono text-[28px] leading-none font-extrabold tracking-tight text-slate-900 sm:mt-3 sm:text-[34px]">
             {stats.accuracy}
-            <span className="text-[18px] font-semibold text-slate-400">%</span>
+            <span className="ml-0.5 text-[15px] font-semibold text-slate-400 sm:text-[18px]">%</span>
           </div>
-          <h4 className="mt-1 text-[16px] font-bold text-slate-900">{badgeInfo.title}</h4>
-          <p className="mt-1 text-[12.5px] text-slate-500">{badgeInfo.sub}</p>
+          <h4 className="mt-1.5 text-[14.5px] font-bold text-slate-900 sm:text-[16px]">{badgeInfo.title}</h4>
+          <p className="mt-0.5 text-[11.5px] text-slate-500 sm:mt-1 sm:text-[12.5px]">{badgeInfo.sub}</p>
 
-          {/* 三宫格统计 */}
-          <div className="mt-5 grid grid-cols-3 gap-2.5">
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] p-3">
-              <div className="font-mono text-[18px] font-bold text-emerald-700">
-                {stats.correctCount} / {activeQuestions.length}
+          {/* 三宫格统计（单行不折行，对齐紧凑） */}
+          <div className="mt-3.5 grid grid-cols-3 gap-2 sm:mt-5 sm:gap-2.5">
+            <div className="flex flex-col items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-2 py-2.5 sm:rounded-2xl sm:p-3">
+              <div className="whitespace-nowrap font-mono text-[16px] font-bold leading-tight text-emerald-700 sm:text-[18px]">
+                {stats.correctCount}/{activeQuestions.length}
               </div>
-              <div className="mt-0.5 text-[11px] font-medium text-emerald-800/80">答对题数</div>
+              <div className="mt-1 whitespace-nowrap text-[11px] font-medium text-emerald-800/80">答对题数</div>
             </div>
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-3">
-              <div className="font-mono text-[18px] font-bold text-amber-700">🔥 {stats.maxStreak}</div>
-              <div className="mt-0.5 text-[11px] font-medium text-amber-800/80">最高连对</div>
+            <div className="flex flex-col items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-2 py-2.5 sm:rounded-2xl sm:p-3">
+              <div className="whitespace-nowrap font-mono text-[16px] font-bold leading-tight text-amber-700 sm:text-[18px]">
+                🔥 {stats.maxStreak}
+              </div>
+              <div className="mt-1 whitespace-nowrap text-[11px] font-medium text-amber-800/80">最高连对</div>
             </div>
-            <div className="rounded-2xl border border-rose-500/20 bg-rose-500/[0.05] p-3">
-              <div className="font-mono text-[18px] font-bold text-rose-600">{stats.wrongCount}</div>
-              <div className="mt-0.5 text-[11px] font-medium text-rose-800/80">待攻克错题</div>
+            <div className="flex flex-col items-center justify-center rounded-xl border border-rose-500/20 bg-rose-500/[0.05] px-2 py-2.5 sm:rounded-2xl sm:p-3">
+              <div className="whitespace-nowrap font-mono text-[16px] font-bold leading-tight text-rose-600 sm:text-[18px]">
+                {stats.wrongCount}
+              </div>
+              <div className="mt-1 whitespace-nowrap text-[11px] font-medium text-rose-800/80">待攻克错题</div>
             </div>
           </div>
 
           {/* 动作按钮组 */}
-          <div className="mt-6 flex flex-col gap-2.5">
+          <div className="mt-4 flex flex-col gap-2 sm:mt-6 sm:gap-2.5">
             {stats.wrongCount > 0 && (
               <button
                 type="button"
                 onClick={handleRetryWrong}
-                className="btn-pill w-full !py-2.5 !text-[13.5px]"
+                className="btn-pill w-full whitespace-nowrap !py-2 !text-[12.5px] sm:!py-2.5 sm:!text-[13.5px]"
               >
                 🎯 仅重练错题（{stats.wrongCount} 题专项突破）
               </button>
             )}
-            <div className="flex gap-2.5">
+            <div className="flex gap-2 sm:gap-2.5">
               <button
                 type="button"
                 onClick={() => handleOpenFullPaper(true)}
-                className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="flex-1 whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-2 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-50 sm:px-4 sm:text-[13px]"
               >
                 📋 展开全卷复盘
               </button>
@@ -1001,7 +1007,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 <button
                   type="button"
                   onClick={isSandboxPractice ? handleRestoreOwnerResult : handleStartSandboxPractice}
-                  className="flex-1 rounded-full border border-[#0071e3]/30 bg-[#0071e3]/10 px-4 py-2 text-[13px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white"
+                  className="flex-1 whitespace-nowrap rounded-full border border-[#0071e3]/30 bg-[#0071e3]/10 px-2.5 py-2 text-[12px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white sm:px-4 sm:text-[13px]"
                 >
                   {isSandboxPractice ? '👁 查看原分享结果' : '🎮 本地试做一遍'}
                 </button>
@@ -1009,7 +1015,7 @@ export const QuizPanel: React.FC<QuizPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => void onGenerateQuiz(targetCount)}
-                  className="flex-1 rounded-full border border-[#0071e3]/30 bg-[#0071e3]/10 px-4 py-2 text-[13px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white"
+                  className="flex-1 whitespace-nowrap rounded-full border border-[#0071e3]/30 bg-[#0071e3]/10 px-2.5 py-2 text-[12px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white sm:px-4 sm:text-[13px]"
                 >
                   🔄 再出一套新题
                 </button>

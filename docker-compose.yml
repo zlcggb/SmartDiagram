@@ -156,6 +156,7 @@ services:
         CN_MIRROR: ${CN_MIRROR:-false}
         NODE_IMAGE: ${NODE_IMAGE:-node:22-bookworm-slim}
         NGINX_IMAGE: ${NGINX_IMAGE:-nginx:stable-alpine}
+        VITE_PUBLIC_FILE_BASE: ${VITE_PUBLIC_FILE_BASE:-https://file-smartdiagram.unilumin-gtm.com}
     container_name: smartdiagram-web
     restart: always
     depends_on:

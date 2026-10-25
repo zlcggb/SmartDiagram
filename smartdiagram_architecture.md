@@ -243,7 +243,7 @@ Studio 设计稿按页懒加载最近 5 个 `SlideDesignVersion`；版本导航�
 | AI 研报 / 导图 / 问答 | `components/SummaryPanel.tsx` + `components/MindmapElixirCanvas.tsx`（支持一键发送至 `/diagram` 画布深度编辑）+ `lib/markdown.ts`（CJK 富文本、可视化流程卡片、原生 SVG 保护） |
 | 智能测验（Study Deck & 全卷） | `components/QuizPanel.tsx`（🎴 闯关卡片 + 📋 紧凑电子全卷双模式、底部固定操作栏、PostgreSQL + `localStorage` 双重持久化） |
 | 学习记录 / 文档中心 / 更新记录 / 管理台 | `pages/VideoHistoryPage.tsx` + `pages/VideoDocsPage.tsx`（`/video/docs`）+ `pages/VideoChangelogPage.tsx`（`/video/changelog`）+ `pages/VideoAdminPage.tsx` |
-| AI 视觉教练探索沙盒（独立目录） | `features/video-coach-lab/pages/VideoCoachLabPage.tsx`（`/video/coach-lab` · `/video/coach`）+ `lib/edgePerceptionEngine.ts`（L1 像素帧差门控、30fps 骨骼角度 HUD、2×2 时序网格合成、A/B 消融对比与一键转入学习闭环） |
+| AI 视觉教练探索沙盒（独立目录） | `features/video-coach-lab/pages/VideoCoachLabPage.tsx`（`/video/coach-lab` · `/video/coach`）+ `lib/edgePerceptionEngine.ts`（MediaPipe 模型与 WASM 托管于 Cloudflare R2 `${VITE_PUBLIC_FILE_BASE}/mediapipe/`，L1 像素帧差门控、30fps 骨骼角度 HUD、2×2 时序网格合成、A/B 消融对比与一键转入学习闭环） |
 | API 与本地历史 | `lib/api.ts`（base = `/video-api/api`）+ `lib/guestHistory.ts` |
 
 ---
@@ -365,7 +365,7 @@ PPT 导演视频的矩形聚焦由 `SlideNarration.focusPlanJson` 与 `alignment
 | 分区 | 服务 | 关键变量 |
 |------|------|----------|
 | **Platform** | deploy / docker | `DB_PASSWORD`、`GATEWAY_PORT`、`PPT_INTERNAL_API_SECRET` |
-| **Diagram** | api-diagram | `DIAGRAM_DATABASE_URL`、`REDIS_URL`、`OPENAI_*`、`AUTH_*` |
+| **Diagram** | api-diagram / web | `DIAGRAM_DATABASE_URL`、`REDIS_URL`、`OPENAI_*`、`AUTH_*`、`OBJECT_STORAGE_BACKEND`（`r2`/`s3`/`local`）、`S3_*`、`VITE_PUBLIC_FILE_BASE` |
 | **PPT** | api-ppt + renderer | `DATABASE_URL`（ppt_agent）、`AI_*`、`STORAGE_DIR` |
 | **Video** | api-video + jeff | `VIDEO_DATABASE_URL`（vidgrab）、`TYPESAFE_BASE_URL`（`http://shared-jeff:8001`）、`TYPESAFE_API_KEY`、`ASR_MODEL` |
 
