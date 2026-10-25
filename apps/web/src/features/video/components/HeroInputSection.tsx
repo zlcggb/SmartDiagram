@@ -84,6 +84,7 @@ export const HeroInputSection: React.FC<HeroInputSectionProps> = ({
   onStageFile,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileUrlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [localUploadError, setLocalUploadError] = useState('');
   const [showLogin, setShowLogin] = useState(false);
@@ -93,6 +94,14 @@ export const HeroInputSection: React.FC<HeroInputSectionProps> = ({
   const [mobileSwitcherOpen, setMobileSwitcherOpen] = useState(false);
 
   const isLoginError = GUIDED_CODES.includes(errorCode);
+
+  useEffect(() => {
+    const el = mobileUrlTextareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const nextHeight = Math.min(Math.max(el.scrollHeight, 104), 320);
+    el.style.height = `${nextHeight}px`;
+  }, [urlValue, inputTab]);
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
@@ -412,13 +421,54 @@ export const HeroInputSection: React.FC<HeroInputSectionProps> = ({
               </div>
             ) : (
               <div>
-                <div className="flex flex-col gap-2.5 sm:flex-row">
+                {/* 移动端专属：高度随粘贴内容自适应伸缩的多行输入域（最高展开至 320px，充分利用屏幕下方空间） */}
+                <div className="flex flex-col gap-3 sm:hidden">
+                  <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-slate-50/75 transition focus-within:border-[#0071e3] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0071e3]/15">
+                    <textarea
+                      ref={mobileUrlTextareaRef}
+                      rows={3}
+                      value={urlValue}
+                      onChange={(e) => onUrlChange(e.target.value)}
+                      placeholder="粘贴 Bilibili / YouTube / 抖音 / 小红书 / TikTok 视频链接或完整分享口令…"
+                      className="min-h-[104px] max-h-[320px] w-full resize-none bg-transparent px-3.5 pt-3 pb-2 text-[14px] leading-relaxed break-all text-[#1d1d1f] placeholder:text-slate-400 outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          onParseUrl();
+                        }
+                      }}
+                    />
+                    {urlValue && (
+                      <div className="flex items-center justify-between border-t border-slate-200/60 bg-slate-100/50 px-3.5 py-1.5 text-[11px] text-slate-400">
+                        <span>已输入 {urlValue.length} 字符</span>
+                        <button
+                          type="button"
+                          onClick={() => onUrlChange('')}
+                          className="rounded-full bg-white px-2.5 py-0.5 text-[11px] font-medium text-slate-600 shadow-2xs active:scale-95"
+                        >
+                          ✕ 清空
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={loading || !urlValue.trim()}
+                    onClick={onParseUrl}
+                    className="btn-pill !h-11 w-full text-[14.5px] font-semibold shadow-sm"
+                  >
+                    {loading ? '正在解析…' : '解析视频'}
+                  </button>
+                </div>
+
+                {/* 桌面端：经典单行胶囊输入框 + 解析按钮 */}
+                <div className="hidden gap-2.5 sm:flex sm:flex-row">
                   <input
                     type="url"
                     value={urlValue}
                     onChange={(e) => onUrlChange(e.target.value)}
                     placeholder="粘贴 Bilibili / YouTube / 抖音 / TikTok 视频链接…"
-                    className="field-pill min-w-0 flex-1 !h-11"
+                    className="field-pill min-w-0 sm:flex-1 !h-11"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') onParseUrl();
                     }}
@@ -433,7 +483,7 @@ export const HeroInputSection: React.FC<HeroInputSectionProps> = ({
                   </button>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[12px] text-slate-500">
+                <div className="mt-3 hidden flex-wrap items-center justify-between gap-2 text-[12px] text-slate-500 sm:flex">
                   <button
                     type="button"
                     onClick={() => setShowLogin((v) => !v)}

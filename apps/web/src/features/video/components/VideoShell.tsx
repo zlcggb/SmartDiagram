@@ -1,19 +1,37 @@
-import React from 'react';
-import { NavLink, useNavigate, useSearchParams } from 'react-router-dom';
-import { isAdminSession, readAuthSession } from '@/shared/lib/config/auth';
+import React, { useEffect, useRef, useState } from 'react';
+import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { isAdminSession } from '@/shared/lib/config/auth';
+import { usePlatformAuth } from '@/shared/store/authStore';
 
 export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isCoachRoute = location.pathname.startsWith('/video/coach');
   const [searchParams] = useSearchParams();
   const isReadOnlyShare = Boolean(
     searchParams.get('s') || (searchParams.get('share') && searchParams.get('analysis')),
   );
-  const session = readAuthSession();
+  const session = usePlatformAuth((state) => state.session);
+  const openLogin = usePlatformAuth((state) => state.openLogin);
+  const logout = usePlatformAuth((state) => state.logout);
   const isAdmin = isAdminSession(session);
   const userName =
     session?.user?.display_name ||
     session?.user?.email?.split('@')[0] ||
     '';
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [userMenuOpen]);
 
   const handleGoVideoHome = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -25,16 +43,20 @@ export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }
 
   return (
     <div className="vidgrab-shell flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#f2f2f7] text-[#1d1d1f] lg:bg-[#f5f5f7]">
-      {/* 视频学习专属 Apple 毛玻璃顶部导航栏 */}
-      <header className="ios-glass-header z-30 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-black/[0.07] px-3 shadow-[0_1px_8px_-2px_rgba(15,23,42,0.04)] lg:h-14 lg:gap-3 lg:border-slate-200/80 lg:px-6">
+      {/* 视频学习专属 Apple 毛玻璃顶部导航栏（移动端进入视觉教练工作台时使用教练专属单行顶栏，避免双顶栏叠高） */}
+      <header
+        className={`ios-glass-header z-30 h-12 shrink-0 items-center justify-between gap-2 border-b border-black/[0.07] px-3 shadow-[0_1px_8px_-2px_rgba(15,23,42,0.04)] lg:flex lg:h-14 lg:gap-3 lg:border-slate-200/80 lg:px-6 ${
+          isCoachRoute ? 'hidden' : 'flex'
+        }`}
+      >
         {/* 左侧：移动端返回主桌面按钮 + 品牌标识（点击直接返回视频学习助手首页） */}
         <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate(isCoachRoute ? '/video' : '/')}
             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-600 transition active:scale-95 active:bg-slate-200/70 lg:hidden"
-            title="返回 SmartDiagram 桌面"
-            aria-label="返回桌面"
+            title={isCoachRoute ? '返回视频学习助手首页' : '返回 SmartDiagram 桌面'}
+            aria-label="返回"
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
               <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
@@ -162,23 +184,53 @@ export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }
           </nav>
 
           {userName ? (
-            <div
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 shadow-2xs lg:px-2.5 lg:py-1 lg:text-[11.5px]"
-              title={`已登录账号：${userName}`}
-            >
-              <span className="grid h-4 w-4 place-items-center rounded-full bg-gradient-to-tr from-[#0071e3] to-indigo-500 text-[10px] font-bold text-white">
-                {userName.slice(0, 1).toUpperCase()}
-              </span>
-              <span className="hidden max-w-[84px] truncate sm:inline">{userName}</span>
+            <div ref={userMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((v) => !v)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200/80 bg-white px-2.5 text-[12px] font-medium text-slate-700 shadow-2xs transition hover:border-[#0071e3]/40 active:scale-95 cursor-pointer"
+                title={`已登录账号：${userName}`}
+              >
+                <span className="grid h-5 w-5 place-items-center rounded-full bg-gradient-to-tr from-[#0071e3] to-indigo-500 text-[10.5px] font-bold text-white">
+                  {userName.slice(0, 1).toUpperCase()}
+                </span>
+                <span className="max-w-[72px] truncate sm:max-w-[96px]">{userName}</span>
+              </button>
+
+              {userMenuOpen && (
+                <div className=" absolute right-0 top-10 z-50 w-48 rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-xl backdrop-blur-xl">
+                  <div className="border-b border-slate-100 px-2.5 py-2">
+                    <div className="truncate text-[12.5px] font-semibold text-slate-900">{userName}</div>
+                    {session?.user?.email && (
+                      <div className="truncate text-[11px] text-slate-500">{session.user.email}</div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      logout();
+                    }}
+                    className="mt-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-rose-600 transition hover:bg-rose-50 cursor-pointer"
+                  >
+                    <span>退出登录</span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
-            <span
-              className="hidden items-center gap-1 rounded-full border border-slate-200/70 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500 md:inline-flex"
-              title="游客模式（本地与服务端双重保存学习进度）"
+            <button
+              type="button"
+              onClick={() => openLogin()}
+              className="inline-flex h-8 items-center gap-1 rounded-full bg-[#0071e3]/12 px-3 text-[12.5px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white active:scale-95 cursor-pointer"
+              title="登录账户以同步视频学习记录与评测进度"
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              游客模式
-            </span>
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
+                <circle cx="12" cy="8" r="4" />
+                <path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6" strokeLinecap="round" />
+              </svg>
+              <span>登录</span>
+            </button>
           )}
         </div>
       </header>
@@ -187,12 +239,20 @@ export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }
       <div id="vidgrab-mobile-subheader-slot" className="z-20 shrink-0 lg:hidden" />
 
       {/* 主体内容区 */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">{children}</div>
+      <div
+        className={`flex min-h-0 flex-1 flex-col ${
+          isCoachRoute ? 'overflow-hidden' : 'overflow-y-auto lg:overflow-hidden'
+        }`}
+      >
+        {children}
+      </div>
 
-      {/* 移动端专属：iOS 原生底部毛玻璃标签栏 (Bottom Tab Bar) */}
+      {/* 移动端专属：iOS 原生底部毛玻璃标签栏 (视觉教练页面使用专属底栏，隐藏通用学习底栏) */}
       <nav
         aria-label="视频学习移动端导航"
-        className="ios-glass-tabbar z-30 flex shrink-0 items-center justify-around border-t border-black/[0.08] px-1 pt-1.5 pb-[max(0.35rem,env(safe-area-inset-bottom))] lg:hidden"
+        className={`ios-glass-tabbar z-30 shrink-0 items-center justify-around border-t border-black/[0.08] px-1 pt-1.5 pb-[max(0.35rem,env(safe-area-inset-bottom))] lg:hidden ${
+          isCoachRoute ? 'hidden' : 'flex'
+        }`}
       >
         <NavLink
           to="/video"

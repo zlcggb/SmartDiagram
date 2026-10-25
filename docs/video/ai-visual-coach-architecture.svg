@@ -1,0 +1,481 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1040" width="1600" height="1040">
+  <defs>
+    <!-- Apple Light Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F7F8FA" />
+      <stop offset="50%" stop-color="#F2F4F8" />
+      <stop offset="100%" stop-color="#EEF1F6" />
+    </linearGradient>
+
+    <!-- Subtle Card Header Gradients -->
+    <linearGradient id="blueHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#EBF4FF" />
+      <stop offset="100%" stop-color="#F5F9FF" />
+    </linearGradient>
+    <linearGradient id="indigoHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F0EEFF" />
+      <stop offset="100%" stop-color="#F8F7FF" />
+    </linearGradient>
+    <linearGradient id="greenHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#E9FBF0" />
+      <stop offset="100%" stop-color="#F4FDF7" />
+    </linearGradient>
+
+    <!-- Accent Pill Gradients -->
+    <linearGradient id="bluePill" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0071E3" />
+      <stop offset="100%" stop-color="#2997FF" />
+    </linearGradient>
+    <linearGradient id="indigoPill" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5856D6" />
+      <stop offset="100%" stop-color="#7D7AFF" />
+    </linearGradient>
+    <linearGradient id="greenPill" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1D9E34" />
+      <stop offset="100%" stop-color="#30D158" />
+    </linearGradient>
+
+    <!-- Soft Apple Card Shadows -->
+    <filter id="cardShadow" x="-4%" y="-3%" width="108%" height="108%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#1D1D1F" flood-opacity="0.05" />
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#1D1D1F" flood-opacity="0.03" />
+    </filter>
+    <filter id="subCardShadow" x="-3%" y="-3%" width="106%" height="108%">
+      <feDropShadow dx="0" dy="2" stdDeviation="5" flood-color="#1D1D1F" flood-opacity="0.035" />
+    </filter>
+
+    <!-- Flow Arrow Markers -->
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 8 5 L 1 8.5 z" fill="#0071E3" />
+    </marker>
+    <marker id="arrowIndigo" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 8 5 L 1 8.5 z" fill="#5856D6" />
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1.5 L 8 5 L 1 8.5 z" fill="#1D9E34" />
+    </marker>
+  </defs>
+
+  <!-- ======================== BACKGROUND ======================== -->
+  <rect width="1600" height="1040" fill="url(#bgGrad)" />
+
+  <!-- Subtle Corner Registration Dots for Editorial Precision -->
+  <g fill="#D2D2D7" opacity="0.45">
+    <circle cx="48" cy="32" r="1.5" />
+    <circle cx="1552" cy="32" r="1.5" />
+    <circle cx="48" cy="1008" r="1.5" />
+    <circle cx="1552" cy="1008" r="1.5" />
+  </g>
+
+  <!-- ======================== HEADER SECTION ======================== -->
+  <g transform="translate(48, 30)">
+    <!-- Eyebrow Pill -->
+    <rect x="0" y="0" width="364" height="26" rx="13" fill="#E8F2FF" stroke="#B8D8FF" stroke-width="1" />
+    <circle cx="14" cy="13" r="4" fill="#0071E3" />
+    <text x="26" y="17" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#0066CC" letter-spacing="0.5">SMARTDIAGRAM · AI VISUAL COACH ARCHITECTURE</text>
+
+    <!-- Main Title -->
+    <text x="0" y="60" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="30" font-weight="700" fill="#1D1D1F" letter-spacing="-0.5">AI 视觉分析教练 · 三步破局计算架构</text>
+
+    <!-- Subtitle -->
+    <text x="0" y="86" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="14" font-weight="400" fill="#515154">前端轻量姿态检测（WebGPU 30fps）  +  多帧时序拼图 VLM（消除几何盲区）  +  教练复盘闭环（知识内化与一键分享）</text>
+
+    <!-- Top-Right Key Metrics Bento Pills -->
+    <g transform="translate(972, 6)">
+      <!-- Metric 1 -->
+      <rect x="0" y="0" width="168" height="76" rx="16" fill="#FFFFFF" stroke="#E5E5EA" stroke-width="1" filter="url(#subCardShadow)" />
+      <text x="16" y="26" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="11.5" font-weight="500" fill="#86868B">无效轮询过滤率</text>
+      <text x="16" y="54" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="24" font-weight="700" fill="#0071E3">&gt; 85%</text>
+      <rect x="94" y="38" width="58" height="20" rx="6" fill="#E8F2FF" />
+      <text x="123" y="52" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10.5" font-weight="600" fill="#0071E3">帧差门控</text>
+
+      <!-- Metric 2 -->
+      <rect x="182" y="0" width="168" height="76" rx="16" fill="#FFFFFF" stroke="#E5E5EA" stroke-width="1" filter="url(#subCardShadow)" />
+      <text x="198" y="26" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="11.5" font-weight="500" fill="#86868B">VLM 推理耗时与成本</text>
+      <text x="198" y="54" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="24" font-weight="700" fill="#5856D6">↓ 52%</text>
+      <rect x="276" y="38" width="58" height="20" rx="6" fill="#F0EEFF" />
+      <text x="305" y="52" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10.5" font-weight="600" fill="#5856D6">2×2 拼图</text>
+
+      <!-- Metric 3 -->
+      <rect x="364" y="0" width="168" height="76" rx="16" fill="#FFFFFF" stroke="#E5E5EA" stroke-width="1" filter="url(#subCardShadow)" />
+      <text x="380" y="26" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="11.5" font-weight="500" fill="#86868B">关键极值动作捕获</text>
+      <text x="380" y="54" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="24" font-weight="700" fill="#1D9E34">30 fps</text>
+      <rect x="458" y="38" width="58" height="20" rx="6" fill="#E9FBF0" />
+      <text x="487" y="52" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10.5" font-weight="600" fill="#1D9E34">骨骼锚点</text>
+    </g>
+  </g>
+
+  <!-- ======================== STAGE 01: FRONTEND EDGE PERCEPTION ======================== -->
+  <g transform="translate(48, 134)">
+    <!-- Main Stage Card -->
+    <rect x="0" y="0" width="464" height="624" rx="24" fill="#FFFFFF" stroke="#DCE3EC" stroke-width="1.2" filter="url(#cardShadow)" />
+    <!-- Top Banner -->
+    <path d="M 0 24 Q 0 0 24 0 L 440 0 Q 464 0 464 24 L 464 88 L 0 88 Z" fill="url(#blueHeader)" />
+    <line x1="0" y1="88" x2="464" y2="88" stroke="#DCE8F8" stroke-width="1" />
+
+    <!-- Step Pill -->
+    <rect x="24" y="18" width="96" height="24" rx="12" fill="url(#bluePill)" />
+    <text x="72" y="34" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="11.5" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">STEP 01</text>
+    <text x="132" y="35" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="600" fill="#0066CC">浏览器边缘计算 · 零服务器算力消耗</text>
+
+    <!-- Stage Title -->
+    <text x="24" y="68" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="20" font-weight="700" fill="#1D1D1F">前端轻量姿态检测与智能门控抽帧</text>
+
+    <!-- Painpoint Solved Banner -->
+    <rect x="24" y="102" width="416" height="32" rx="8" fill="#FFF8EC" stroke="#F8DFB6" stroke-width="1" />
+    <text x="36" y="122" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#B25000">🎯 破局：告别 1fps 漏掉极值帧、队列积压雪崩与画面静止时废话刷屏</text>
+
+    <!-- Sub-module 1.1: Media Source -->
+    <g transform="translate(24, 148)">
+      <rect x="0" y="0" width="416" height="92" rx="14" fill="#F8FAFC" stroke="#E5E9F0" stroke-width="1" />
+      <text x="16" y="24" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#1D1D1F">1.1 多源视频流统一接入（Web Media Pipeline）</text>
+      
+      <!-- Left Box: Camera -->
+      <rect x="16" y="36" width="186" height="44" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+      <circle cx="34" cy="58" r="6" fill="#30D158" />
+      <text x="48" y="54" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="600" fill="#1D1D1F">实时摄像头 (WebRTC)</text>
+      <text x="48" y="70" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="11" fill="#86868B">getUserMedia · 30fps 采集</text>
+
+      <!-- Right Box: Local / URL Video -->
+      <rect x="214" y="36" width="186" height="44" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+      <circle cx="232" cy="58" r="6" fill="#0071E3" />
+      <text x="246" y="54" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="600" fill="#1D1D1F">本地 / 平台视频流</text>
+      <text x="246" y="70" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="11" fill="#86868B">HTML5 Video + Canvas 渲染</text>
+    </g>
+
+    <!-- Down Arrow 1.1 -> 1.2 -->
+    <line x1="232" y1="240" x2="232" y2="262" stroke="#0071E3" stroke-width="1.8" marker-end="url(#arrowBlue)" />
+
+    <!-- Sub-module 1.2: Dual Gate Engine -->
+    <g transform="translate(24, 266)">
+      <rect x="0" y="0" width="416" height="172" rx="14" fill="#F8FAFC" stroke="#E5E9F0" stroke-width="1" />
+      <text x="16" y="24" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#1D1D1F">1.2 双路协同感知引擎（WebGPU / WASM 实时运行）</text>
+
+      <!-- Left Branch: Frame Diff Gate -->
+      <rect x="16" y="36" width="186" height="122" rx="10" fill="#FFFFFF" stroke="#D8E6F8" stroke-width="1.2" />
+      <rect x="28" y="48" width="76" height="20" rx="6" fill="#E8F2FF" />
+      <text x="66" y="62" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" font-weight="600" fill="#0071E3">像素帧差门控</text>
+      <text x="28" y="86" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="600" fill="#1D1D1F">Frame Diff Filter</text>
+      <text x="28" y="106" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#6E6E73">• 计算相邻帧 L1 像素变化率</text>
+      <text x="28" y="124" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#6E6E73">• 静止/微动 (&lt;τ) 直接静默丢弃</text>
+      <text x="28" y="142" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#0071E3">✓ 阻断 85%+ 无意义 VLM 调用</text>
+
+      <!-- Right Branch: MediaPipe Pose -->
+      <rect x="214" y="36" width="186" height="122" rx="10" fill="#FFFFFF" stroke="#D8E6F8" stroke-width="1.2" />
+      <rect x="226" y="48" width="92" height="20" rx="6" fill="#E9FBF0" />
+      <text x="272" y="62" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" font-weight="600" fill="#1D9E34">轻量姿态关键点</text>
+      <text x="226" y="86" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="600" fill="#1D1D1F">MediaPipe Pose / Hands</text>
+      <text x="226" y="106" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#6E6E73">• 33 个 3D 骨骼关键点 (30fps)</text>
+      <text x="226" y="124" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#6E6E73">• 实时解算关节角 θ 与重心轨迹</text>
+      <text x="226" y="142" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#1D9E34">✓ 精准定位动作极值帧 (Apex)</text>
+    </g>
+
+    <!-- Down Arrow 1.2 -> 1.3 -->
+    <line x1="232" y1="438" x2="232" y2="460" stroke="#0071E3" stroke-width="1.8" marker-end="url(#arrowBlue)" />
+
+    <!-- Sub-module 1.3: Keyframe & Skeleton Overlay -->
+    <g transform="translate(24, 464)">
+      <rect x="0" y="0" width="416" height="136" rx="14" fill="#F2F7FF" stroke="#B8D8FF" stroke-width="1.2" />
+      <text x="16" y="24" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#0051A8">1.3 动作周期关键帧抽取 + 骨骼视觉锚点渲染</text>
+      <text x="16" y="44" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#515154">按角速度拐点捕获 4 个关键帧，Canvas 原位叠加骨骼线与角度水印：</text>
+
+      <!-- 4 Mini Phase Boxes -->
+      <g transform="translate(16, 56)">
+        <rect x="0" y="0" width="88" height="64" rx="8" fill="#FFFFFF" stroke="#C8E0FF" stroke-width="1" />
+        <text x="44" y="20" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="11" font-weight="700" fill="#0071E3">① 起始帧</text>
+        <text x="44" y="38" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#1D1D1F">准备姿态</text>
+        <text x="44" y="54" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Mono', monospace" font-size="10" fill="#86868B">T+0.0s · 172°</text>
+
+        <rect x="98" y="0" width="88" height="64" rx="8" fill="#FFFFFF" stroke="#C8E0FF" stroke-width="1" />
+        <text x="142" y="20" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="11" font-weight="700" fill="#0071E3">② 蓄力帧</text>
+        <text x="142" y="38" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#1D1D1F">离心下潜/引拍</text>
+        <text x="142" y="54" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Mono', monospace" font-size="10" fill="#86868B">T+0.4s · 128°</text>
+
+        <rect x="196" y="0" width="94" height="64" rx="8" fill="#FFF5F5" stroke="#FEB2B2" stroke-width="1.2" />
+        <text x="243" y="20" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="11" font-weight="700" fill="#E53E3E">③ 极值顶点帧</text>
+        <text x="243" y="38" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" font-weight="600" fill="#C53030">发力极点 (Apex)</text>
+        <text x="243" y="54" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Mono', monospace" font-size="10" font-weight="600" fill="#E53E3E">T+0.8s · 86°</text>
+
+        <rect x="300" y="0" width="84" height="64" rx="8" fill="#FFFFFF" stroke="#C8E0FF" stroke-width="1" />
+        <text x="342" y="20" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="11" font-weight="700" fill="#0071E3">④ 结束帧</text>
+        <text x="342" y="38" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#1D1D1F">收势回位</text>
+        <text x="342" y="54" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Mono', monospace" font-size="10" fill="#86868B">T+1.3s · 168°</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ======================== CONNECTOR 01 -> 02 ======================== -->
+  <g transform="translate(512, 420)">
+    <path d="M 2 26 L 50 26" stroke="#0071E3" stroke-width="2.2" stroke-dasharray="4 3" marker-end="url(#arrowBlue)" />
+    <rect x="3" y="-12" width="50" height="30" rx="8" fill="#FFFFFF" stroke="#DCE3EC" stroke-width="1" />
+    <text x="28" y="1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="9.5" font-weight="600" fill="#0071E3">网格+JSON</text>
+    <text x="28" y="13" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Mono', monospace" font-size="9" fill="#86868B">~180KB</text>
+  </g>
+
+  <!-- ======================== STAGE 02: TEMPORAL GRID VLM ======================== -->
+  <g transform="translate(568, 134)">
+    <!-- Main Stage Card -->
+    <rect x="0" y="0" width="464" height="624" rx="24" fill="#FFFFFF" stroke="#DCE3EC" stroke-width="1.2" filter="url(#cardShadow)" />
+    <!-- Top Banner -->
+    <path d="M 0 24 Q 0 0 24 0 L 440 0 Q 464 0 464 24 L 464 88 L 0 88 Z" fill="url(#indigoHeader)" />
+    <line x1="0" y1="88" x2="464" y2="88" stroke="#E4E0FA" stroke-width="1" />
+
+    <!-- Step Pill -->
+    <rect x="24" y="18" width="96" height="24" rx="12" fill="url(#indigoPill)" />
+    <text x="72" y="34" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="11.5" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">STEP 02</text>
+    <text x="132" y="35" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="600" fill="#5856D6">多模态时序认知层 · api-video (:4020)</text>
+
+    <!-- Stage Title -->
+    <text x="24" y="68" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="20" font-weight="700" fill="#1D1D1F">多帧时序拼图 + 骨骼量化锚点 VLM</text>
+
+    <!-- Painpoint Solved Banner -->
+    <rect x="24" y="102" width="416" height="32" rx="8" fill="#F5F3FF" stroke="#DDD6FE" stroke-width="1" />
+    <text x="36" y="122" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#5B21B6">🎯 破局：根治通用 VLM 看不准空间角度、多图 Token 爆炸与跨窗断片</text>
+
+    <!-- Sub-module 2.1: Temporal Grid Composer -->
+    <g transform="translate(24, 148)">
+      <rect x="0" y="0" width="416" height="156" rx="14" fill="#F8FAFC" stroke="#E5E9F0" stroke-width="1" />
+      <text x="16" y="24" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#1D1D1F">2.1 时序网格合成器（2×2 Temporal Grid Image）</text>
+
+      <!-- Visual 2x2 Grid Illustration (Left) -->
+      <g transform="translate(16, 36)">
+        <rect x="0" y="0" width="164" height="106" rx="8" fill="#1D1D1F" />
+        <!-- Cell 1 -->
+        <rect x="4" y="4" width="76" height="47" rx="4" fill="#2C2C2E" />
+        <text x="10" y="16" font-family="'SF Mono', monospace" font-size="9" font-weight="700" fill="#30D158">#1 T+0.0s</text>
+        <!-- Stick figure 1 -->
+        <circle cx="42" cy="22" r="3.5" fill="#64D2FF" />
+        <line x1="42" y1="26" x2="42" y2="38" stroke="#64D2FF" stroke-width="1.8" />
+        <line x1="42" y1="38" x2="37" y2="47" stroke="#30D158" stroke-width="1.8" />
+        <line x1="42" y1="38" x2="47" y2="47" stroke="#30D158" stroke-width="1.8" />
+
+        <!-- Cell 2 -->
+        <rect x="84" y="4" width="76" height="47" rx="4" fill="#2C2C2E" />
+        <text x="90" y="16" font-family="'SF Mono', monospace" font-size="9" font-weight="700" fill="#FFD60A">#2 T+0.4s</text>
+        <circle cx="122" cy="24" r="3.5" fill="#64D2FF" />
+        <line x1="122" y1="28" x2="119" y2="39" stroke="#64D2FF" stroke-width="1.8" />
+        <line x1="119" y1="39" x2="114" y2="47" stroke="#FFD60A" stroke-width="1.8" />
+        <line x1="119" y1="39" x2="126" y2="47" stroke="#FFD60A" stroke-width="1.8" />
+
+        <!-- Cell 3 (Apex Alert) -->
+        <rect x="4" y="55" width="76" height="47" rx="4" fill="#3A1D22" stroke="#FF453A" stroke-width="1" />
+        <text x="10" y="67" font-family="'SF Mono', monospace" font-size="9" font-weight="700" fill="#FF453A">#3 APEX 86°</text>
+        <circle cx="42" cy="78" r="3.5" fill="#FF453A" />
+        <line x1="42" y1="82" x2="36" y2="91" stroke="#FF453A" stroke-width="1.8" />
+        <line x1="36" y1="91" x2="44" y2="98" stroke="#FF453A" stroke-width="1.8" />
+
+        <!-- Cell 4 -->
+        <rect x="84" y="55" width="76" height="47" rx="4" fill="#2C2C2E" />
+        <text x="90" y="67" font-family="'SF Mono', monospace" font-size="9" font-weight="700" fill="#30D158">#4 T+1.3s</text>
+        <circle cx="122" cy="73" r="3.5" fill="#64D2FF" />
+        <line x1="122" y1="77" x2="122" y2="89" stroke="#64D2FF" stroke-width="1.8" />
+        <line x1="122" y1="89" x2="117" y2="98" stroke="#30D158" stroke-width="1.8" />
+        <line x1="122" y1="89" x2="127" y2="98" stroke="#30D158" stroke-width="1.8" />
+      </g>
+
+      <!-- Right Explanation of Grid -->
+      <g transform="translate(192, 40)">
+        <text x="0" y="14" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="600" fill="#1D1D1F">为什么单张网格图远胜多图上传？</text>
+        <text x="0" y="36" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#515154">1. 空间自注意力对齐：VLM 在同一张图</text>
+        <text x="14" y="52" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#515154">内直接对比 4 格的位移与角度变化</text>
+        <text x="0" y="72" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#515154">2. 视觉 Token 降本 50%+，首字提速 45%</text>
+        <text x="0" y="92" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#5856D6">3. 带时间戳+骨骼线水印，彻底消除幻觉</text>
+      </g>
+    </g>
+
+    <!-- Down Arrow 2.1 -> 2.2 -->
+    <line x1="232" y1="304" x2="232" y2="326" stroke="#5856D6" stroke-width="1.8" marker-end="url(#arrowIndigo)" />
+
+    <!-- Sub-module 2.2: Multimodal Prompt Grounding -->
+    <g transform="translate(24, 330)">
+      <rect x="0" y="0" width="416" height="122" rx="14" fill="#F8FAFC" stroke="#E5E9F0" stroke-width="1" />
+      <text x="16" y="24" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#1D1D1F">2.2 具身量化提示词注入（Grounded Coach Prompting）</text>
+
+      <!-- 3 Input Pills -->
+      <rect x="16" y="36" width="122" height="72" rx="10" fill="#FFFFFF" stroke="#DDD6FE" stroke-width="1" />
+      <text x="77" y="56" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="700" fill="#5856D6">📐 骨骼角度 JSON</text>
+      <text x="77" y="74" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Mono', monospace" font-size="10" fill="#6E6E73">knee_angle: 86°</text>
+      <text x="77" y="90" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Mono', monospace" font-size="10" fill="#6E6E73">valgus_offset: +14°</text>
+
+      <rect x="147" y="36" width="122" height="72" rx="10" fill="#FFFFFF" stroke="#DDD6FE" stroke-width="1" />
+      <text x="208" y="56" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="700" fill="#5856D6">📋 教练评分标尺</text>
+      <text x="208" y="74" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10.5" fill="#6E6E73">场景专属 Rubric</text>
+      <text x="208" y="90" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10.5" fill="#6E6E73">标准阈值 &amp; 扣分项</text>
+
+      <rect x="278" y="36" width="122" height="72" rx="10" fill="#FFFFFF" stroke="#DDD6FE" stroke-width="1" />
+      <text x="339" y="56" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="700" fill="#5856D6">🔄 滑动状态记忆</text>
+      <text x="339" y="74" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10.5" fill="#6E6E73">前序 3 个动作摘要</text>
+      <text x="339" y="90" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10.5" fill="#6E6E73">跟踪疲劳度与趋势</text>
+    </g>
+
+    <!-- Down Arrow 2.2 -> 2.3 -->
+    <line x1="232" y1="452" x2="232" y2="474" stroke="#5856D6" stroke-width="1.8" marker-end="url(#arrowIndigo)" />
+
+    <!-- Sub-module 2.3: Dual Stream Output -->
+    <g transform="translate(24, 478)">
+      <rect x="0" y="0" width="416" height="122" rx="14" fill="#F4F2FF" stroke="#C4B5FD" stroke-width="1.2" />
+      <text x="16" y="24" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#4C1D95">2.3 快慢双通道 VLM 协同输出（Qwen3-VL / GPT-4o）</text>
+
+      <!-- Fast Stream -->
+      <rect x="16" y="36" width="186" height="72" rx="10" fill="#FFFFFF" stroke="#DDD6FE" stroke-width="1" />
+      <text x="28" y="56" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="700" fill="#5856D6">⚡ 快通道：SSE 实时纠偏流</text>
+      <text x="28" y="74" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#515154">首字 &lt; 800ms，仅在动作完成或</text>
+      <text x="28" y="90" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#515154">出现风险时输出 1~2 句口语指导</text>
+
+      <!-- Slow Structured Stream -->
+      <rect x="214" y="36" width="186" height="72" rx="10" fill="#FFFFFF" stroke="#DDD6FE" stroke-width="1" />
+      <text x="226" y="56" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="700" fill="#5856D6">📦 深通道：结构化动作事件</text>
+      <text x="226" y="74" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#515154">输出起止时间戳、五维打分、</text>
+      <text x="226" y="90" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#515154">问题定格帧 ID 与训练处方 JSON</text>
+    </g>
+  </g>
+
+  <!-- ======================== CONNECTOR 02 -> 03 ======================== -->
+  <g transform="translate(1032, 420)">
+    <path d="M 2 26 L 50 26" stroke="#5856D6" stroke-width="2.2" stroke-dasharray="4 3" marker-end="url(#arrowIndigo)" />
+    <rect x="3" y="-12" width="50" height="30" rx="8" fill="#FFFFFF" stroke="#DCE3EC" stroke-width="1" />
+    <text x="28" y="1" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="9.5" font-weight="600" fill="#5856D6">SSE+事件</text>
+    <text x="28" y="13" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Mono', monospace" font-size="9" fill="#86868B">实时流</text>
+  </g>
+
+  <!-- ======================== STAGE 03: COACHING LOOP & STUDIO ======================== -->
+  <g transform="translate(1088, 134)">
+    <!-- Main Stage Card -->
+    <rect x="0" y="0" width="464" height="624" rx="24" fill="#FFFFFF" stroke="#DCE3EC" stroke-width="1.2" filter="url(#cardShadow)" />
+    <!-- Top Banner -->
+    <path d="M 0 24 Q 0 0 24 0 L 440 0 Q 464 0 464 24 L 464 88 L 0 88 Z" fill="url(#greenHeader)" />
+    <line x1="0" y1="88" x2="464" y2="88" stroke="#D1F4DE" stroke-width="1" />
+
+    <!-- Step Pill -->
+    <rect x="24" y="18" width="96" height="24" rx="12" fill="url(#greenPill)" />
+    <text x="72" y="34" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="11.5" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">STEP 03</text>
+    <text x="132" y="35" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="600" fill="#1D9E34">复用 SmartDiagram /video 核心优势</text>
+
+    <!-- Stage Title -->
+    <text x="24" y="68" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="20" font-weight="700" fill="#1D1D1F">教练复盘与学习内化完整闭环</text>
+
+    <!-- Painpoint Solved Banner -->
+    <rect x="24" y="102" width="416" height="32" rx="8" fill="#ECFDF3" stroke="#A6F4C5" stroke-width="1" />
+    <text x="36" y="122" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#067647">🎯 破局：把“看完即忘的流水账日志”升级为可沉淀的“完整学习闭环”</text>
+
+    <!-- Sub-module 3.1: Interactive Action Timeline -->
+    <g transform="translate(24, 148)">
+      <rect x="0" y="0" width="416" height="118" rx="14" fill="#F8FAFC" stroke="#E5E9F0" stroke-width="1" />
+      <text x="16" y="24" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#1D1D1F">3.1 关键问题帧定格回放（VideoPlayer 时间轴锚定）</text>
+
+      <!-- Timeline Bar Mockup -->
+      <rect x="16" y="38" width="384" height="32" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+      <line x1="32" y1="54" x2="384" y2="54" stroke="#E5E5EA" stroke-width="4" stroke-linecap="round" />
+      <line x1="32" y1="54" x2="240" y2="54" stroke="#30D158" stroke-width="4" stroke-linecap="round" />
+      <!-- Markers on timeline -->
+      <circle cx="96" cy="54" r="6" fill="#30D158" stroke="#FFFFFF" stroke-width="1.5" />
+      <circle cx="176" cy="54" r="7" fill="#FF3B30" stroke="#FFFFFF" stroke-width="1.5" />
+      <circle cx="240" cy="54" r="6" fill="#FF9500" stroke="#FFFFFF" stroke-width="1.5" />
+      <circle cx="320" cy="54" r="6" fill="#30D158" stroke="#FFFFFF" stroke-width="1.5" />
+
+      <text x="16" y="90" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#515154">• 点击右侧「⚠️ 01:24 膝盖内扣 14°」卡片 → 播放器自动跳帧并 0.5x 慢放</text>
+      <text x="16" y="108" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#515154">• 同屏对比「学员问题定格帧」vs「教练标准骨骼示范区间」</text>
+    </g>
+
+    <!-- Down Arrow 3.1 -> 3.2 -->
+    <line x1="232" y1="266" x2="232" y2="288" stroke="#1D9E34" stroke-width="1.8" marker-end="url(#arrowGreen)" />
+
+    <!-- Sub-module 3.2: 4-Dimensional Coaching Studio -->
+    <g transform="translate(24, 292)">
+      <rect x="0" y="0" width="416" height="176" rx="14" fill="#F8FAFC" stroke="#E5E9F0" stroke-width="1" />
+      <text x="16" y="24" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#1D1D1F">3.2 四维教练复盘工作台（直接复用现有组件生态）</text>
+
+      <!-- 2x2 Grid of Deliverables -->
+      <rect x="16" y="36" width="186" height="58" rx="10" fill="#FFFFFF" stroke="#D1F4DE" stroke-width="1.2" />
+      <text x="28" y="56" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="700" fill="#1D1D1F">📊 教练诊断研报</text>
+      <text x="28" y="76" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#6E6E73">五维评分雷达 + 问题帧截图处方</text>
+
+      <rect x="214" y="36" width="186" height="58" rx="10" fill="#FFFFFF" stroke="#D1F4DE" stroke-width="1.2" />
+      <text x="226" y="56" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="700" fill="#1D1D1F">🧠 动作拆解思维导图</text>
+      <text x="226" y="76" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#6E6E73">MindElixir 树 · 一键送 /diagram</text>
+
+      <rect x="16" y="104" width="186" height="58" rx="10" fill="#FFFFFF" stroke="#D1F4DE" stroke-width="1.2" />
+      <text x="28" y="124" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="700" fill="#1D1D1F">💬 教练追问 (System 1+2)</text>
+      <text x="28" y="144" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#6E6E73">针对薄弱动作秒级流式答疑</text>
+
+      <rect x="214" y="104" width="186" height="58" rx="10" fill="#FFFFFF" stroke="#D1F4DE" stroke-width="1.2" />
+      <text x="226" y="124" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="700" fill="#1D1D1F">🎯 纠偏闯关测验 (Quiz)</text>
+      <text x="226" y="144" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#6E6E73">基于错误点自动出题巩固记忆</text>
+    </g>
+
+    <!-- Down Arrow 3.2 -> 3.3 -->
+    <line x1="232" y1="468" x2="232" y2="490" stroke="#1D9E34" stroke-width="1.8" marker-end="url(#arrowGreen)" />
+
+    <!-- Sub-module 3.3: Persistence & Short-Link Sharing -->
+    <g transform="translate(24, 494)">
+      <rect x="0" y="0" width="416" height="106" rx="14" fill="#EDFDF2" stroke="#9AE6B4" stroke-width="1.2" />
+      <text x="16" y="24" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700" fill="#065F46">3.3 持久化档案与免登录短链交付（vidgrab DB）</text>
+      <text x="16" y="46" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#374151">• PostgreSQL 记录每次训练评分曲线，量化进步轨迹</text>
+      <rect x="16" y="58" width="384" height="34" rx="8" fill="#FFFFFF" stroke="#A7F3D0" stroke-width="1" />
+      <text x="28" y="80" font-family="-apple-system, BlinkMacSystemFont, 'SF Mono', 'PingFang SC', monospace" font-size="11.5" font-weight="600" fill="#047857">🔗 一键分享复盘报告：https://ai.zlcggb.com/video?s=CoachDemo</text>
+    </g>
+  </g>
+
+  <!-- ======================== BOTTOM SECTION: COMPARISON & SCENARIOS ======================== -->
+  <!-- Left Card: Architecture Comparison Matrix -->
+  <g transform="translate(48, 782)">
+    <rect x="0" y="0" width="984" height="224" rx="22" fill="#FFFFFF" stroke="#DCE3EC" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="28" y="34" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="16" font-weight="700" fill="#1D1D1F">架构代差对比：为什么传统抽帧 Demo 会失败，而「三步破局架构」能稳定落地？</text>
+
+    <!-- Table Header -->
+    <rect x="24" y="48" width="936" height="30" rx="8" fill="#F2F4F8" />
+    <text x="38" y="68" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="700" fill="#515154">核心技术维度</text>
+    <text x="196" y="68" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="700" fill="#C53030">❌ 传统连续抽帧 Demo（如展会 Frigate-VL 方案）</text>
+    <text x="576" y="68" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="700" fill="#0071E3">✅ SmartDiagram「三步破局」视觉教练架构</text>
+
+    <!-- Row 1 -->
+    <line x1="24" y1="112" x2="960" y2="112" stroke="#F0F2F5" stroke-width="1" />
+    <text x="38" y="100" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#1D1D1F">1. 抽帧与触发机制</text>
+    <text x="196" y="100" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#6E6E73">固定 1fps 盲抽 + 每 4 帧死板提交 → 漏掉极值帧、静止时刷屏</text>
+    <text x="576" y="100" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#1D1D1F">前端像素帧差过滤 + 30fps 骨骼拐点触发 → 只抓有效动作周期</text>
+
+    <!-- Row 2 -->
+    <line x1="24" y1="146" x2="960" y2="146" stroke="#F0F2F5" stroke-width="1" />
+    <text x="38" y="134" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#1D1D1F">2. 空间与姿态精度</text>
+    <text x="196" y="134" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#6E6E73">裸原图直喂通用 VLM → 看不准关节角与发力微变化，严重幻觉</text>
+    <text x="576" y="134" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#1D1D1F">Canvas 骨骼连线水印叠加 + 关节角 JSON 注入 → 具身量化零瞎猜</text>
+
+    <!-- Row 3 -->
+    <line x1="24" y1="180" x2="960" y2="180" stroke="#F0F2F5" stroke-width="1" />
+    <text x="38" y="168" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#1D1D1F">3. 推理延迟与成本</text>
+    <text x="196" y="168" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#6E6E73">4 张大图独立编码，耗时 ~4.8s &gt; 4s 采集窗 → 队列积压丢帧</text>
+    <text x="576" y="168" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#1D1D1F">2×2 时序网格单图编码 → 视觉 Token 减半，首字 &lt; 800ms 零积压</text>
+
+    <!-- Row 4 -->
+    <text x="38" y="202" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#1D1D1F">4. 最终产品交付</text>
+    <text x="196" y="202" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" fill="#6E6E73">右侧滚屏文本日志（2800+ 段流水账）→ 无法回溯、无沉淀价值</text>
+    <text x="576" y="202" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11.5" font-weight="600" fill="#1D9E34">问题帧慢放回溯 + 诊断研报 + 动作导图 + 测验 + 短链分享闭环</text>
+  </g>
+
+  <!-- Right Card: Plug-and-Play Coaching Scenarios -->
+  <g transform="translate(1056, 782)">
+    <rect x="0" y="0" width="496" height="224" rx="22" fill="#FFFFFF" stroke="#DCE3EC" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="24" y="34" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="16" font-weight="700" fill="#1D1D1F">套用不同 Rubric 标尺，一键切换三大教练场景</text>
+
+    <!-- Scenario 1 -->
+    <rect x="24" y="50" width="448" height="48" rx="10" fill="#F8FAFC" stroke="#E5E9F0" stroke-width="1" />
+    <rect x="36" y="61" width="26" height="26" rx="7" fill="#E8F2FF" />
+    <text x="49" y="79" text-anchor="middle" font-size="14">🎤</text>
+    <text x="74" y="70" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="700" fill="#1D1D1F">演讲 / 面试 / 路演体态教练（音画双流融合）</text>
+    <text x="74" y="88" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#6E6E73">眼神接触率、手势开放度、身体晃动频率 + 语速停顿与核心话术评估</text>
+
+    <!-- Scenario 2 -->
+    <rect x="24" y="106" width="448" height="48" rx="10" fill="#F8FAFC" stroke="#E5E9F0" stroke-width="1" />
+    <rect x="36" y="117" width="26" height="26" rx="7" fill="#F0EEFF" />
+    <text x="49" y="135" text-anchor="middle" font-size="14">🏋️</text>
+    <text x="74" y="126" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="700" fill="#1D1D1F">运动健身 / 康复训练动作教练（3D 关节角标定）</text>
+    <text x="74" y="144" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#6E6E73">深蹲膝内扣检测、挥拍/挥杆顶点角度、发力对称性与运动代偿风险预警</text>
+
+    <!-- Scenario 3 -->
+    <rect x="24" y="162" width="448" height="48" rx="10" fill="#F8FAFC" stroke="#E5E9F0" stroke-width="1" />
+    <rect x="36" y="173" width="26" height="26" rx="7" fill="#E9FBF0" />
+    <text x="49" y="191" text-anchor="middle" font-size="14">🛠️</text>
+    <text x="74" y="182" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="700" fill="#1D1D1F">工业实操 / 展厅接待 SOP 督导教练（动作序列校验）</text>
+    <text x="74" y="200" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#6E6E73">标准操作步骤完整性核验、违规/漏步定格抓拍、展厅客户互动质量复盘</text>
+  </g>
+</svg>

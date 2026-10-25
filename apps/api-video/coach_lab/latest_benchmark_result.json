@@ -1,0 +1,94 @@
+{
+  "gemini-3.8-flash-high": {
+    "model": "gemini-3.8-flash-high",
+    "scene_id": "fitness_posture_coach",
+    "baseline": {
+      "mode": "baseline_multi",
+      "model": "gemini-3.8-flash-high",
+      "ttft_ms": 6735,
+      "total_ms": 7243,
+      "payload_kb": 33.3,
+      "estimated_vision_tokens": 1032,
+      "text": "当前处于动作下潜极值阶段，在第 3 帧（APEX）中躯干出现明显的代偿性前倾与重心前移，核心稳定性不足。该姿态会导致腰椎压力骤增并破坏下肢力线传导，存在失衡与代偿损伤风险。下潜与发力全程请收紧腹部核心，保持脊柱中立，避免上身过度前倒（Keep your core tight and maintain a neutral spine）。",
+      "meta": {
+        "status": "warning",
+        "score": 70,
+        "tag": "躯干过度前倾",
+        "apex_cell": 3,
+        "angle_note": "极值点躯干倾角过大失衡",
+        "advice": "收紧核心稳定躯干，控制重心垂直升降"
+      }
+    },
+    "ours": {
+      "mode": "grid_grounded",
+      "model": "gemini-3.8-flash-high",
+      "ttft_ms": 4583,
+      "total_ms": 5254,
+      "payload_kb": 29.2,
+      "estimated_vision_tokens": 258,
+      "text": "当前深蹲动作在 #3 极值点（APEX）下潜充分（膝屈曲达 84°），但躯干前倾幅度过大（29°）且出现 14° 膝内扣代偿，存在较大膝关节与下背部剪切压力。下潜到底部发力起身时，请主动激活臀中肌将膝盖向外推对准脚尖，同时收紧核心保持挺胸。口令：Knees out, chest up!",
+      "meta": {
+        "status": "warning",
+        "score": 68,
+        "tag": "膝内扣伴躯干前倾",
+        "apex_cell": 3,
+        "angle_note": "膝屈84°/前倾29°/内扣14°",
+        "advice": "下潜发力时双膝向外撑开对准脚尖，收紧核心挺起胸腔"
+      }
+    },
+    "comparison": {
+      "ttft_reduction_pct": 32.0,
+      "total_latency_reduction_pct": 27.5,
+      "payload_reduction_pct": 12.3,
+      "token_reduction_pct": 75.0,
+      "queue_safe_baseline": false,
+      "queue_safe_ours": false
+    }
+  },
+  "gemini-3.5-flash-lite": {
+    "model": "gemini-3.5-flash-lite",
+    "scene_id": "fitness_posture_coach",
+    "baseline": {
+      "mode": "baseline_multi",
+      "model": "gemini-3.5-flash-lite",
+      "ttft_ms": 3617,
+      "total_ms": 4102,
+      "payload_kb": 33.3,
+      "estimated_vision_tokens": 1032,
+      "text": "学员正在进行双腿支撑的行进或站姿转换动作，当前#3极值帧显示身体重心前倾，躯干与支撑腿夹角变小。整体动作节奏尚可，但需注意躯干稳定性，避免前倾过大导致腰部代偿。\nKeep your torso upright and engage your core!",
+      "meta": {
+        "status": "normal",
+        "score": 82,
+        "tag": "躯干微前倾",
+        "apex_cell": 3,
+        "angle_note": "躯干前倾角度约15度",
+        "advice": "保持核心收紧，挺胸抬头控制躯干直立"
+      }
+    },
+    "ours": {
+      "mode": "grid_grounded",
+      "model": "gemini-3.5-flash-lite",
+      "ttft_ms": 2544,
+      "total_ms": 2777,
+      "payload_kb": 29.2,
+      "estimated_vision_tokens": 258,
+      "text": "当前正处于下蹲动作的 #3 APEX 极值点（00:08.8），膝关节屈曲角达 84°，但伴随 14° 的膝盖内扣与 29° 的躯干过度前倾，存在关节代偿与下肢力线不正的风险。请立即纠正发力轨迹，\"Push knees out and keep chest up!\"。",
+      "meta": {
+        "status": "warning",
+        "score": 72,
+        "tag": "膝内扣伴躯干前倾",
+        "apex_cell": 3,
+        "angle_note": "Knee:84deg Trunk:29deg Valgus:14deg",
+        "advice": "下蹲至顶点时膝盖向外推，保持脊柱中立"
+      }
+    },
+    "comparison": {
+      "ttft_reduction_pct": 29.7,
+      "total_latency_reduction_pct": 32.3,
+      "payload_reduction_pct": 12.3,
+      "token_reduction_pct": 75.0,
+      "queue_safe_baseline": false,
+      "queue_safe_ours": true
+    }
+  }
+}

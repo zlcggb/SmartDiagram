@@ -42,7 +42,8 @@ SmartDiagram/
 │   │       │   ├── diagram/      # 图表：chatStore、Canvas、ChatPanel
 │   │       │   ├── recruit/      # AI 招聘 ATS：岗位、候选人、面试、统计
 │   │       │   ├── ppt/          # PPT：五步工作流、workbenchStore、api.ts
-│   │       │   └── video/        # 视频学习：工作台、导图、双语字幕、测验、历史与后台
+│   │       │   ├── video/        # 视频学习：工作台、导图、双语字幕、测验、历史与后台
+│   │       │   └── video-coach-lab/ # AI 视觉分析教练 (/video/coach)：MediaPipe 三合一感知 + 2×2 拼图 VLM 流式诊断
 │   │       └── shared/           # AppShell、auth、settings、macOS 桌面 UI
 │   │
 │   ├── api-diagram/              # 图表 FastAPI + LangGraph（:8000）
@@ -60,7 +61,7 @@ SmartDiagram/
 │   │   └── Prisma + PPTX 渲染 + 资料存储
 │   │
 │   └── api-video/                # 视频学习助手 FastAPI（:4020，/video-api/*）
-│       └── main.py / summarizer.py / downloader.py / quiz_generator.py / migrations/
+│       └── main.py / summarizer.py / downloader.py / quiz_generator.py / coach_lab/ / migrations/
 │
 ├── packages/
 │   ├── slide-ir/                 # PPT IR 与 SmartSlide DSL
@@ -242,6 +243,7 @@ Studio 设计稿按页懒加载最近 5 个 `SlideDesignVersion`；版本导航�
 | AI 研报 / 导图 / 问答 | `components/SummaryPanel.tsx` + `components/MindmapElixirCanvas.tsx`（支持一键发送至 `/diagram` 画布深度编辑）+ `lib/markdown.ts`（CJK 富文本、可视化流程卡片、原生 SVG 保护） |
 | 智能测验（Study Deck & 全卷） | `components/QuizPanel.tsx`（🎴 闯关卡片 + 📋 紧凑电子全卷双模式、底部固定操作栏、PostgreSQL + `localStorage` 双重持久化） |
 | 学习记录 / 文档中心 / 更新记录 / 管理台 | `pages/VideoHistoryPage.tsx` + `pages/VideoDocsPage.tsx`（`/video/docs`）+ `pages/VideoChangelogPage.tsx`（`/video/changelog`）+ `pages/VideoAdminPage.tsx` |
+| AI 视觉教练探索沙盒（独立目录） | `features/video-coach-lab/pages/VideoCoachLabPage.tsx`（`/video/coach-lab` · `/video/coach`）+ `lib/edgePerceptionEngine.ts`（L1 像素帧差门控、30fps 骨骼角度 HUD、2×2 时序网格合成、A/B 消融对比与一键转入学习闭环） |
 | API 与本地历史 | `lib/api.ts`（base = `/video-api/api`）+ `lib/guestHistory.ts` |
 
 ---
@@ -352,6 +354,7 @@ PPT 导演视频的矩形聚焦由 `SlideNarration.focusPlanJson` 与 `alignment
          ├─ intent_router.py / qa.py        : 系统 1 (共享 shared-jeff :8001, 0.78 高置信门控) + 系统 2 三阶段 SSE 流式问答
          ├─ quiz_generator.py / ai_routes.py: 时间桶均匀采样 + 研报骨架双源 6 题极速出题、状态与成绩双写持久化
          ├─ media_token.py                  : 10 位自包含 HMAC 短码 (/video?s=<code >) 免登录只读分享与沙盒试做
+         ├─ coach_lab/                      : 独立 AI 视觉教练探索沙盒 (/api/coach-lab/*)，支持 2×2 时序网格+骨骼锚点 SSE 流、A/B 基准对比实验与一键桥接复盘闭环
          └─ docs_routes.py                  : 读取 docs/video/*.md 驱动 /video/docs 文档中心
 ```
 
@@ -391,6 +394,7 @@ PPT 导演视频的矩形聚焦由 `SlideNarration.focusPlanJson` 与 `alignment
 | 改 PPTX 渲染 | `packages/ppt-renderer/` + `service-ppt-renderer/` |
 | 改 PPT 导演配音 / 字幕 / 矩形聚焦 | `service-ppt-renderer/src/routes/media.ts` + `src/lib/audioAlignment.ts` + `src/lib/focusResolver.ts` + `packages/agents/src/speechScriptPlan.ts` + `packages/ppt-renderer/src/focusOverlay.ts` |
 | 改视频学习模块（前端/后端） | `apps/web/src/features/video/` + `apps/api-video/`（`:4020`，代理前缀 `/video-api/*`，数据库 `vidgrab`，专项文档 `docs/video/`） |
+| 改视频学习助手宣传片（独立制作工程） | `scripts/promo-v4/remotion/`；手机竖版入口 `src/vertical/Vertical.tsx`，独立场景与字幕布局在 `src/vertical/`；手机布局入口 `src/mobile/Mobile.tsx`；高清版 `MobileHD` / `MobileHDProof` / `MobileHDCover`，390×636手机布局按3倍像素绘制采集，采集容器 `scripts/promo-v4/mobile_capture.html`、编码 `prepare_mobile.py --hidpi`、验收 `finish_mobile.py --hidpi`，高清交付 `docs/video/promo-mobile-hidpi-20261024/`；旧1倍采集版 `MobilePromo` 保留追溯（`promo-mobile-rerecord-20261024/`）；完整原画居中对照 `src/vertical/CenteredPreview.tsx`；原生分辨率取景 `scripts/promo-v4/prepare_vertical.py`，成片检查与打包 `finish_vertical.py`；竖版交付 `docs/video/promo-vertical-20261024/`，方案对照 `docs/video/promo-revision-20261024/` |
 | 改生产路由 | `gateway/nginx.conf` |
 | 改本地 proxy | `apps/web/vite.config.ts` |
 | 改启动/端口 | `dev.sh`、`scripts/dev-common.sh`、`docker-compose.yml` |

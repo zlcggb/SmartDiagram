@@ -7,12 +7,15 @@ import { VideoHistoryPage } from './pages/VideoHistoryPage';
 import { VideoDocsPage } from './pages/VideoDocsPage';
 import { VideoChangelogPage } from './pages/VideoChangelogPage';
 import { VideoAdminPage } from './pages/VideoAdminPage';
+import { VideoCoachLabPage } from '../video-coach-lab/pages/VideoCoachLabPage';
 
 export const VideoModule: React.FC = () => {
   return (
     <VideoShell>
       <Routes>
         <Route index element={<VideoWorkspacePage />} />
+        <Route path="coach-lab" element={<VideoCoachLabPage />} />
+        <Route path="coach" element={<VideoCoachLabPage />} />
         <Route path="history" element={<VideoHistoryPage />} />
         <Route path="docs" element={<VideoDocsPage />} />
         <Route path="docs/:docPath" element={<VideoDocsPage />} />

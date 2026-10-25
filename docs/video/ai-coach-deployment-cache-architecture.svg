@@ -1,0 +1,334 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 940" width="100%" height="100%" style="background-color: #F5F5F7; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;">
+  <defs>
+    <!-- 苹果风柔和卡片阴影 -->
+    <filter id="cardShadow" x="-4%" y="-4%" width="108%" height="110%">
+      <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#0F172A" flood-opacity="0.05"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.03"/>
+    </filter>
+    <filter id="badgeShadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0071E3" flood-opacity="0.12"/>
+    </filter>
+
+    <!-- 渐变定义 -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F5F5F7"/>
+      <stop offset="50%" stop-color="#F8FAFC"/>
+      <stop offset="100%" stop-color="#EEF2F6"/>
+    </linearGradient>
+
+    <linearGradient id="blueHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0071E3"/>
+      <stop offset="100%" stop-color="#00A3FF"/>
+    </linearGradient>
+
+    <linearGradient id="greenHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1D9E34"/>
+      <stop offset="100%" stop-color="#30D158"/>
+    </linearGradient>
+
+    <linearGradient id="purpleHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5E5CE6"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+
+    <!-- 箭头标记 -->
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#0071E3"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#1D9E34"/>
+    </marker>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#5E5CE6"/>
+    </marker>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="1480" height="940" fill="url(#bgGrad)"/>
+
+  <!-- ==================== 顶部标题区 ==================== -->
+  <g transform="translate(36, 26)">
+    <rect x="0" y="0" width="380" height="24" rx="12" fill="#E8F2FF"/>
+    <circle cx="14" cy="12" r="4" fill="#0071E3"/>
+    <text x="26" y="16" font-size="11" font-weight="700" fill="#0071E3" letter-spacing="0.6">PRODUCTION DEPLOYMENT &amp; EDGE-CLOUD CACHE ARCHITECTURE</text>
+
+    <text x="0" y="54" font-size="26" font-weight="800" fill="#1D1D1F" letter-spacing="-0.4">AI 视觉分析教练 · 线上部署、跨地域缓存加速与端云协同执行架构图</text>
+    <text x="0" y="78" font-size="13.5" font-weight="500" fill="#6E6E73">
+      核心原则：骨骼/手部/面部识别 100% 在用户浏览器本地 GPU 运行（服务器 0 GPU 成本） · 模型内置自有 CDN 预压缩分发 · 浏览器 CacheStorage 二次秒开
+    </text>
+
+    <!-- 右上角核心指标徽章 -->
+    <g transform="translate(950, 8)">
+      <rect x="0" y="0" width="218" height="58" rx="16" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#cardShadow)"/>
+      <text x="16" y="22" font-size="11" font-weight="600" fill="#64748B">线上服务器 GPU 需求</text>
+      <text x="16" y="44" font-size="18" font-weight="800" fill="#1D9E34">0 张 GPU (纯静态+转发)</text>
+
+      <rect x="230" y="0" width="226" height="58" rx="16" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#cardShadow)"/>
+      <text x="246" y="22" font-size="11" font-weight="600" fill="#64748B">模型传输体积 (Gzip) / 二次加载</text>
+      <text x="246" y="44" font-size="17" font-weight="800" fill="#0071E3">首次 19.6MB / 二次 0MB</text>
+    </g>
+  </g>
+
+  <!-- ==================== 主体三泳道（左：静态源站与CDN -> 中：用户本地浏览器 -> 右：轻量后端与云端VLM） ==================== -->
+
+  <!-- 泳道 1：线上静态资源与多地域边缘 CDN (X=36, Y=122, W=420, H=530) -->
+  <g transform="translate(36, 122)">
+    <rect x="0" y="0" width="420" height="530" rx="24" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2" filter="url(#cardShadow)"/>
+    <path d="M 0 24 Q 0 0 24 0 L 396 0 Q 420 0 420 24 L 420 46 L 0 46 Z" fill="url(#blueHeader)"/>
+    <text x="18" y="29" font-size="13.5" font-weight="800" fill="#FFFFFF">① 线上静态托管与边缘 CDN（模型分发层）</text>
+    <rect x="322" y="11" width="82" height="24" rx="12" fill="rgba(255,255,255,0.22)"/>
+    <text x="363" y="27" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF">脱离海外墙</text>
+
+    <!-- 子块 1.1：自有服务器静态目录 -->
+    <g transform="translate(18, 62)">
+      <rect x="0" y="0" width="384" height="74" rx="14" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="14" y="22" font-size="13" font-weight="700" fill="#0F172A">📦 前端自有静态目录 (/public/mediapipe/*)</text>
+      <text x="14" y="42" font-size="11.5" fill="#475569">• 随前端 Vite 构建直接打包进 dist/mediapipe/，部署在自有服务器或 OSS</text>
+      <text x="14" y="60" font-size="11.5" fill="#0071E3" font-weight="600">• 彻底摆脱 storage.googleapis.com，国内任何网络 100% 可达</text>
+    </g>
+
+    <!-- 子块 1.2：实测文件体积与 Gzip 压缩明细表 -->
+    <g transform="translate(18, 148)">
+      <rect x="0" y="0" width="384" height="222" rx="14" fill="#F8FAFC" stroke="#CBD5E1"/>
+      <text x="14" y="23" font-size="12.5" font-weight="800" fill="#0F172A">📊 实测模型体积清单（原始大小 vs 开启 Gzip 后网络下载量）</text>
+
+      <!-- 表头 -->
+      <rect x="10" y="32" width="364" height="24" rx="6" fill="#E2E8F0"/>
+      <text x="18" y="48" font-size="11" font-weight="700" fill="#334155">模块 / 文件名</text>
+      <text x="235" y="48" font-size="11" font-weight="700" fill="#334155">原始体积</text>
+      <text x="305" y="48" font-size="11" font-weight="700" fill="#0071E3">Gzip 传输量</text>
+
+      <!-- 行 1 -->
+      <text x="18" y="74" font-size="11.5" font-weight="600" fill="#1E293B">1. WASM SIMD 推理引擎底座</text>
+      <text x="18" y="89" font-size="10.5" fill="#64748B">vision_wasm_internal.wasm + .mjs</text>
+      <text x="238" y="81" font-size="11.5" font-weight="600" fill="#475569">9.38 MB</text>
+      <rect x="300" y="66" width="68" height="22" rx="6" fill="#DCFCE7"/>
+      <text x="334" y="81" text-anchor="middle" font-size="11.5" font-weight="800" fill="#15803D">2.85 MB</text>
+
+      <line x1="12" y1="97" x2="372" y2="97" stroke="#E2E8F0"/>
+
+      <!-- 行 2 -->
+      <text x="18" y="115" font-size="11.5" font-weight="600" fill="#1E293B">2. 身体 33 点高精度模型 (Full)</text>
+      <text x="18" y="130" font-size="10.5" fill="#64748B">pose_landmarker_full.task (Lite版仅4.7MB)</text>
+      <text x="238" y="122" font-size="11.5" font-weight="600" fill="#475569">8.96 MB</text>
+      <text x="334" y="122" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0369A1">7.97 MB</text>
+
+      <line x1="12" y1="138" x2="372" y2="138" stroke="#E2E8F0"/>
+
+      <!-- 行 3 -->
+      <text x="18" y="156" font-size="11.5" font-weight="600" fill="#1E293B">3. 双手 42 指关节模型 (Hands)</text>
+      <text x="18" y="171" font-size="10.5" fill="#64748B">hand_landmarker.task (单手21点×2)</text>
+      <text x="238" y="163" font-size="11.5" font-weight="600" fill="#475569">7.46 MB</text>
+      <text x="334" y="163" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0369A1">5.58 MB</text>
+
+      <line x1="12" y1="179" x2="372" y2="179" stroke="#E2E8F0"/>
+
+      <!-- 行 4 -->
+      <text x="18" y="196" font-size="11.5" font-weight="600" fill="#1E293B">4. 面部 478 点 + 52维表情 (Face)</text>
+      <text x="238" y="196" font-size="11.5" font-weight="600" fill="#475569">3.58 MB</text>
+      <text x="334" y="196" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0369A1">3.18 MB</text>
+
+      <!-- 汇总栏 -->
+      <rect x="10" y="202" width="364" height="18" rx="4" fill="#EFF6FF"/>
+      <text x="18" y="215" font-size="11" font-weight="800" fill="#1E3A8A">全量三合一首次总计：原始 29.38 MB  →  实际 Gzip 传输 19.58 MB</text>
+    </g>
+
+    <!-- 子块 1.3：跨地区 CDN 边缘节点加速 -->
+    <g transform="translate(18, 382)">
+      <rect x="0" y="0" width="384" height="130" rx="14" fill="#F0F9FF" stroke="#BAE6FD"/>
+      <text x="14" y="23" font-size="13" font-weight="800" fill="#0369A1">🌐 跨地区延迟破局：多地域 CDN 边缘节点 + 强缓存头</text>
+      <text x="14" y="45" font-size="11.5" fill="#0F172A">• 痛点：不同地区直接跨省拉源站 19.6MB 会有带宽瓶颈（耗时 5~15s）</text>
+      <text x="14" y="65" font-size="11.5" fill="#0F172A">• 方案 1：绑定阿里云/腾讯云 CDN（国内）或 Cloudflare（海外）就近分发</text>
+      <text x="14" y="85" font-size="11.5" fill="#0F172A">• 方案 2：Nginx 开启 <tspan font-family="monospace" font-weight="700">gzip_static on;</tspan> 与 <tspan font-family="monospace" font-weight="700">brotli_static on;</tspan></text>
+      <rect x="14" y="96" width="356" height="24" rx="6" fill="#0284C7"/>
+      <text x="192" y="112" text-anchor="middle" font-size="11" font-weight="700" font-family="monospace" fill="#FFFFFF">Cache-Control: public, max-age=31536000, immutable</text>
+    </g>
+  </g>
+
+  <!-- 泳道 1 -> 泳道 2 连接箭头 -->
+  <g transform="translate(456, 250)">
+    <line x1="4" y1="0" x2="54" y2="0" stroke="#0071E3" stroke-width="2.5" stroke-dasharray="5,3" marker-end="url(#arrowBlue)"/>
+    <rect x="3" y="-32" width="54" height="24" rx="6" fill="#E8F2FF"/>
+    <text x="30" y="-16" text-anchor="middle" font-size="10" font-weight="700" fill="#0071E3">首次19.6M</text>
+    <text x="30" y="18" text-anchor="middle" font-size="10" font-weight="700" fill="#1D9E34">二次 0KB</text>
+  </g>
+
+  <!-- 泳道 2：用户本地电脑/手机浏览器（端侧实时算力核心） (X=516, Y=122, W=468, H=530) -->
+  <g transform="translate(516, 122)">
+    <rect x="0" y="0" width="468" height="530" rx="24" fill="#FFFFFF" stroke="#86EFAC" stroke-width="1.8" filter="url(#cardShadow)"/>
+    <path d="M 0 24 Q 0 0 24 0 L 444 0 Q 468 0 468 24 L 468 46 L 0 46 Z" fill="url(#greenHeader)"/>
+    <text x="18" y="29" font-size="13.5" font-weight="800" fill="#FFFFFF">② 用户本地浏览器（100% 本地显卡识别 · 零延迟）</text>
+    <rect x="358" y="11" width="94" height="24" rx="12" fill="rgba(255,255,255,0.24)"/>
+    <text x="405" y="27" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF">核心算力在端侧</text>
+
+    <!-- 子块 2.1：浏览器本地 CacheStorage 持久化缓存（已写进代码） -->
+    <g transform="translate(18, 62)">
+      <rect x="0" y="0" width="432" height="114" rx="14" fill="#F0FDF4" stroke="#86EFAC"/>
+      <text x="14" y="23" font-size="13" font-weight="800" fill="#166534">⚡ 第 1 步：浏览器 CacheStorage 磁盘持久化缓存（已内置实现）</text>
+      <text x="14" y="44" font-size="11.5" fill="#1E293B">• 存储库：<tspan font-family="monospace" font-weight="700" fill="#15803D">window.caches.open('smartdiagram-mediapipe-models-v1')</tspan></text>
+      <text x="14" y="64" font-size="11.5" fill="#1E293B">• 首次访问：从就近 CDN 下载 3 个 .task 模型 → 自动永久写入用户电脑本地磁盘</text>
+      <text x="14" y="84" font-size="11.5" font-weight="700" fill="#15803D">• 二次及以后访问：直接从本地磁盘读取 Uint8Array 传入 modelAssetBuffer</text>
+      <rect x="14" y="91" width="404" height="18" rx="5" fill="#DCFCE7"/>
+      <text x="216" y="104" text-anchor="middle" font-size="11" font-weight="800" fill="#166534">网络请求 = 0 字节  |  跨地区延迟 = 0ms  |  模型初始化耗时 &lt; 120ms</text>
+    </g>
+
+    <!-- 子块 2.2：本地 WebGL GPU + WASM SIMD 三合一实时检测 -->
+    <g transform="translate(18, 190)">
+      <rect x="0" y="0" width="432" height="186" rx="14" fill="#F8FAFC" stroke="#CBD5E1"/>
+      <text x="14" y="23" font-size="13" font-weight="800" fill="#0F172A">🎮 第 2 步：调用用户本地电脑/手机显卡 (WebGL GPU) 实时推理</text>
+      <text x="14" y="42" font-size="11" fill="#64748B">视频流完全在本地内存处理（每 55ms 跑一轮三模型推理 + 60FPS EMA 平滑绘制）：</text>
+
+      <!-- 3 个并行模型小卡 -->
+      <g transform="translate(12, 52)">
+        <rect x="0" y="0" width="130" height="86" rx="10" fill="#EFF6FF" stroke="#BFDBFE"/>
+        <text x="65" y="20" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1D4ED8">🦴 身体 33 点 (Full)</text>
+        <text x="65" y="38" text-anchor="middle" font-size="10.5" fill="#334155">双肩倾角 / 左右肘角</text>
+        <text x="65" y="54" text-anchor="middle" font-size="10.5" fill="#334155">双臂抬起角 / 躯干倾角</text>
+        <text x="65" y="72" text-anchor="middle" font-size="10" font-weight="700" fill="#0284C7">EMA 防抖平滑滤波</text>
+
+        <rect x="139" y="0" width="130" height="86" rx="10" fill="#ECFDF5" stroke="#A7F3D0"/>
+        <text x="204" y="20" text-anchor="middle" font-size="11.5" font-weight="800" fill="#047857">🖐️ 双手 42 指关节</text>
+        <text x="204" y="38" text-anchor="middle" font-size="10.5" fill="#334155">左右手各 21 个指骨点</text>
+        <text x="204" y="54" text-anchor="middle" font-size="10.5" fill="#334155">五指伸展数 / 握拳 / 张开</text>
+        <text x="204" y="72" text-anchor="middle" font-size="10" font-weight="700" fill="#059669">手与头部/胸前相对位置</text>
+
+        <rect x="278" y="0" width="130" height="86" rx="10" fill="#F5F3FF" stroke="#DDD6FE"/>
+        <text x="343" y="20" text-anchor="middle" font-size="11.5" font-weight="800" fill="#6D28D9">😊 面部 478 点+表情</text>
+        <text x="343" y="38" text-anchor="middle" font-size="10.5" fill="#334155">3D朝向 Yaw/Pitch/Roll</text>
+        <text x="343" y="54" text-anchor="middle" font-size="10.5" fill="#334155">转头 / 低头 / 歪头度数</text>
+        <text x="343" y="72" text-anchor="middle" font-size="10" font-weight="700" fill="#7C3AED">注视 / 说话 / 微笑系数</text>
+      </g>
+
+      <text x="14" y="160" font-size="11.5" font-weight="700" fill="#0F172A">✅ 为什么在本地算？</text>
+      <text x="125" y="160" font-size="11.5" fill="#334155">0ms 网络延迟（骨骼紧贴手指不飘）+ 原始摄像头画面不出本机</text>
+      <text x="14" y="177" font-size="11.5" fill="#15803D" font-weight="600">✅ 算力免费扩展：10,000 个用户同时在线 = 调用 10,000 台用户自己的电脑显卡！</text>
+    </g>
+
+    <!-- 子块 2.3：2×2 连续帧拼图与 AbortController 零延迟控制 -->
+    <g transform="translate(18, 390)">
+      <rect x="0" y="0" width="432" height="122" rx="14" fill="#FFFBEB" stroke="#FDE68A"/>
+      <text x="14" y="23" font-size="13" font-weight="800" fill="#B45309">🖼️ 第 3 步：端侧差分门控 + 2×2 紧凑拼图 + 0ms 随时中断</text>
+      <text x="14" y="44" font-size="11.5" fill="#1E293B">• 静止画面过滤：FrameDiffGate 检测到画面未动自动跳过，不浪费大模型 Token</text>
+      <text x="14" y="64" font-size="11.5" fill="#1E293B">• 2×2 拼图瘦身：每 2.5s 将 4 帧合成为 1 张 <tspan font-weight="700" fill="#B45309">768×432 JPEG (~22KB)</tspan> + 1KB 骨骼 JSON</text>
+      <text x="14" y="84" font-size="11.5" fill="#1E293B">• 零延迟停止：点「停止分析」或「关闭摄像头」立即触发 <tspan font-family="monospace" font-weight="700">AbortController.abort()</tspan></text>
+      <text x="14" y="104" font-size="11.5" font-weight="700" fill="#DC2626">• 硬件级断电：点「关闭摄像头」立即执行 MediaStreamTrack.stop() 熄灭摄像头绿灯</text>
+    </g>
+  </g>
+
+  <!-- 泳道 2 -> 泳道 3 连接箭头 -->
+  <g transform="translate(984, 340)">
+    <line x1="4" y1="-15" x2="54" y2="-15" stroke="#5E5CE6" stroke-width="2.5" marker-end="url(#arrowPurple)"/>
+    <text x="29" y="-24" text-anchor="middle" font-size="9.5" font-weight="700" fill="#5E5CE6">22KB拼图</text>
+
+    <line x1="54" y1="18" x2="4" y2="18" stroke="#1D9E34" stroke-width="2.5" stroke-dasharray="4,3" marker-end="url(#arrowGreen)"/>
+    <text x="29" y="34" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1D9E34">SSE流式</text>
+  </g>
+
+  <!-- 泳道 3：线上轻量后端与云端视觉大模型 (X=1044, Y=122, W=400, H=530) -->
+  <g transform="translate(1044, 122)">
+    <rect x="0" y="0" width="400" height="530" rx="24" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2" filter="url(#cardShadow)"/>
+    <path d="M 0 24 Q 0 0 24 0 L 376 0 Q 400 0 400 24 L 400 46 L 0 46 Z" fill="url(#purpleHeader)"/>
+    <text x="18" y="29" font-size="13.5" font-weight="800" fill="#FFFFFF">③ 线上后端 (api-video) 与云端视觉大模型</text>
+    <rect x="302" y="11" width="82" height="24" rx="12" fill="rgba(255,255,255,0.22)"/>
+    <text x="343" y="27" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF">2核4G即可</text>
+
+    <!-- 子块 3.1：FastAPI 轻量网关 -->
+    <g transform="translate(18, 62)">
+      <rect x="0" y="0" width="364" height="128" rx="14" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="14" y="23" font-size="13" font-weight="800" fill="#0F172A">🚀 FastAPI 教练路由 (/api/coach-lab/*)</text>
+      <text x="14" y="45" font-size="11" fill="#334155">• 服务器配置要求：<tspan font-weight="700" fill="#15803D">普通 2核4G CPU 云服务器即可</tspan></text>
+      <text x="14" y="65" font-size="11" fill="#334155">• 无需安装 PyTorch / TensorFlow / CUDA / MediaPipe</text>
+      <text x="14" y="85" font-size="11" fill="#334155">• 职责 1：将实测头部3D角、42指关节手势、肩肘角注入 Prompt</text>
+      <text x="14" y="105" font-size="11" fill="#334155">• 职责 2：维护最近 3 轮滑动动作记忆 (Rolling Memory)</text>
+    </g>
+
+    <!-- 子块 3.2：云端 VLM 多模态流式推理 -->
+    <g transform="translate(18, 204)">
+      <rect x="0" y="0" width="364" height="154" rx="14" fill="#F5F3FF" stroke="#DDD6FE"/>
+      <text x="14" y="23" font-size="13" font-weight="800" fill="#5B21B6">🧠 云端视觉大模型 API（按需调用）</text>
+      <text x="14" y="45" font-size="11" font-weight="700" fill="#1E293B">• 极速实时流：Gemini 3.5 Flash Lite（推荐，首字 ~2.2s）</text>
+      <text x="14" y="65" font-size="11" font-weight="700" fill="#1E293B">• 深度诊断流：Gemini 3.8 Flash High（精细生物力学点评）</text>
+      <text x="14" y="88" font-size="11" fill="#475569">• 输入负载：每次仅 1 张 2×2 拼图 (~258 Tokens) + 实测骨骼 JSON</text>
+      <text x="14" y="108" font-size="11" fill="#475569">• 输出内容：SSE 流式文字 + 评分 / 状态标签 / 纠偏处方</text>
+      <rect x="14" y="120" width="336" height="22" rx="6" fill="#EDE9FE"/>
+      <text x="182" y="135" text-anchor="middle" font-size="11" font-weight="700" fill="#6D28D9">相比逐帧裸发大图，Token 成本降低 75%，无关节度数幻觉</text>
+    </g>
+
+    <!-- 子块 3.3：复盘报告闭环与分享 -->
+    <g transform="translate(18, 372)">
+      <rect x="0" y="0" width="364" height="140" rx="14" fill="#F0FDF4" stroke="#BBF7D0"/>
+      <text x="14" y="23" font-size="13" font-weight="800" fill="#166534">📊 训练复盘闭环 (/api/coach-lab/finalize)</text>
+      <text x="14" y="45" font-size="11" fill="#1E293B">• 汇总所有时间窗口的动作描述、骨骼量化数据与纠偏建议</text>
+      <text x="14" y="65" font-size="11" fill="#1E293B">• 直接复用 SmartDiagram 视频学习主干流水线：</text>
+      <text x="20" y="85" font-size="11" font-weight="600" fill="#15803D">① 专业动作诊断研报 (Markdown)   ② 动作拆解思维导图</text>
+      <text x="20" y="104" font-size="11" font-weight="600" fill="#15803D">③ 互动巩固测验                ④ 免登录短链分享 (/video?s=xxx)</text>
+      <text x="14" y="125" font-size="11" fill="#64748B">• 数据持久化：PostgreSQL (videos + analyses 表)</text>
+    </g>
+  </g>
+
+  <!-- ==================== 底部三栏：针对您关心的 3 大核心部署问题给出直接工程解答 ==================== -->
+  <g transform="translate(36, 672)">
+    <!-- 解答卡片 1 -->
+    <rect x="0" y="0" width="454" height="240" rx="22" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#cardShadow)"/>
+    <rect x="20" y="18" width="28" height="28" rx="8" fill="#FEE2E2"/>
+    <text x="34" y="37" text-anchor="middle" font-size="14" font-weight="800" fill="#DC2626">Q1</text>
+    <text x="58" y="37" font-size="14.5" font-weight="800" fill="#0F172A">为什么不在服务器上跑姿态识别，而在本地浏览器算？</text>
+
+    <g transform="translate(20, 56)" font-size="12" fill="#334155">
+      <rect x="0" y="0" width="414" height="72" rx="10" fill="#FEF2F2" stroke="#FECACA"/>
+      <text x="12" y="20" font-weight="700" fill="#991B1B">❌ 如果放到后端服务器识别（传统失败方案）：</text>
+      <text x="12" y="40" font-size="11">1. <tspan font-weight="700">严重跟手延迟</tspan>：每秒传 30 帧图片到后端，往返 150ms+，手放下了线还在飘；</text>
+      <text x="12" y="58" font-size="11">2. <tspan font-weight="700">服务器成本爆炸</tspan>：跑 Pose+Hand+Face 需昂贵 GPU 主机，50 人并发即卡死。</text>
+
+      <rect x="0" y="84" width="414" height="82" rx="10" fill="#F0FDF4" stroke="#BBF7D0"/>
+      <text x="12" y="104" font-weight="700" fill="#166534">✅ 现在的本地浏览器识别方案（WebGL GPU + WASM）：</text>
+      <text x="12" y="124" font-size="11">1. <tspan font-weight="700">0 网络延迟</tspan>：直接用用户电脑/手机显卡在内存算，42 指关节 60FPS 紧贴手指；</text>
+      <text x="12" y="142" font-size="11">2. <tspan font-weight="700">线上部署 0 负担</tspan>：线上服务器不需要装任何深度学习框架，只发静态文件！</text>
+      <text x="12" y="159" font-size="11" font-weight="700" fill="#15803D">3. 隐私极佳：原始摄像头视频流留在用户浏览器本地，不上传未筛选视频。</text>
+    </g>
+
+    <!-- 解答卡片 2 -->
+    <g transform="translate(476, 0)">
+      <rect x="0" y="0" width="454" height="240" rx="22" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#cardShadow)"/>
+      <rect x="20" y="18" width="28" height="28" rx="8" fill="#E0F2FE"/>
+      <text x="34" y="37" text-anchor="middle" font-size="14" font-weight="800" fill="#0284C7">Q2</text>
+      <text x="58" y="37" font-size="14.5" font-weight="800" fill="#0F172A">模型多大？存自己服务器吗？怎么做本地持久化缓存？</text>
+
+      <g transform="translate(20, 56)" font-size="12" fill="#334155">
+        <text x="0" y="16" font-weight="700" fill="#0F172A">1. 必须放在我们自己的服务器 / CDN 上（已完成）：</text>
+        <text x="12" y="35" font-size="11">所有文件已放在项目 <tspan font-family="monospace" font-weight="700" fill="#0284C7">apps/web/public/mediapipe/</tspan> 下，随前端一起部署，</text>
+        <text x="12" y="52" font-size="11">绝不去连 Google 海外地址，彻底杜绝国内打不开的问题。</text>
+
+        <text x="0" y="78" font-weight="700" fill="#0F172A">2. 实际网络加载量（开启 Nginx Gzip 后共 19.58 MB）：</text>
+        <text x="12" y="96" font-size="11">WASM 引擎 <tspan font-weight="700">2.85MB</tspan> + 身体Full <tspan font-weight="700">7.97MB</tspan> + 双手 <tspan font-weight="700">5.58MB</tspan> + 面部 <tspan font-weight="700">3.18MB</tspan>。</text>
+
+        <rect x="0" y="108" width="414" height="58" rx="10" fill="#EFF6FF" stroke="#BFDBFE"/>
+        <text x="12" y="128" font-weight="800" fill="#1D4ED8">3. 双重本地缓存机制（HTTP 强缓存 + CacheStorage 磁盘缓存）：</text>
+        <text x="12" y="146" font-size="11" fill="#1E3A8A">代码已接入浏览器 <tspan font-family="monospace" font-weight="700">window.caches</tspan> API，首次下载后永久存入用户本地硬盘；</text>
+        <text x="12" y="161" font-size="11" font-weight="700" fill="#15803D">用户第 2 次打开页面：网络下载量 = 0 MB，直接读本地磁盘 (&lt;120ms 秒开)！</text>
+      </g>
+    </g>
+
+    <!-- 解答卡片 3 -->
+    <g transform="translate(952, 0)">
+      <rect x="0" y="0" width="456" height="240" rx="22" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#cardShadow)"/>
+      <rect x="20" y="18" width="28" height="28" rx="8" fill="#F3E8FF"/>
+      <text x="34" y="37" text-anchor="middle" font-size="14" font-weight="800" fill="#7C3AED">Q3</text>
+      <text x="58" y="37" font-size="14.5" font-weight="800" fill="#0F172A">不同地区首次打开延迟大怎么办？4 步加速清单</text>
+
+      <g transform="translate(20, 56)" font-size="11" fill="#334155">
+        <rect x="0" y="0" width="416" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0"/>
+        <text x="12" y="22"><tspan font-weight="800" fill="#0284C7">Step 1 · 静态预压缩：</tspan>Nginx 开启 gzip_static / brotli，体积立减 35% (省 9.8MB)</text>
+
+        <rect x="0" y="44" width="416" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0"/>
+        <text x="12" y="66"><tspan font-weight="800" fill="#0284C7">Step 2 · 边缘 CDN：</tspan>将 /mediapipe/* 挂阿里云/腾讯云 CDN，各省就近拉取 (1~2s)</text>
+
+        <rect x="0" y="88" width="416" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0"/>
+        <text x="12" y="110"><tspan font-weight="800" fill="#0284C7">Step 3 · 闲时预热：</tspan>进入 /video 首页时，后台静默预拉取模型存入 CacheStorage</text>
+
+        <rect x="0" y="132" width="416" height="36" rx="8" fill="#F0FDF4" stroke="#BBF7D0"/>
+        <text x="12" y="154"><tspan font-weight="800" fill="#15803D">Step 4 · 分级加载：</tspan>弱网先下 Lite(4.7M) 1秒亮屏，后台静默升级双手+面部模型</text>
+      </g>
+    </g>
+  </g>
+</svg>

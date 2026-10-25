@@ -13,7 +13,8 @@ const CATEGORIES: Array<{ id: CategoryId; label: string }> = [
 ];
 
 const VERSIONS = [
-  { id: 'v2.7.0', label: 'v2.7.0', latest: true, date: '2026年10月24日' },
+  { id: 'v2.8.0', label: 'v2.8.0', latest: true, date: '2026年10月25日' },
+  { id: 'v2.7.0', label: 'v2.7.0', date: '2026年10月24日' },
   { id: 'v2.6.0', label: 'v2.6.0', date: '2026年10月23日' },
   { id: 'v2.5.0', label: 'v2.5.0', date: '2026年10月11日' },
   { id: 'v2.4.0', label: 'v2.4.0', date: '2026年8月7日' },
@@ -25,10 +26,12 @@ const VERSIONS = [
 export function VideoChangelogPage() {
   const [activeCategory, setActiveCategory] = useState<CategoryId>('all');
   const [expandAll, setExpandAll] = useState(true);
-  const [activeVersion, setActiveVersion] = useState('v2.7.0');
+  const [activeVersion, setActiveVersion] = useState('v2.8.0');
   const [copySuccess, setCopySuccess] = useState(false);
   const [archMode, setArchMode] = useState<'architecture' | 'sequence' | 'benchmark'>('architecture');
   const [collapseState, setCollapseState] = useState<Record<string, boolean>>({
+    'v2.8.0-features': true,
+    'v2.8.0-fixes': true,
     'v2.7.0-features': true,
     'v2.7.0-fixes': true,
     'v2.6.0-features': true,
@@ -57,11 +60,11 @@ export function VideoChangelogPage() {
 
   const shouldShowVersion = (vId: string): boolean => {
     if (activeCategory === 'all') return true;
-    if (activeCategory === 'ai' && ['v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.0.0'].includes(vId)) return true;
+    if (activeCategory === 'ai' && ['v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.0.0'].includes(vId)) return true;
     if (activeCategory === 'asr' && ['v2.7.0', 'v2.5.0', 'v2.3.0'].includes(vId)) return true;
-    if (activeCategory === 'arch' && ['v2.7.0', 'v2.6.0', 'v2.5.0', 'v1.0.0'].includes(vId)) return true;
-    if (activeCategory === 'quiz' && ['v2.7.0', 'v2.4.0'].includes(vId)) return true;
-    if (activeCategory === 'platform' && ['v2.7.0', 'v2.6.0', 'v2.3.0', 'v1.0.0'].includes(vId)) return true;
+    if (activeCategory === 'arch' && ['v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v1.0.0'].includes(vId)) return true;
+    if (activeCategory === 'quiz' && ['v2.8.0', 'v2.7.0', 'v2.4.0'].includes(vId)) return true;
+    if (activeCategory === 'platform' && ['v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.3.0', 'v1.0.0'].includes(vId)) return true;
     return false;
   };
 
@@ -76,7 +79,13 @@ export function VideoChangelogPage() {
   const handleCopyChangelog = async () => {
     const md = `# 视频学习助手 (SmartDiagram /video) 更新记录与架构全景
 
-## v2.7.0 (2026-10-24 · LATEST)
+## v2.8.0 (2026-10-25 · LATEST)
+- 🎯 AI 视觉分析教练工作台 (/video/coach)：浏览器端 MediaPipe WebGL 三合一高精度感知（全身33点+双手42指关节+面部478点3D朝向）+ 2×2 时序四格拼图 + Gemini 3.5/3.8 Flash 流式动作诊断。
+- 🚀 服务端 0 GPU 成本与本地持久化缓存：模型同源静态托管（Gzip 19.58MB）+ 浏览器 CacheStorage 持久化，二次加载 0MB 流量、<150ms 瞬时启动。
+- 📱 桌面端双向独立滚动 + 移动端专属 4-Tab 教练工作台：互斥二选一输入源（开启镜头/选择视频即刻自动分析，防误触隐藏另一输入源），移动端专属「实时诊断 / 骨骼手势 / 教练提示词 / 复盘报告」底栏。
+- 🛡️ 单次防呆自动熔断 + 访客/登录分级每日配额：访客单次限 1 分钟、全天限 5 分钟（前后端双重计量）；已登录用户连续 2 分钟无操作自动暂停分析，防止忘关浪费 AI 算力。
+
+## v2.7.0 (2026-10-24)
 - 🏛️ SmartDiagram 统一平台全栈融合：定制单行毛玻璃导航栏、Portal 中央紧凑视频切换条、思维导图一键移交 /diagram 画布编辑。
 - ⚡ 四点并发极速总结管线：6 线程切片并发 ASR (210s 仅 6.7s) + 主总结与双语字幕并行生成，端到端耗时从 58.8s 降至 35.4s。
 - 🧭 系统 1 (Jeff) 三层高置信意图门控：总结优先白名单 + 0.78 置信度门控，预设引导词与开放式提问 100% 稳定触发总结问答。
@@ -133,7 +142,7 @@ export function VideoChangelogPage() {
       <div className="mx-auto max-w-[1240px] px-3 pt-3 pb-2.5 sm:px-6 sm:pt-8 sm:pb-6">
         <div className="max-w-3xl">
           <div className="mb-2 hidden items-center gap-2 rounded-full bg-[#0071e3]/10 px-3 py-1 text-[11.5px] font-bold text-[#0071e3] sm:inline-flex">
-            <span>🚀 SmartDiagram Unified Platform · Video Learning v2.7.0</span>
+            <span>🚀 SmartDiagram Unified Platform · Video Learning v2.8.0</span>
           </div>
           <div className="flex items-center justify-between gap-2">
             <h1 className="text-[18px] font-bold tracking-tight text-slate-900 sm:text-[32px] md:text-[38px]">
@@ -185,7 +194,89 @@ export function VideoChangelogPage() {
       {/* 正文双栏：左侧版本时间轴 + 右侧 Sticky 版本导航 */}
       <div className="mx-auto grid max-w-[1240px] grid-cols-1 gap-4 px-3 sm:gap-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="min-w-0 space-y-3.5 sm:space-y-10 lg:space-y-14">
-          {/* ================= v2.7.0 (最新重大版本) ================= */}
+          {/* ================= v2.8.0 (最新重大版本：AI 视觉分析教练) ================= */}
+          {shouldShowVersion('v2.8.0') && (
+            <section
+              id="v2.8.0"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-3 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-3.5 sm:p-6 shadow-xs"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.8.0</span>
+                  <span className="rounded-full bg-[#0071e3] px-1.5 py-0.5 text-[9.5px] font-bold text-white uppercase tracking-wider sm:px-2 sm:text-[10px]">
+                    LATEST
+                  </span>
+                  <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3] md:hidden">
+                    🎯 AI 视觉分析教练
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-slate-400 font-mono sm:text-[12.5px] sm:text-slate-500">2026-10-25</p>
+                <p className="hidden text-[11.5px] text-[#0071e3] font-semibold md:block">
+                  🎯 端云协同 AI 视觉分析教练工作台
+                </p>
+              </div>
+
+              <div className="min-w-0 space-y-3 sm:space-y-5">
+                <div>
+                  <h2 className="text-[15px] font-bold leading-snug tracking-tight text-slate-900 sm:text-[20px]">
+                    AI 视觉分析教练工作台 (/video/coach)、端侧三合一高精度骨骼感知、互斥二选一状态机与分级算力风控
+                  </h2>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 sm:mt-2 sm:text-[13.5px]">
+                    新增独立视觉教练工作台（<code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">/video/coach</code>），采用「浏览器端 MediaPipe WebGL 三合一高精度检测（全身 33 点 + 双手 42 指关节 + 面部 478 点 3D 朝向）+ 2×2 时序四格拼图 + Gemini 3.5/3.8 Flash 流式诊断」架构，实现服务端 <strong>0 GPU 成本</strong>实时教练纠偏；重构桌面端左右独立滚动与移动端专属 4-Tab 教练底栏；落地「开启镜头/选择视频互斥二选一即刻自动分析」状态机，以及「访客单次 1 分钟 / 全天 5 分钟 + 登录用户 2 分钟无操作自动暂停」双重算力保护。
+                  </p>
+                </div>
+
+                {/* v2.8.0 4列核心架构矩阵 */}
+                <div className="rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/70 p-2.5 sm:p-4 space-y-2.5 sm:space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 pb-2 sm:pb-2.5">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-lg bg-[#0071e3]/10 text-[11px] sm:text-sm text-[#0071e3]">
+                        🎯
+                      </span>
+                      <span className="text-[12px] sm:text-[13.5px] font-bold text-slate-900">
+                        v2.8.0 端云协同三合一感知与算力风控全景
+                      </span>
+                    </div>
+                    <Link
+                      to="/video/coach"
+                      className="inline-flex items-center gap-1 rounded-full bg-[#0071e3] px-2.5 py-0.5 text-[11px] font-bold text-white shadow-2xs transition hover:brightness-105"
+                    >
+                      <span>进入 AI 视觉教练 →</span>
+                    </Link>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11.5px] sm:grid-cols-4 sm:gap-3 sm:text-[12px]">
+                    <div className="rounded-xl border border-[#0071e3]/25 bg-white p-2.5 sm:p-3 space-y-1">
+                      <div className="font-bold text-[#0071e3]">1. 端侧三合一 0 GPU 成本</div>
+                      <p className="text-slate-600 leading-snug">
+                        全身33点 + 双手42指关节 + 面部478点本地 WebGL 推理；同源 Gzip 19.58MB + CacheStorage 二次 0MB 秒开
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-500/25 bg-white p-2.5 sm:p-3 space-y-1">
+                      <div className="font-bold text-emerald-600">2. 二选一即刻自动分析</div>
+                      <p className="text-slate-600 leading-snug">
+                        开启镜头/选择视频二选一互斥，点亮即自动抽帧分析并隐藏另一入口防误触；支持 0ms 瞬时截断与硬件断电
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-indigo-500/25 bg-white p-2.5 sm:p-3 space-y-1">
+                      <div className="font-bold text-indigo-600">3. 桌面双滚 + 移动专属底栏</div>
+                      <p className="text-slate-600 leading-snug">
+                        桌面端左右分栏独立滚动；手机端替换通用底栏为「实时诊断 / 骨骼手势 / 教练提示词 / 复盘报告」专属工作台
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-amber-500/25 bg-white p-2.5 sm:p-3 space-y-1">
+                      <div className="font-bold text-amber-600">4. 单次与全天算力风控</div>
+                      <p className="text-slate-600 leading-snug">
+                        访客单次限 1 分钟、全天限 5 分钟（前后端双重计量）；登录用户连续 2 分钟无操作自动暂停防忘关浪费
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ================= v2.7.0 ================= */}
           {shouldShowVersion('v2.7.0') && (
             <section
               id="v2.7.0"
@@ -194,9 +285,6 @@ export function VideoChangelogPage() {
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.7.0</span>
-                  <span className="rounded-full bg-[#0071e3] px-1.5 py-0.5 text-[9.5px] font-bold text-white uppercase tracking-wider sm:px-2 sm:text-[10px]">
-                    LATEST
-                  </span>
                   <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3] md:hidden">
                     🏛️ 平台融合与极速版
                   </span>
