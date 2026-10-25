@@ -5,10 +5,12 @@ import { usePlatformAuth } from '@/shared/store/authStore';
 import {
   analyzeAndDrawRealPose,
   composeRealTemporalGridBundle,
+  drawVideoFrameAdaptive,
   FrameDiffGate,
   realPoseService,
   type ComposedWindowBundle,
   type OverlayLayerConfig,
+  type PerceptionPerfMode,
   type RealPoseTelemetry,
 } from '../lib/edgePerceptionEngine';
 
@@ -198,7 +200,22 @@ export const VideoCoachLabPage: React.FC = () => {
   // 视频源状态：null（已关闭/未选择） | 'camera'（真实摄像头） | 'file'（本地视频）
   const [sourceType, setSourceType] = useState<'camera' | 'file' | null>(null);
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
+  const [videoFitMode, setVideoFitMode] = useState<'cover' | 'contain'>('cover');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  // 当暂停时是否在视频画面内显示全局暂停覆盖层（用户可点击「仅看画面」暂时收起）
+  const [pauseOverlayHidden, setPauseOverlayHidden] = useState<boolean>(false);
+
+  // 设备性能自适应帧率控制：'auto' (智能自适应) | 'eco' (省电降帧防卡顿) | 'high' (高帧率)
+  const [perfMode, setPerfMode] = useState<PerceptionPerfMode>('auto');
+  const [detectFpsInfo, setDetectFpsInfo] = useState<{
+    fps: number;
+    throttled: boolean;
+    costMs: number;
+  }>({
+    fps: 18,
+    throttled: false,
+    costMs: 14,
+  });
 
   // 三合一高精度图层开关（全身33点 + 双手42指关节 + 面部478点网格）
   const [overlayLayers, setOverlayLayers] = useState<OverlayLayerConfig>({
@@ -300,6 +317,7 @@ export const VideoCoachLabPage: React.FC = () => {
   const handleStopAnalyzing = useCallback(() => {
     isAnalyzingRef.current = false;
     setIsAnalyzing(false);
+    setPauseOverlayHidden(false);
     abortActiveAnalysis();
     if (sourceType === 'file' && videoRef.current) {
       videoRef.current.pause();
@@ -312,6 +330,8 @@ export const VideoCoachLabPage: React.FC = () => {
   const stopMedia = useCallback(() => {
     isAnalyzingRef.current = false;
     setIsAnalyzing(false);
+    setPauseOverlayHidden(false);
+    setQuotaNotice('');
     abortActiveAnalysis();
 
     if (mediaStreamRef.current) {
@@ -344,6 +364,17 @@ export const VideoCoachLabPage: React.FC = () => {
     }
   }, [isLoggedIn]);
 
+  // 切换识别帧率档位：智能自适应 (auto) -> 省电降帧防卡顿 (eco) -> 高帧率 (high)
+  const handleCyclePerfMode = useCallback(() => {
+    recordUserActivity();
+    setPerfMode((prev) => {
+      const next: PerceptionPerfMode =
+        prev === 'auto' ? 'eco' : prev === 'eco' ? 'high' : 'auto';
+      realPoseService.setPerfMode(next);
+      return next;
+    });
+  }, [recordUserActivity]);
+
   // 尝试开启实时抽帧分析（先校验今日累计时长配额）
   const tryStartAnalyzing = useCallback((): boolean => {
     const latest = readDailyQuotaFromStorage();
@@ -353,6 +384,7 @@ export const VideoCoachLabPage: React.FC = () => {
     if (!isAdmin && used >= limit) {
       isAnalyzingRef.current = false;
       setIsAnalyzing(false);
+      setPauseOverlayHidden(false);
       setQuotaNotice(
         isLoggedIn
           ? '🔒 今日 AI 视觉分析保护额度（15 分钟/天）已用完，已停止 AI 抽帧分析。'
@@ -361,6 +393,7 @@ export const VideoCoachLabPage: React.FC = () => {
       return false;
     }
     setQuotaNotice('');
+    setPauseOverlayHidden(false);
     setSessionActiveSec(0);
     isAnalyzingRef.current = true;
     setIsAnalyzing(true);
@@ -432,12 +465,18 @@ export const VideoCoachLabPage: React.FC = () => {
     setErrorMsg('');
     try {
       stopMedia();
+      // 不强制锁定横屏 16:9，兼容手机端竖屏传感器原生分辨率，再由 Canvas 等比居中裁剪绘制
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: facing },
+        video: {
+          facingMode: facing,
+          width: { ideal: 960 },
+          height: { ideal: 720 },
+        },
         audio: false,
       });
       mediaStreamRef.current = stream;
       setCameraFacing(facing);
+      setVideoFitMode('cover');
       setSourceType('camera');
       startTimeRef.current = performance.now();
       windowBufferRef.current = [];
@@ -479,6 +518,7 @@ export const VideoCoachLabPage: React.FC = () => {
     stopMedia();
     setErrorMsg('');
     const objUrl = URL.createObjectURL(file);
+    setVideoFitMode('contain');
     setSourceType('file');
     startTimeRef.current = performance.now();
     windowBufferRef.current = [];
@@ -695,7 +735,7 @@ export const VideoCoachLabPage: React.FC = () => {
     [customRubric, handleStopAnalyzing, sceneId, selectedModel, session?.access_token],
   );
 
-  // 主循环：从真实 <video> 读取画面 → 运行 MediaPipe 三合一检测 → 打包提交
+  // 主循环：从真实 <video> 读取画面（等比无变形 + 前置自然镜像）→ 自适应帧率运行 MediaPipe 三合一检测 → 打包提交
   useEffect(() => {
     if (!diffGateRef.current) {
       diffGateRef.current = new FrameDiffGate();
@@ -705,7 +745,8 @@ export const VideoCoachLabPage: React.FC = () => {
     const anyOverlayOn =
       overlayLayers.showPose || overlayLayers.showHands || overlayLayers.showFace;
 
-    const captureStepMs = windowIntervalMs <= 2500 ? 350 : 500;
+    const captureStepMs = windowIntervalMs <= 2500 ? 380 : 520;
+    const isFrontMirrored = sourceType === 'camera' && cameraFacing === 'user';
 
     const renderLoop = (now: number) => {
       const canvas = mainCanvasRef.current;
@@ -714,6 +755,16 @@ export const VideoCoachLabPage: React.FC = () => {
         animId = requestAnimationFrame(renderLoop);
         return;
       }
+
+      // 手机端采用 560×350 (16:10 黄金人像视野)，桌面端采用 640×360 (16:9)，与 CSS aspect 严格 1:1 匹配
+      const isMobileViewport = typeof window !== 'undefined' && window.innerWidth < 640;
+      const targetW = isMobileViewport ? 560 : 640;
+      const targetH = isMobileViewport ? 350 : 360;
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
+
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         animId = requestAnimationFrame(renderLoop);
@@ -727,43 +778,59 @@ export const VideoCoachLabPage: React.FC = () => {
         const elapsedSec =
           sourceType === 'file' ? video.currentTime : (now - startTimeRef.current) / 1000.0;
 
-        ctx.drawImage(video, 0, 0, w, h);
+        // 1. 按真实宽高比等比绘制视频帧（彻底解决手机竖屏摄像头被横向拉伸变形问题，并支持前置自拍镜像）
+        drawVideoFrameAdaptive(ctx, video, w, h, {
+          fitMode: videoFitMode,
+          mirror: isFrontMirrored,
+        });
 
-        const holistic = realPoseService.detectHolisticFrame(video, now, overlayLayers);
+        // 2. 基于已等比对齐的画布运行三合一检测（内置设备性能自适应帧率与奇偶拍错峰调度）
+        const holistic = realPoseService.detectHolisticFrame(
+          canvas,
+          now,
+          overlayLayers,
+          isFrontMirrored,
+        );
 
         if (now - lastCaptureTimeRef.current >= captureStepMs) {
           lastCaptureTimeRef.current = now;
 
-          const rawSnap = document.createElement('canvas');
-          rawSnap.width = w;
-          rawSnap.height = h;
-          rawSnap.getContext('2d')!.drawImage(canvas, 0, 0);
-
-          const diffScore = diffGateRef.current?.computeDiff(rawSnap) ?? 0;
-
-          const annotatedSnap = document.createElement('canvas');
-          annotatedSnap.width = w;
-          annotatedSnap.height = h;
-          const aCtx = annotatedSnap.getContext('2d')!;
-          aCtx.drawImage(rawSnap, 0, 0);
-
-          const tel = analyzeAndDrawRealPose(
-            aCtx,
-            w,
-            h,
-            holistic,
-            elapsedSec,
-            diffScore,
-            anyOverlayOn,
-            overlayLayers,
-          );
-          setLiveTelemetry(tel);
-
-          if (anyOverlayOn) {
-            ctx.drawImage(annotatedSnap, 0, 0);
-          }
+          const diffScore = diffGateRef.current?.computeDiff(canvas) ?? 0;
 
           if (isAnalyzingRef.current) {
+            // 仅在开启实时分析时才创建快照画布推入滑窗队列，避免非分析状态下频繁分配内存
+            const rawSnap = document.createElement('canvas');
+            rawSnap.width = w;
+            rawSnap.height = h;
+            rawSnap.getContext('2d')!.drawImage(canvas, 0, 0);
+
+            const annotatedSnap = document.createElement('canvas');
+            annotatedSnap.width = w;
+            annotatedSnap.height = h;
+            const aCtx = annotatedSnap.getContext('2d')!;
+            aCtx.drawImage(rawSnap, 0, 0);
+
+            const tel = analyzeAndDrawRealPose(
+              aCtx,
+              w,
+              h,
+              holistic,
+              elapsedSec,
+              diffScore,
+              anyOverlayOn,
+              overlayLayers,
+            );
+            setLiveTelemetry(tel);
+            setDetectFpsInfo({
+              fps: realPoseService.currentTargetFps,
+              throttled: realPoseService.isThrottled,
+              costMs: realPoseService.avgInferCostMs,
+            });
+
+            if (anyOverlayOn) {
+              ctx.drawImage(annotatedSnap, 0, 0);
+            }
+
             setTotalSampledFrames((c) => c + 1);
             windowBufferRef.current.push({
               rawCanvas: rawSnap,
@@ -773,6 +840,23 @@ export const VideoCoachLabPage: React.FC = () => {
             if (windowBufferRef.current.length > 12) {
               windowBufferRef.current.shift();
             }
+          } else {
+            const tel = analyzeAndDrawRealPose(
+              ctx,
+              w,
+              h,
+              holistic,
+              elapsedSec,
+              diffScore,
+              anyOverlayOn,
+              overlayLayers,
+            );
+            setLiveTelemetry(tel);
+            setDetectFpsInfo({
+              fps: realPoseService.currentTargetFps,
+              throttled: realPoseService.isThrottled,
+              costMs: realPoseService.avgInferCostMs,
+            });
           }
         } else if (anyOverlayOn) {
           analyzeAndDrawRealPose(
@@ -821,8 +905,8 @@ export const VideoCoachLabPage: React.FC = () => {
 
         ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
         ctx.lineWidth = 2;
-        const m = 20;
-        const cl = 16;
+        const m = 18;
+        const cl = 14;
         ctx.beginPath();
         ctx.moveTo(m, m + cl);
         ctx.lineTo(m, m);
@@ -845,15 +929,15 @@ export const VideoCoachLabPage: React.FC = () => {
         ctx.stroke();
 
         ctx.fillStyle = '#E2E8F0';
-        ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+        ctx.font = '600 13.5px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('二选一：点击下方「📷 开启镜头」或「📁 选择视频」即刻自动分析', w / 2, h / 2 - 8);
-        ctx.font = '500 11.5px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+        ctx.fillText('点击下方「📷 开启镜头」或「📁 选择视频」即刻开始分析', w / 2, h / 2 - 8);
+        ctx.font = '500 11px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
         ctx.fillStyle = poseModelReady ? '#34D399' : '#94A3B8';
         ctx.fillText(
           poseModelReady ? `● ${activeModelsText}` : '⏳ 正在初始化本地高精度模型...',
           w / 2,
-          h / 2 + 16,
+          h / 2 + 15,
         );
         ctx.textAlign = 'start';
       }
@@ -865,12 +949,14 @@ export const VideoCoachLabPage: React.FC = () => {
     return () => cancelAnimationFrame(animId);
   }, [
     activeModelsText,
+    cameraFacing,
     liveTelemetry.diffScore,
     overlayLayers,
     poseModelReady,
     segments.length,
     sourceType,
     submitWindowForAnalysis,
+    videoFitMode,
     windowIntervalMs,
   ]);
 
@@ -888,6 +974,7 @@ export const VideoCoachLabPage: React.FC = () => {
     const used = isLoggedIn ? latest.userSec : latest.guestSec;
     const limit = isLoggedIn ? USER_DAILY_LIMIT_SEC : GUEST_DAILY_LIMIT_SEC;
     if (!isAdmin && used >= limit) {
+      setPauseOverlayHidden(false);
       setQuotaNotice(
         isLoggedIn
           ? '🔒 今日 AI 视觉分析保护额度（15 分钟/天）已用完，无法继续抓拍分析。'
@@ -921,12 +1008,23 @@ export const VideoCoachLabPage: React.FC = () => {
       const now = performance.now();
       const elapsedSec =
         sourceType === 'file' ? video.currentTime : (now - startTimeRef.current) / 1000.0;
-      const holistic = realPoseService.detectHolisticFrame(video, now, overlayLayers);
+      const isFrontMirrored = sourceType === 'camera' && cameraFacing === 'user';
 
       const rawSnap = document.createElement('canvas');
       rawSnap.width = w;
       rawSnap.height = h;
-      rawSnap.getContext('2d')!.drawImage(video, 0, 0, w, h);
+      const rCtx = rawSnap.getContext('2d')!;
+      drawVideoFrameAdaptive(rCtx, video, w, h, {
+        fitMode: videoFitMode,
+        mirror: isFrontMirrored,
+      });
+
+      const holistic = realPoseService.detectHolisticFrame(
+        rawSnap,
+        now,
+        overlayLayers,
+        isFrontMirrored,
+      );
 
       const annotatedSnap = document.createElement('canvas');
       annotatedSnap.width = w;
@@ -1156,17 +1254,17 @@ export const VideoCoachLabPage: React.FC = () => {
               }`}
             />
 
-            {/* 卡片头部：段号 + 时间区间 + 动作标签 + 评分 */}
-            <div className="flex flex-wrap items-center justify-between gap-1.5 pl-1.5">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex items-center rounded-md bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] font-extrabold text-white">
+            {/* 卡片头部：段号 + 时间区间 + 动作标签 + 评分（单行防折行，节省纵向空间） */}
+            <div className="flex items-center justify-between gap-1.5 pl-1.5">
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <span className="inline-flex shrink-0 items-center rounded-md bg-slate-900 px-1.5 py-0.5 font-mono text-[10.5px] font-extrabold text-white">
                   #{String(seg.windowIndex).padStart(2, '0')}
                 </span>
-                <span className="font-mono text-[12px] font-bold text-slate-600">
+                <span className="shrink-0 font-mono text-[11.5px] font-bold text-slate-600">
                   {seg.timeRangeLabel}
                 </span>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[10.5px] font-extrabold ${
+                  className={`truncate rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
                     isWarn
                       ? 'bg-amber-100 text-amber-800'
                       : isGood
@@ -1179,7 +1277,7 @@ export const VideoCoachLabPage: React.FC = () => {
               </div>
 
               <span
-                className={`rounded-lg px-2 py-0.5 font-mono text-[11.5px] font-extrabold ${
+                className={`shrink-0 rounded-lg px-2 py-0.5 font-mono text-[11px] font-extrabold ${
                   seg.meta.score >= 88
                     ? 'bg-emerald-50 text-emerald-700'
                     : seg.meta.score < 78
@@ -1272,10 +1370,10 @@ export const VideoCoachLabPage: React.FC = () => {
         className="hidden"
       />
 
-      {/* ======================= 顶部极简状态栏（手机端独立单行 46px 含返回键，桌面端完整工具栏） ======================= */}
+      {/* ======================= 顶部极简状态栏（手机端紧凑防重叠单行，桌面端完整工具栏） ======================= */}
       <div className="shrink-0 border-b border-slate-200/80 bg-white/95 px-2.5 py-1.5 backdrop-blur-md lg:px-6 lg:py-2.5">
-        <div className="mx-auto flex w-full max-w-[1600px] min-w-0 items-center justify-between gap-1.5">
-          {/* 左：手机端返回按钮 + 标题 + 模型就绪状态点 */}
+        <div className="mx-auto flex w-full max-w-[1600px] min-w-0 items-center justify-between gap-1">
+          {/* 左：手机端返回按钮 + 标题 + 极简模型状态圆点 */}
           <div className="flex min-w-0 items-center gap-1.5 lg:gap-2">
             <button
               type="button"
@@ -1283,47 +1381,44 @@ export const VideoCoachLabPage: React.FC = () => {
                 stopMedia();
                 navigate('/video');
               }}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition active:scale-95 lg:hidden"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition active:scale-95 lg:hidden"
               title="返回视频学习助手"
               aria-label="返回视频学习助手"
             >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}>
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                 <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
 
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#0071E3]/10 text-[13px] lg:h-7 lg:w-7">
+            <div className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#0071E3]/10 text-[13px] lg:flex">
               🎯
             </div>
-            <h1 className="shrink-0 text-[13.5px] font-extrabold tracking-tight text-slate-900 lg:text-[15.5px]">
+            <h1 className="truncate text-[13px] font-extrabold tracking-tight text-slate-900 lg:text-[15.5px]">
               AI 视觉教练
             </h1>
-            {/* 手机端极简绿点 / 桌面端完整三合一徽章 */}
+            {/* 手机端极简呼吸状态圆点（不占宽度防重叠） / 桌面端完整三合一徽章 */}
             <span
-              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold lg:px-2 lg:text-[11px] ${
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full lg:border lg:px-2 lg:py-0.5 lg:text-[11px] lg:font-bold ${
                 poseModelReady
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : 'border-amber-200 bg-amber-50 text-amber-700'
+                  ? 'lg:border-emerald-200 lg:bg-emerald-50 lg:text-emerald-700'
+                  : 'lg:border-amber-200 lg:bg-amber-50 lg:text-amber-700'
               }`}
               title={poseModelReady ? activeModelsText : '正在加载高精度模型...'}
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${
+                className={`h-2 w-2 rounded-full ${
                   poseModelReady ? 'bg-emerald-500' : 'animate-ping bg-amber-500'
                 }`}
               />
-              <span className="hidden sm:inline lg:hidden">
-                {poseModelReady ? '3合1就绪' : '加载中'}
-              </span>
               <span className="hidden lg:inline">
                 {poseModelReady ? activeModelsText : '正在加载高精度模型...'}
               </span>
             </span>
           </div>
 
-          {/* 右：配额倒计时胶囊 + 手机端紧凑胶囊 / 桌面端完整选择器 */}
+          {/* 右：紧凑配额胶囊 + 周期分段开关 + 模型切换 */}
           <div className="flex shrink-0 items-center gap-1 lg:gap-2">
-            {/* 算力风控配额胶囊：访客显示单次1m/全天5m剩余（点击可登录），登录用户显示2m无操作防呆与今日剩余 */}
+            {/* 算力风控配额胶囊：手机端仅展示最核心的剩余时长，彻底消除顶栏文字挤压 */}
             <button
               type="button"
               onClick={() => {
@@ -1331,7 +1426,7 @@ export const VideoCoachLabPage: React.FC = () => {
                   openLogin('登录账号可解锁单次 2 分钟连续分析与更高每日 AI 视觉教练额度');
                 }
               }}
-              className={`inline-flex items-center gap-1 rounded-xl border px-1.5 py-0.5 text-[10px] font-bold transition lg:px-2.5 lg:py-1 lg:text-[11px] ${
+              className={`inline-flex items-center gap-0.5 rounded-lg border px-1.5 py-0.5 text-[10px] font-bold transition lg:gap-1 lg:rounded-xl lg:px-2.5 lg:py-1 lg:text-[11px] ${
                 isDailyQuotaExhausted
                   ? 'border-red-200 bg-red-50 text-red-700'
                   : isAnalyzing
@@ -1346,11 +1441,7 @@ export const VideoCoachLabPage: React.FC = () => {
             >
               <span>{isDailyQuotaExhausted ? '🔒' : isAnalyzing ? '⏱️' : isLoggedIn ? '🛡️' : '👤'}</span>
               <span className="font-mono lg:hidden">
-                {isAnalyzing
-                  ? `${formatMMSS(remainingSingleSec)}/${formatMMSS(remainingDailySec)}`
-                  : isLoggedIn
-                    ? `2m·剩${formatMMSS(remainingDailySec)}`
-                    : `1m·剩${formatMMSS(remainingDailySec)}`}
+                {isAnalyzing ? formatMMSS(remainingSingleSec) : `剩${formatMMSS(remainingDailySec)}`}
               </span>
               <span className="hidden font-mono lg:inline">
                 {isAnalyzing
@@ -1361,20 +1452,20 @@ export const VideoCoachLabPage: React.FC = () => {
               </span>
             </button>
 
-            <div className="inline-flex items-center rounded-xl border border-slate-200/90 bg-slate-100/90 p-0.5 text-[10.5px] lg:text-[11px]">
+            <div className="inline-flex items-center rounded-lg border border-slate-200/90 bg-slate-100/90 p-0.5 text-[10px] lg:rounded-xl lg:text-[11px]">
               <button
                 type="button"
                 onClick={() => {
                   recordUserActivity();
                   setWindowIntervalMs(2500);
                 }}
-                className={`rounded-lg px-1.5 py-0.5 font-bold transition-all lg:px-2 ${
+                className={`rounded-md px-1.5 py-0.5 font-bold transition-all lg:rounded-lg lg:px-2 ${
                   windowIntervalMs === 2500
                     ? 'bg-white text-[#0071E3] shadow-2xs'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                ⚡2.5s
+                2.5s
               </button>
               <button
                 type="button"
@@ -1382,7 +1473,7 @@ export const VideoCoachLabPage: React.FC = () => {
                   recordUserActivity();
                   setWindowIntervalMs(4000);
                 }}
-                className={`rounded-lg px-1.5 py-0.5 font-bold transition-all lg:px-2 ${
+                className={`rounded-md px-1.5 py-0.5 font-bold transition-all lg:rounded-lg lg:px-2 ${
                   windowIntervalMs === 4000
                     ? 'bg-white text-[#0071E3] shadow-2xs'
                     : 'text-slate-500 hover:text-slate-800'
@@ -1403,9 +1494,9 @@ export const VideoCoachLabPage: React.FC = () => {
                     : 'gemini-3.5-flash-lite',
                 );
               }}
-              className="rounded-xl border border-slate-200/90 bg-white px-2 py-1 text-[10.5px] font-bold text-slate-700 shadow-2xs lg:hidden"
+              className="rounded-lg border border-slate-200/90 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700 shadow-2xs lg:hidden"
             >
-              {selectedModel === 'gemini-3.5-flash-lite' ? '⚡3.5极速' : '🧠3.8深度'}
+              {selectedModel === 'gemini-3.5-flash-lite' ? '⚡3.5' : '🧠3.8'}
             </button>
 
             <select
@@ -1435,53 +1526,15 @@ export const VideoCoachLabPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 算力风控与单次无操作自动熔断提示横幅 */}
-      {quotaNotice && (
-        <div className="mx-auto mt-1.5 w-full max-w-[1600px] shrink-0 px-3 lg:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[12px] font-medium text-amber-900 shadow-2xs">
-            <span className="min-w-0 flex-1">{quotaNotice}</span>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {!isLoggedIn && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    openLogin('登录账号可解锁单次 2 分钟连续分析与更高每日 AI 视觉教练额度')
-                  }
-                  className="rounded-lg bg-[#0071E3] px-2.5 py-1 text-[11px] font-extrabold text-white shadow-2xs transition hover:brightness-105"
-                >
-                  🔑 立即登录解锁
-                </button>
-              )}
-              {sourceType && !isAnalyzing && !isDailyQuotaExhausted && (
-                <button
-                  type="button"
-                  onClick={handleToggleStartStopAnalyze}
-                  className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-extrabold text-white shadow-2xs transition hover:brightness-105"
-                >
-                  ▶ 继续分析
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setQuotaNotice('')}
-                className="rounded-lg bg-amber-200/70 px-2 py-1 text-[10.5px] font-bold text-amber-900"
-              >
-                知道了
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 全局错误横幅 */}
       {(errorMsg || poseModelError) && (
         <div className="mx-auto mt-1.5 w-full max-w-[1600px] shrink-0 px-3 lg:px-6">
-          <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-[12px] font-medium text-red-700">
+          <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-[11.5px] font-medium text-red-700">
             <span className="truncate">⚠️ {errorMsg || poseModelError}</span>
             <button
               type="button"
               onClick={() => setErrorMsg('')}
-              className="ml-2 shrink-0 rounded bg-red-100 px-2 py-0.5 text-[10.5px] font-bold text-red-800"
+              className="ml-2 shrink-0 rounded bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-800"
             >
               关闭
             </button>
@@ -1492,8 +1545,8 @@ export const VideoCoachLabPage: React.FC = () => {
       {/* ======================= 主工作区：手机端「上取景+中独立滚动Tab」，桌面端「左右分栏独立滚动」 ======================= */}
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] min-w-0 flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-12 lg:gap-5 lg:px-6 lg:py-4">
         {/* ==================== 左侧 / 手机端上半屏常驻取景与控制舱 ==================== */}
-        <section className="flex w-full max-w-full min-w-0 shrink-0 flex-col border-b border-slate-200/80 bg-white px-3 pt-2 pb-2.5 lg:col-span-5 lg:min-h-0 lg:overflow-hidden lg:rounded-[24px] lg:border lg:p-0 lg:shadow-[0_8px_30px_rgb(15,23,42,0.04)]">
-          {/* 桌面端左栏固定头部 (手机端将图层胶囊直接悬浮在视频框内，省去这一行高度) */}
+        <section className="flex w-full max-w-full min-w-0 shrink-0 flex-col border-b border-slate-200/80 bg-white px-2.5 pt-1.5 pb-2 lg:col-span-5 lg:min-h-0 lg:overflow-hidden lg:rounded-[24px] lg:border lg:p-0 lg:shadow-[0_8px_30px_rgb(15,23,42,0.04)]">
+          {/* 桌面端左栏固定头部 */}
           <div className="hidden shrink-0 items-center justify-between border-b border-slate-100 px-5 py-3 lg:flex">
             <div className="flex items-center gap-2">
               <span
@@ -1548,61 +1601,41 @@ export const VideoCoachLabPage: React.FC = () => {
           </div>
 
           {/* 桌面端左栏独立滚动容器 / 手机端紧凑固定容器 */}
-          <div className="flex w-full max-w-full min-w-0 flex-col gap-2 lg:min-h-0 lg:flex-1 lg:gap-3.5 lg:overflow-y-auto lg:p-5">
-            {/* 1. 视频取景器 (带悬浮 HUD 图层胶囊与前后镜头切换) */}
+          <div className="flex w-full max-w-full min-w-0 flex-col gap-1.5 lg:min-h-0 lg:flex-1 lg:gap-3.5 lg:overflow-y-auto lg:p-5">
+            {/* 1. 视频取景器 (等比自适应无拉伸 + 悬浮 HUD + 画面内全局暂停覆盖层) */}
             <div className="relative w-full max-w-full min-w-0 shrink-0 overflow-hidden rounded-2xl border border-slate-900/10 bg-[#0B1120] shadow-inner">
               <video ref={videoRef} className="hidden" playsInline muted />
               <canvas
                 ref={mainCanvasRef}
-                width={640}
-                height={360}
-                className="block aspect-video max-h-[195px] w-full max-w-full object-cover sm:max-h-none"
+                width={560}
+                height={350}
+                className="block aspect-[16/10] w-full max-w-full sm:aspect-video"
               />
 
-              {/* 左上角：实时状态 + 手机端前后镜头翻转按钮 */}
-              <div className="absolute top-2 left-2 flex items-center gap-1.5">
-                {sourceType && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-slate-950/75 px-2 py-1 font-mono text-[10.5px] font-bold text-white backdrop-blur-md">
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        isAnalyzing ? 'animate-ping bg-red-500' : 'bg-emerald-400'
-                      }`}
-                    />
-                    <span>{sourceType === 'camera' ? 'LIVE' : 'VIDEO'}</span>
-                    <span className="text-emerald-300">{liveTelemetry.timeLabel}</span>
-                    {isAnalyzing && (
-                      <span
-                        className="ml-0.5 border-l border-white/20 pl-1.5 text-amber-300"
-                        title={
-                          isLoggedIn
-                            ? '2分钟无操作自动暂停倒计时'
-                            : '访客单次1分钟倒计时'
-                        }
-                      >
-                        ⏱️{formatMMSS(remainingSingleSec)}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {sourceType === 'camera' && (
-                  <button
-                    type="button"
-                    onClick={handleFlipCamera}
-                    className="flex items-center gap-1 rounded-lg bg-slate-950/75 px-2 py-1 text-[10.5px] font-bold text-white backdrop-blur-md transition active:scale-95"
-                    title="翻转前/后置摄像头"
-                  >
-                    <span>🔄</span>
-                    <span>{cameraFacing === 'user' ? '前置' : '后置'}</span>
-                  </button>
-                )}
-              </div>
+              {/* 左上角：精简直播/视频状态与单次倒计时（移除原本挤在此处的翻转按钮，彻底解决与右上角图层胶囊重叠问题） */}
+              {sourceType && (
+                <div className="pointer-events-none absolute top-2 left-2 z-10 flex items-center gap-1 rounded-lg bg-slate-950/75 px-2 py-0.5 font-mono text-[10px] font-bold text-white backdrop-blur-md">
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      isAnalyzing ? 'animate-ping bg-red-500' : 'bg-amber-400'
+                    }`}
+                  />
+                  <span>{sourceType === 'camera' ? 'LIVE' : 'VIDEO'}</span>
+                  <span className="text-emerald-300">{liveTelemetry.timeLabel}</span>
+                  {isAnalyzing && (
+                    <span className="ml-0.5 border-l border-white/20 pl-1 text-amber-300">
+                      ⏱{formatMMSS(remainingSingleSec)}
+                    </span>
+                  )}
+                </div>
+              )}
 
-              {/* 右上角：手机端专属 HUD 图层悬浮开关 (不占外部行高！) */}
-              <div className="absolute top-2 right-2 flex items-center gap-1 rounded-xl bg-slate-950/70 p-1 backdrop-blur-md lg:hidden">
+              {/* 右上角：手机端专属 HUD 图层悬浮开关 */}
+              <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-lg bg-slate-950/70 p-0.5 backdrop-blur-md lg:hidden">
                 <button
                   type="button"
                   onClick={() => setOverlayLayers((p) => ({ ...p, showPose: !p.showPose }))}
-                  className={`rounded-lg px-1.5 py-0.5 text-[10px] font-bold transition ${
+                  className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-bold transition ${
                     overlayLayers.showPose ? 'bg-[#0284C7] text-white' : 'text-slate-300'
                   }`}
                 >
@@ -1611,7 +1644,7 @@ export const VideoCoachLabPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setOverlayLayers((p) => ({ ...p, showHands: !p.showHands }))}
-                  className={`rounded-lg px-1.5 py-0.5 text-[10px] font-bold transition ${
+                  className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-bold transition ${
                     overlayLayers.showHands ? 'bg-[#059669] text-white' : 'text-slate-300'
                   }`}
                 >
@@ -1620,7 +1653,7 @@ export const VideoCoachLabPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setOverlayLayers((p) => ({ ...p, showFace: !p.showFace }))}
-                  className={`rounded-lg px-1.5 py-0.5 text-[10px] font-bold transition ${
+                  className={`rounded-md px-1.5 py-0.5 text-[9.5px] font-bold transition ${
                     overlayLayers.showFace ? 'bg-[#7C3AED] text-white' : 'text-slate-300'
                   }`}
                 >
@@ -1628,28 +1661,154 @@ export const VideoCoachLabPage: React.FC = () => {
                 </button>
               </div>
 
+              {/* 左下角（状态条上方）：镜头翻转 + 画面比例适配 + 自适应帧率档位切换 */}
+              {sourceType && (
+                <div className="absolute bottom-8 left-2 z-10 flex items-center gap-1">
+                  {sourceType === 'camera' && (
+                    <button
+                      type="button"
+                      onClick={handleFlipCamera}
+                      className="flex items-center gap-1 rounded-lg bg-slate-950/75 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-md transition hover:bg-slate-900 active:scale-95"
+                      title="翻转前/后置摄像头"
+                    >
+                      <span>🔄</span>
+                      <span>{cameraFacing === 'user' ? '前置' : '后置'}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVideoFitMode((m) => (m === 'cover' ? 'contain' : 'cover'))
+                    }
+                    className="flex items-center gap-0.5 rounded-lg bg-slate-950/75 px-1.5 py-0.5 text-[10px] font-bold text-slate-200 backdrop-blur-md transition hover:bg-slate-900 active:scale-95"
+                    title="切换画面等比填充或完整保留"
+                  >
+                    <span>📐</span>
+                    <span>{videoFitMode === 'cover' ? '满屏' : '完整'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCyclePerfMode}
+                    className={`flex items-center gap-0.5 rounded-lg px-1.5 py-0.5 text-[10px] font-bold backdrop-blur-md transition active:scale-95 ${
+                      perfMode === 'eco' || detectFpsInfo.throttled
+                        ? 'bg-emerald-950/80 text-emerald-300'
+                        : 'bg-slate-950/75 text-sky-300'
+                    }`}
+                    title="点击切换识别帧率档位：智能自适应 / 省电降帧防卡顿 / 高帧率"
+                  >
+                    <span>{perfMode === 'eco' ? '🌿' : perfMode === 'high' ? '🚀' : '🤖'}</span>
+                    <span>
+                      {perfMode === 'eco'
+                        ? `流畅${detectFpsInfo.fps}帧`
+                        : perfMode === 'high'
+                          ? `高帧${detectFpsInfo.fps}帧`
+                          : detectFpsInfo.throttled
+                            ? `自适应${detectFpsInfo.fps}帧`
+                            : `${detectFpsInfo.fps}fps`}
+                    </span>
+                  </button>
+                </div>
+              )}
+
               {/* 底部姿态摘要浮层 */}
               {sourceType && (
-                <div className="absolute right-2 bottom-2 left-2 flex items-center justify-between rounded-xl bg-slate-950/80 px-2.5 py-1 text-[11px] text-white backdrop-blur-md">
+                <div className="pointer-events-none absolute right-2 bottom-1.5 left-2 z-10 flex items-center justify-between rounded-lg bg-slate-950/80 px-2 py-0.5 text-[10.5px] text-white backdrop-blur-md">
                   <span className="truncate font-medium text-slate-100">
                     {liveTelemetry.statusSummary}
                   </span>
-                  <span className="ml-2 shrink-0 rounded bg-white/15 px-1.5 py-0.5 font-mono text-[9.5px] text-emerald-300">
-                    Δ {liveTelemetry.diffScore}
+                  <span className="ml-1.5 shrink-0 rounded bg-white/15 px-1 py-0.2 font-mono text-[9px] text-emerald-300">
+                    Δ{liveTelemetry.diffScore}
                   </span>
+                </div>
+              )}
+
+              {/* 画面内全局暂停 / 配额提醒毛玻璃覆盖层（取代原本外部占空间的黄色大警告框） */}
+              {(quotaNotice || (sourceType && !isAnalyzing && !pauseOverlayHidden)) && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/72 px-4 py-3 text-center backdrop-blur-[3px] transition-opacity">
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10.5px] font-extrabold ${
+                      isDailyQuotaExhausted
+                        ? 'bg-red-500/25 text-red-200 ring-1 ring-red-400/40'
+                        : quotaNotice
+                          ? 'bg-amber-500/25 text-amber-200 ring-1 ring-amber-400/40'
+                          : 'bg-white/15 text-white ring-1 ring-white/25'
+                    }`}
+                  >
+                    <span>
+                      {isDailyQuotaExhausted
+                        ? '🔒 今日免费额度已用完'
+                        : quotaNotice
+                          ? '⏱️ 已自动暂停实时分析'
+                          : '⏸ 实时分析已暂停'}
+                    </span>
+                  </span>
+
+                  <p className="mt-1.5 max-w-[290px] text-[11.5px] leading-relaxed text-slate-200 sm:max-w-[360px] sm:text-[12px]">
+                    {quotaNotice
+                      ? isDailyQuotaExhausted
+                        ? isLoggedIn
+                          ? '今日 15 分钟 AI 视觉分析额度已达上限，明天自动恢复。'
+                          : '访客今日 5 分钟免费额度已用完，登录账号即可解锁每天 15 分钟额度。'
+                        : isLoggedIn
+                          ? '已连续分析满 2 分钟无操作，自动暂停以节省 AI 算力（今日剩余 ' +
+                            formatMMSS(remainingDailySec) +
+                            '）。'
+                          : '访客单次最多连续分析 1 分钟，已自动暂停以节省 AI 资源（今日剩余 ' +
+                            formatMMSS(remainingDailySec) +
+                            '）。'
+                      : '画面骨骼追踪仍在运行，点击下方可随时恢复 AI 抽帧诊断。'}
+                  </p>
+
+                  <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
+                    {sourceType && !isAnalyzing && !isDailyQuotaExhausted && (
+                      <button
+                        type="button"
+                        onClick={handleToggleStartStopAnalyze}
+                        className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-3.5 py-1.5 text-[11.5px] font-extrabold text-white shadow-sm transition hover:bg-emerald-400 active:scale-95"
+                      >
+                        <span>▶</span>
+                        <span>继续实时分析</span>
+                      </button>
+                    )}
+
+                    {!isLoggedIn && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openLogin('登录账号可解锁单次 2 分钟连续分析与更高每日 AI 视觉教练额度')
+                        }
+                        className="inline-flex items-center gap-1 rounded-full bg-[#0071E3] px-3 py-1.5 text-[11.5px] font-extrabold text-white shadow-sm transition hover:brightness-110 active:scale-95"
+                      >
+                        <span>🔑</span>
+                        <span>登录解锁单次2分钟</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuotaNotice('');
+                        setPauseOverlayHidden(true);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-white/20 active:scale-95"
+                    >
+                      <span>👁️</span>
+                      <span>仅看画面</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* 2. 互斥二选一状态机操控坞：
-                 - 未开启画面 (!sourceType)：只展示「📷 开启镜头实时分析」与「📁 选择视频实时分析」二选一入口；
-                 - 已开启镜头/视频 (sourceType)：彻底隐藏另一个输入源按钮（防误触），直接展示当前会话专属三键（暂停/继续 + 抓拍 + 关闭退出） */}
+            {/* 2. 紧凑型操控坞：精简按钮尺寸与文案，彻底告别大按钮挤压 */}
             {!sourceType ? (
-              <div className="grid shrink-0 grid-cols-2 gap-2">
+              <div className="grid shrink-0 grid-cols-2 gap-1.5 lg:gap-2">
                 <button
                   type="button"
                   onClick={handleToggleCamera}
-                  className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#16A34A] to-[#15803D] py-2.5 text-[12.5px] font-extrabold text-white shadow-sm shadow-emerald-600/20 transition hover:brightness-105 active:scale-[0.98] lg:py-3 lg:text-[13.5px]"
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#16A34A] to-[#15803D] py-2 text-[12px] font-extrabold text-white shadow-xs transition hover:brightness-105 active:scale-[0.98] lg:py-2.5 lg:text-[13px]"
                 >
                   <span>📷</span>
                   <span>开启镜头实时分析</span>
@@ -1658,28 +1817,26 @@ export const VideoCoachLabPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-slate-50 py-2.5 text-[12.5px] font-extrabold text-slate-800 transition hover:bg-slate-100 active:scale-[0.98] lg:py-3 lg:text-[13.5px]"
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-slate-50 py-2 text-[12px] font-extrabold text-slate-800 transition hover:bg-slate-100 active:scale-[0.98] lg:py-2.5 lg:text-[13px]"
                 >
                   <span>📁</span>
                   <span>选择视频实时分析</span>
                 </button>
               </div>
             ) : (
-              <div className="grid shrink-0 grid-cols-12 gap-1.5 lg:gap-2">
-                {/* 会话键 1：暂停分析(0ms截断) ↔ 继续实时分析 */}
+              <div className="grid shrink-0 grid-cols-3 gap-1.5 lg:gap-2">
+                {/* 会话键 1：暂停分析 ↔ 继续分析 */}
                 <button
                   type="button"
                   onClick={handleToggleStartStopAnalyze}
-                  className={`col-span-5 flex items-center justify-center gap-1 rounded-xl py-2.5 text-[12px] font-extrabold transition active:scale-[0.98] lg:text-[13px] ${
+                  className={`flex items-center justify-center gap-1 rounded-xl py-1.5 text-[11.5px] font-extrabold transition active:scale-[0.98] lg:py-2 lg:text-[12.5px] ${
                     isAnalyzing || inFlightCount > 0
                       ? 'border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
                       : 'bg-gradient-to-r from-[#16A34A] to-[#15803D] text-white shadow-xs hover:brightness-105'
                   }`}
                 >
                   <span>{isAnalyzing || inFlightCount > 0 ? '⏸' : '▶'}</span>
-                  <span>
-                    {isAnalyzing || inFlightCount > 0 ? '暂停分析 (0ms)' : '继续实时分析'}
-                  </span>
+                  <span>{isAnalyzing || inFlightCount > 0 ? '暂停分析' : '继续分析'}</span>
                 </button>
 
                 {/* 会话键 2：立即抓拍当前动作 */}
@@ -1687,18 +1844,18 @@ export const VideoCoachLabPage: React.FC = () => {
                   type="button"
                   disabled={inFlightCount > 0}
                   onClick={handleManualSnapshotAnalyze}
-                  className="col-span-3 flex items-center justify-center gap-1 rounded-xl border border-[#0071E3]/30 bg-[#0071E3]/10 py-2.5 text-[12px] font-extrabold text-[#0071E3] transition hover:bg-[#0071E3]/15 active:scale-[0.98] disabled:opacity-40 lg:text-[13px]"
+                  className="flex items-center justify-center gap-1 rounded-xl border border-[#0071E3]/30 bg-[#0071E3]/10 py-1.5 text-[11.5px] font-extrabold text-[#0071E3] transition hover:bg-[#0071E3]/15 active:scale-[0.98] disabled:opacity-40 lg:py-2 lg:text-[12.5px]"
                   title="不等窗口周期，立即抓拍当前动作并流式点评"
                 >
                   <span>⚡</span>
                   <span>立即抓拍</span>
                 </button>
 
-                {/* 会话键 3：关闭当前输入源（断电并返回二选一状态） */}
+                {/* 会话键 3：关闭当前输入源 */}
                 <button
                   type="button"
                   onClick={stopMedia}
-                  className="col-span-4 flex items-center justify-center gap-1 rounded-xl border border-red-200 bg-red-50 py-2.5 text-[12px] font-extrabold text-red-600 transition hover:bg-red-100 active:scale-[0.98] lg:text-[13px]"
+                  className="flex items-center justify-center gap-1 rounded-xl border border-red-200 bg-red-50 py-1.5 text-[11.5px] font-extrabold text-red-600 transition hover:bg-red-100 active:scale-[0.98] lg:py-2 lg:text-[12.5px]"
                 >
                   <span>{sourceType === 'camera' ? '🔴' : '✕'}</span>
                   <span>{sourceType === 'camera' ? '关闭镜头' : '退出视频'}</span>
@@ -1728,7 +1885,7 @@ export const VideoCoachLabPage: React.FC = () => {
                   src={latestBundle.gridDataUrl}
                   alt="Latest 2x2 Grid"
                   onClick={() => setPreviewGridModalUrl(latestBundle.gridDataUrl)}
-                  className="aspect-video w-full cursor-zoom-in rounded-xl border border-slate-200 object-cover transition hover:brightness-105"
+                  className="w-full cursor-zoom-in rounded-xl border border-slate-200 object-contain transition hover:brightness-105"
                 />
               </div>
             )}
@@ -1737,11 +1894,11 @@ export const VideoCoachLabPage: React.FC = () => {
 
         {/* ==================== 手机端下半屏动态切换工作区 (lg:hidden) ==================== */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
-          {/* 手机端 Tab 1：💬 实时诊断流（顶部带紧凑横向模式切换条） */}
+          {/* 手机端 Tab 1：💬 实时诊断流（顶部带紧凑分段式模式切换条） */}
           {mobileTab === 'feed' && (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="flex shrink-0 items-center justify-between gap-1.5 border-b border-slate-200/70 bg-white px-3 py-2">
-                <div className="flex items-center gap-1 overflow-x-auto">
+              <div className="flex shrink-0 items-center justify-between gap-1.5 border-b border-slate-200/70 bg-white px-2.5 py-1.5">
+                <div className="inline-flex items-center gap-0.5 rounded-xl bg-slate-100/90 p-0.5">
                   {SCENE_PRESETS.map((p) => {
                     const active = p.id === sceneId;
                     return (
@@ -1749,10 +1906,10 @@ export const VideoCoachLabPage: React.FC = () => {
                         key={p.id}
                         type="button"
                         onClick={() => handleSelectScene(p.id)}
-                        className={`inline-flex shrink-0 items-center gap-1 rounded-xl border px-2.5 py-1 text-[11.5px] font-extrabold transition ${
+                        className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold transition ${
                           active
-                            ? 'border-[#0071E3] bg-[#0071E3] text-white shadow-2xs'
-                            : 'border-slate-200 bg-slate-50 text-slate-700'
+                            ? 'bg-white text-[#0071E3] shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         <span>{p.icon}</span>
@@ -1769,14 +1926,14 @@ export const VideoCoachLabPage: React.FC = () => {
                       rollingMemoryRef.current = [];
                       setSegments([]);
                     }}
-                    className="shrink-0 rounded-lg border border-slate-200 px-2 py-1 text-[10.5px] font-bold text-slate-500"
+                    className="shrink-0 rounded-lg border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-500 active:scale-95"
                   >
                     清空
                   </button>
                 )}
               </div>
 
-              <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2.5">
                 {renderDiagnosisCardsList()}
               </div>
             </div>

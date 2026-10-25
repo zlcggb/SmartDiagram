@@ -13,7 +13,8 @@ const CATEGORIES: Array<{ id: CategoryId; label: string }> = [
 ];
 
 const VERSIONS = [
-  { id: 'v2.8.1', label: 'v2.8.1', latest: true, date: '2026年10月25日' },
+  { id: 'v2.8.2', label: 'v2.8.2', latest: true, date: '2026年10月25日' },
+  { id: 'v2.8.1', label: 'v2.8.1', date: '2026年10月25日' },
   { id: 'v2.8.0', label: 'v2.8.0', date: '2026年10月25日' },
   { id: 'v2.7.0', label: 'v2.7.0', date: '2026年10月24日' },
   { id: 'v2.6.0', label: 'v2.6.0', date: '2026年10月23日' },
@@ -27,10 +28,11 @@ const VERSIONS = [
 export function VideoChangelogPage() {
   const [activeCategory, setActiveCategory] = useState<CategoryId>('all');
   const [expandAll, setExpandAll] = useState(true);
-  const [activeVersion, setActiveVersion] = useState('v2.8.1');
+  const [activeVersion, setActiveVersion] = useState('v2.8.2');
   const [copySuccess, setCopySuccess] = useState(false);
   const [archMode, setArchMode] = useState<'architecture' | 'sequence' | 'benchmark'>('architecture');
   const [collapseState, setCollapseState] = useState<Record<string, boolean>>({
+    'v2.8.2-features': true,
     'v2.8.1-features': true,
     'v2.8.0-features': true,
     'v2.8.0-fixes': true,
@@ -62,11 +64,11 @@ export function VideoChangelogPage() {
 
   const shouldShowVersion = (vId: string): boolean => {
     if (activeCategory === 'all') return true;
-    if (activeCategory === 'ai' && ['v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.0.0'].includes(vId)) return true;
+    if (activeCategory === 'ai' && ['v2.8.2', 'v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.0.0'].includes(vId)) return true;
     if (activeCategory === 'asr' && ['v2.7.0', 'v2.5.0', 'v2.3.0'].includes(vId)) return true;
-    if (activeCategory === 'arch' && ['v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v1.0.0'].includes(vId)) return true;
+    if (activeCategory === 'arch' && ['v2.8.2', 'v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v1.0.0'].includes(vId)) return true;
     if (activeCategory === 'quiz' && ['v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.4.0'].includes(vId)) return true;
-    if (activeCategory === 'platform' && ['v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.3.0', 'v1.0.0'].includes(vId)) return true;
+    if (activeCategory === 'platform' && ['v2.8.2', 'v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.3.0', 'v1.0.0'].includes(vId)) return true;
     return false;
   };
 
@@ -81,7 +83,12 @@ export function VideoChangelogPage() {
   const handleCopyChangelog = async () => {
     const md = `# 视频学习助手 (SmartDiagram /video) 更新记录与架构全景
 
-## v2.8.1 (2026-10-25 · LATEST)
+## v2.8.2 (2026-10-25 · LATEST)
+- 📐 手机端前置摄像头等比无畸变取景与自然镜像：修复竖屏传感器画面在横屏画布中拉伸变形问题，支持「满屏裁剪(Cover)/完整保留(Contain)」切换与 2×2 拼图真实宽高比自适应。
+- ⚡ 设备性能自适应动态降帧与多模型奇偶拍错峰推理：实时监测推理耗时动态调节 18/12/8 FPS，移动端奇偶帧交替跑全身骨骼与手部/面部模型，单帧峰值阻塞减半，彻底消除中低配手机卡顿。
+- 🎨 画面内毛玻璃全局暂停 HUD 与移动端紧凑布局重塑：将暂停与配额提示整合进视频取景框内全局覆盖层，消除顶栏与四角 HUD 重叠，精简控制按钮与模式分段条。
+
+## v2.8.1 (2026-10-25)
 - ☁️ MediaPipe 模型与 WASM 迁移至 Cloudflare R2 边缘 CDN（file-smartdiagram.unilumin-gtm.com/mediapipe/）：前端构建产物立减 44MB，1 年强缓存 + 浏览器 CacheStorage 二次访问 0MB 流量瞬时启动。
 - 🔗 文档中心纯英文 Canonical ID 路由（/video/docs/:docId）与移动端测验面板自适应滚动优化。
 
@@ -200,7 +207,63 @@ export function VideoChangelogPage() {
       {/* 正文双栏：左侧版本时间轴 + 右侧 Sticky 版本导航 */}
       <div className="mx-auto grid max-w-[1240px] grid-cols-1 gap-4 px-3 sm:gap-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="min-w-0 space-y-3.5 sm:space-y-10 lg:space-y-14">
-          {/* ================= v2.8.1 (最新架构升级：Cloudflare R2 边缘存储迁移与英文文档路由) ================= */}
+          {/* ================= v2.8.2 (最新体验精修：摄像头等比无畸变取景、动态降帧错峰防卡顿与画面内全局暂停 HUD) ================= */}
+          {shouldShowVersion('v2.8.2') && (
+            <section
+              id="v2.8.2"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-3 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-3.5 sm:p-6 shadow-xs"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.8.2</span>
+                  <span className="rounded-full bg-[#0071e3] px-1.5 py-0.5 text-[9.5px] font-bold text-white uppercase tracking-wider sm:px-2 sm:text-[10px]">
+                    LATEST
+                  </span>
+                  <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3] md:hidden">
+                    📐 镜头等比自适应与降帧防卡顿
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-slate-400 font-mono sm:text-[12.5px] sm:text-slate-500">2026-10-25</p>
+                <p className="hidden text-[11.5px] text-[#0071e3] font-semibold md:block">
+                  📐 镜头等比自适应 · 错峰降帧 · 全局暂停 HUD
+                </p>
+              </div>
+
+              <div className="min-w-0 space-y-3 sm:space-y-5">
+                <div>
+                  <h2 className="text-[15px] font-bold leading-snug tracking-tight text-slate-900 sm:text-[20px]">
+                    手机端前置摄像头等比无畸变取景、设备性能自适应降帧错峰推理与画面内毛玻璃全局暂停 HUD
+                  </h2>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 sm:mt-2 sm:text-[13.5px]">
+                    针对手机端竖屏使用 AI 视觉教练（<code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">/video/coach</code>）时的画面拉伸变形、低配设备微卡顿与界面拥挤问题完成全链路重构：实现 1:1 真实宽高比无畸变绘制与前置自拍镜像、多模型奇偶帧错峰调度与动态降帧（18/12/8 FPS），并将暂停提示升级为视频取景框内全局毛玻璃覆盖层。
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 text-[11.5px] sm:grid-cols-3 sm:gap-3 sm:text-[12px]">
+                  <div className="rounded-xl border border-[#0071e3]/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-[#0071e3]">1. 摄像头等比无畸变 + 自然镜像</div>
+                    <p className="text-slate-600 leading-snug">
+                      按传感器真实宽高比居中裁剪/完整保留绘制，彻底解决竖屏前置自拍横向拉宽问题，文字标注正向不反显
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-500/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-emerald-600">2. 动态降帧 + 奇偶拍错峰推理</div>
+                    <p className="text-slate-600 leading-snug">
+                      实时监测单帧耗时平滑调节 18/12/8 FPS，奇偶帧交替跑骨骼与手部/面部模型，单帧峰值阻塞减半
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-indigo-500/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-indigo-600">3. 画面内全局暂停 HUD 与布局瘦身</div>
+                    <p className="text-slate-600 leading-snug">
+                      移除外部巨型黄框，改为视频内毛玻璃暂停层；解决顶栏与四角 HUD 重叠，瘦身操作按钮与模式分段条
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ================= v2.8.1 (Cloudflare R2 边缘存储迁移与英文文档路由) ================= */}
           {shouldShowVersion('v2.8.1') && (
             <section
               id="v2.8.1"
@@ -209,9 +272,6 @@ export function VideoChangelogPage() {
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.8.1</span>
-                  <span className="rounded-full bg-[#0071e3] px-1.5 py-0.5 text-[9.5px] font-bold text-white uppercase tracking-wider sm:px-2 sm:text-[10px]">
-                    LATEST
-                  </span>
                   <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3] md:hidden">
                     ☁️ R2 边缘存储与路由优化
                   </span>

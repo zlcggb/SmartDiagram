@@ -44,6 +44,80 @@ export interface OverlayLayerConfig {
   showFace: boolean;
 }
 
+export type PerceptionPerfMode = 'auto' | 'eco' | 'high';
+
+export interface VideoAdaptiveDrawOptions {
+  fitMode?: 'cover' | 'contain';
+  mirror?: boolean;
+}
+
+/**
+ * 将 <video> 当前帧按真实宽高比无变形地绘制到目标 Canvas 上
+ * - 解决手机竖屏前置摄像头 (如 720×1280 / 480×640) 直接 drawImage 到横屏画布导致人脸被强行拉宽变形的问题
+ * - cover 模式：等比居中裁剪填满画布（适合实时摄像头取景）
+ * - contain 模式：等比完整居中留黑边（适合不同比例的本地视频）
+ * - mirror 模式：前置摄像头水平镜像，后续在画布上绘制骨骼与文字标注时保持正向不反转
+ */
+export function drawVideoFrameAdaptive(
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  dstW: number,
+  dstH: number,
+  options: VideoAdaptiveDrawOptions = {},
+): void {
+  const vw = video.videoWidth || dstW;
+  const vh = video.videoHeight || dstH;
+  if (vw <= 0 || vh <= 0 || dstW <= 0 || dstH <= 0) return;
+
+  const fitMode = options.fitMode ?? 'cover';
+  const mirror = options.mirror ?? false;
+  const srcAspect = vw / vh;
+  const dstAspect = dstW / dstH;
+
+  ctx.save();
+  if (mirror) {
+    ctx.translate(dstW, 0);
+    ctx.scale(-1, 1);
+  }
+
+  if (fitMode === 'contain') {
+    ctx.fillStyle = '#0B1120';
+    ctx.fillRect(0, 0, dstW, dstH);
+    let drawW = dstW;
+    let drawH = dstH;
+    let dx = 0;
+    let dy = 0;
+    if (srcAspect > dstAspect) {
+      drawW = dstW;
+      drawH = dstW / srcAspect;
+      dy = (dstH - drawH) / 2;
+    } else {
+      drawH = dstH;
+      drawW = dstH * srcAspect;
+      dx = (dstW - drawW) / 2;
+    }
+    ctx.drawImage(video, 0, 0, vw, vh, dx, dy, drawW, drawH);
+  } else {
+    // cover: 等比居中裁剪，100% 保持原始像素宽高比，绝不拉伸变形
+    let sx = 0;
+    let sy = 0;
+    let sw = vw;
+    let sh = vh;
+    if (srcAspect > dstAspect) {
+      sh = vh;
+      sw = vh * dstAspect;
+      sx = (vw - sw) / 2;
+    } else {
+      sw = vw;
+      sh = vw / dstAspect;
+      sy = (vh - sh) / 2;
+    }
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, dstW, dstH);
+  }
+
+  ctx.restore();
+}
+
 export interface RealPoseTelemetry {
   timestampSec: number;
   timeLabel: string;
@@ -205,8 +279,15 @@ class RealMediaPipeHolisticService {
   public isReady = false;
   public activeModelsDesc = '正在加载姿态/手部/面部高精度模型...';
 
+  // 自适应性能与动态帧率调节状态
+  public perfMode: PerceptionPerfMode = 'auto';
+  public avgInferCostMs = 14;
+  public currentTargetFps = 18;
+  public isThrottled = false;
+
   // 缓存上一次检测结果与平滑坐标（避免每帧重复跑 3 个模型导致掉帧）
   private lastDetectTimeMs = 0;
+  private detectTick = 0;
   private prevPose: LandmarkPoint[] | null = null;
   private cachedResult: HolisticDetectionResult = {
     poseLandmarks: null,
@@ -214,8 +295,13 @@ class RealMediaPipeHolisticService {
     face: null,
   };
 
+  public setPerfMode(mode: PerceptionPerfMode): void {
+    this.perfMode = mode;
+  }
+
   public resetCache(): void {
     this.lastDetectTimeMs = 0;
+    this.detectTick = 0;
     this.prevPose = null;
     this.cachedResult = { poseLandmarks: null, hands: [], face: null };
   }
@@ -337,65 +423,127 @@ class RealMediaPipeHolisticService {
   }
 
   /**
-   * 对真实视频帧执行三模型检测（带 55ms 节流与 EMA 平滑，保证 60fps 流畅度与高精度）
+   * 对真实视频帧执行三模型检测（支持设备性能自适应动态降帧 + 奇偶拍错峰推理 + EMA 平滑）
    */
   public detectHolisticFrame(
     videoOrCanvas: HTMLVideoElement | HTMLCanvasElement,
     timestampMs: number,
     layers: OverlayLayerConfig = { showPose: true, showHands: true, showFace: true },
+    isMirrored = false,
   ): HolisticDetectionResult {
     if (!this.poseLandmarker) {
       return { poseLandmarks: null, hands: [], face: null };
     }
 
-    // 控制检测频率约 18 FPS（每 55ms 跑一次推理），中间帧直接返回平滑后的最新骨骼
-    if (timestampMs - this.lastDetectTimeMs < 55 && this.cachedResult.poseLandmarks) {
+    // 1. 根据当前性能模式与实测平均单次推理耗时，动态计算检测间隔与错峰策略
+    let minIntervalMs = 55; // 默认 ~18 FPS
+    let useStaggered = false;
+
+    if (this.perfMode === 'eco') {
+      minIntervalMs = 115; // 省电流畅档 ~8.5 FPS + 错峰推理
+      useStaggered = true;
+      this.isThrottled = true;
+    } else if (this.perfMode === 'high') {
+      minIntervalMs = 50; // 高帧率档 ~20 FPS
+      useStaggered = this.avgInferCostMs > 42;
+      this.isThrottled = false;
+    } else {
+      // auto 自适应档：根据设备实时推理耗时自动平滑降帧，消除中低端手机卡顿
+      if (this.avgInferCostMs >= 34) {
+        minIntervalMs = 125; // ~8 FPS
+        useStaggered = true;
+        this.isThrottled = true;
+      } else if (this.avgInferCostMs >= 20) {
+        minIntervalMs = 85; // ~12 FPS
+        useStaggered = true;
+        this.isThrottled = true;
+      } else {
+        minIntervalMs = 55; // ~18 FPS
+        // 移动设备上默认启用多模型奇偶帧错峰，把单帧峰值阻塞耗时立减 50%
+        useStaggered =
+          typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+        this.isThrottled = false;
+      }
+    }
+
+    this.currentTargetFps = Math.max(5, Math.round(1000 / minIntervalMs));
+
+    const hasAnyCached =
+      Boolean(this.cachedResult.poseLandmarks) ||
+      this.cachedResult.hands.length > 0 ||
+      Boolean(this.cachedResult.face);
+
+    if (timestampMs - this.lastDetectTimeMs < minIntervalMs && hasAnyCached) {
       return this.cachedResult;
     }
 
+    const tStart = performance.now();
     const safeTs = Math.max(Math.round(timestampMs), Math.round(this.lastDetectTimeMs) + 1);
     this.lastDetectTimeMs = safeTs;
+    this.detectTick += 1;
 
-    let poseLandmarks: LandmarkPoint[] | null = null;
-    const hands: HandDetectionItem[] = [];
-    let face: FaceDetectionItem | null = null;
+    // 错峰调度：当启用 useStaggered 且开启了多个图层时，偶数拍跑 Pose，奇数拍跑 Hands + Face
+    const hasSecondaryLayers =
+      Boolean(this.handLandmarker && layers.showHands) ||
+      Boolean(this.faceLandmarker && layers.showFace);
+    const shouldStaggerNow =
+      useStaggered && layers.showPose && hasSecondaryLayers && Boolean(this.cachedResult.poseLandmarks);
+    const runPoseThisTick = !shouldStaggerNow || this.detectTick % 2 === 0;
+    const runSecondaryThisTick = !shouldStaggerNow || this.detectTick % 2 === 1;
 
-    try {
-      const poseRes = this.poseLandmarker.detectForVideo(videoOrCanvas, safeTs);
-      if (poseRes?.landmarks?.length > 0) {
-        poseLandmarks = smoothLandmarks(this.prevPose, poseRes.landmarks[0] as LandmarkPoint[]);
-        this.prevPose = poseLandmarks;
-      } else {
-        this.prevPose = null;
+    let poseLandmarks: LandmarkPoint[] | null = this.cachedResult.poseLandmarks;
+    let hands: HandDetectionItem[] = layers.showHands ? this.cachedResult.hands : [];
+    let face: FaceDetectionItem | null = layers.showFace ? this.cachedResult.face : null;
+
+    if (runPoseThisTick) {
+      try {
+        const poseRes = this.poseLandmarker.detectForVideo(videoOrCanvas, safeTs);
+        if (poseRes?.landmarks?.length > 0) {
+          poseLandmarks = smoothLandmarks(this.prevPose, poseRes.landmarks[0] as LandmarkPoint[]);
+          this.prevPose = poseLandmarks;
+        } else {
+          poseLandmarks = null;
+          this.prevPose = null;
+        }
+      } catch {
+        poseLandmarks = this.prevPose;
       }
-    } catch {
-      poseLandmarks = this.prevPose;
     }
 
-    if (this.handLandmarker && layers.showHands) {
+    if (runSecondaryThisTick && this.handLandmarker && layers.showHands) {
+      const nextHands: HandDetectionItem[] = [];
       try {
-        const handRes = this.handLandmarker.detectForVideo(videoOrCanvas, safeTs);
+        const handRes = this.handLandmarker.detectForVideo(videoOrCanvas, safeTs + 1);
         if (handRes?.landmarks?.length > 0) {
           for (let i = 0; i < handRes.landmarks.length; i++) {
             const lms = handRes.landmarks[i] as LandmarkPoint[];
             const rawCat = handRes.handednesses?.[i]?.[0];
-            // MediaPipe 默认按镜像视角命名 Left/Right，我们根据手腕与身体左右侧或直接转换为主体真实左右手
-            const categoryName = rawCat?.categoryName === 'Left' ? 'Right' : 'Left';
-            hands.push({
+            // MediaPipe 默认按自拍镜像视角命名 Left/Right：
+            // 若输入画布已做前置水平镜像 (isMirrored=true)，rawCat 即为用户真实左右手；若未镜像则反转
+            const rawName = rawCat?.categoryName === 'Left' ? 'Left' : 'Right';
+            const categoryName: 'Left' | 'Right' = isMirrored
+              ? rawName
+              : rawName === 'Left'
+                ? 'Right'
+                : 'Left';
+            nextHands.push({
               handedness: categoryName,
               score: rawCat?.score ?? 0.9,
               landmarks: lms,
             });
           }
         }
+        hands = nextHands;
       } catch {
         // ignore single frame error
       }
+    } else if (!layers.showHands) {
+      hands = [];
     }
 
-    if (this.faceLandmarker && layers.showFace) {
+    if (runSecondaryThisTick && this.faceLandmarker && layers.showFace) {
       try {
-        const faceRes = this.faceLandmarker.detectForVideo(videoOrCanvas, safeTs);
+        const faceRes = this.faceLandmarker.detectForVideo(videoOrCanvas, safeTs + 2);
         if (faceRes?.faceLandmarks?.length > 0) {
           const lms = faceRes.faceLandmarks[0] as LandmarkPoint[];
           const blendMap: Record<string, number> = {};
@@ -408,11 +556,18 @@ class RealMediaPipeHolisticService {
             }
           }
           face = { landmarks: lms, blendshapes: blendMap };
+        } else {
+          face = null;
         }
       } catch {
         // ignore single frame error
       }
+    } else if (!layers.showFace) {
+      face = null;
     }
+
+    const inferCost = Math.max(1, performance.now() - tStart);
+    this.avgInferCostMs = Math.round(this.avgInferCostMs * 0.72 + inferCost * 0.28);
 
     this.cachedResult = { poseLandmarks, hands, face };
     return this.cachedResult;
@@ -1001,11 +1156,16 @@ export function composeRealTemporalGridBundle(
     };
   });
 
-  // 采用 768×432 紧凑高清尺寸，兼顾骨骼标签清晰度与极速网络传输
-  const gridW = 768;
-  const gridH = 432;
-  const cellW = gridW / 2;
-  const cellH = gridH / 2;
+  // 根据源采样帧的真实宽高比自适应计算 2×2 网格尺寸，确保四格拼图 100% 等比不拉伸
+  const refCanvas = picked[0]?.annotatedCanvas;
+  const srcRatio =
+    refCanvas && refCanvas.width > 0 && refCanvas.height > 0
+      ? refCanvas.height / refCanvas.width
+      : 9 / 16;
+  const cellW = 384;
+  const cellH = Math.round(Math.max(216, Math.min(320, cellW * srcRatio)));
+  const gridW = cellW * 2;
+  const gridH = cellH * 2;
 
   const gridCanvas = document.createElement('canvas');
   gridCanvas.width = gridW;
