@@ -215,6 +215,27 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config?.url, config?.fileId, config?.formatId, config?.browser, config?.localSrc]);
 
+  const persistCover = (coverToSave: string) => {
+    if (!coverToSave) return;
+    const targetVid = videoId || config?.fileId || '';
+    if (!analysisId && !postId && !targetVid) return;
+    const syncKey = `${analysisId || ''}|${postId || ''}|${targetVid}|${coverToSave.slice(0, 48)}`;
+    if (syncedCoverKeyRef.current === syncKey) return;
+    syncedCoverKeyRef.current = syncKey;
+
+    if (analysisId) {
+      updateGuestVideoCover(analysisId, coverToSave);
+    }
+    void saveVideoCover({
+      coverUrl: coverToSave,
+      analysisId: analysisId || undefined,
+      postId: postId || undefined,
+      videoId: targetVid || undefined,
+    }).catch(() => {
+      // ignore background cover persistence failure
+    });
+  };
+
   const tryCaptureVideoFrame = (v: HTMLVideoElement | null) => {
     if (!v || existingCoverUrl || capturedCover) return;
     const vw = v.videoWidth || 0;
@@ -261,6 +282,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
       if (dataUrl && dataUrl.startsWith('data:image/')) {
         setCapturedCover(dataUrl);
+        persistCover(dataUrl);
         onCoverCaptured?.(dataUrl);
       }
     } catch {
@@ -269,27 +291,11 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   };
 
   useEffect(() => {
-    if (existingCoverUrl) return;
-    const coverToSave = capturedCover || (mode === 'embed' && poster ? poster : '');
+    const coverToSave = capturedCover || (!existingCoverUrl && mode === 'embed' && poster ? poster : '');
     if (!coverToSave) return;
-    const targetVid = videoId || config?.fileId || '';
-    if (!analysisId && !postId && !targetVid) return;
-    const syncKey = `${analysisId || ''}|${postId || ''}|${targetVid}|${coverToSave.slice(0, 48)}`;
-    if (syncedCoverKeyRef.current === syncKey) return;
-    syncedCoverKeyRef.current = syncKey;
-
-    if (analysisId) {
-      updateGuestVideoCover(analysisId, coverToSave);
-    }
-    void saveVideoCover({
-      coverUrl: coverToSave,
-      analysisId: analysisId || undefined,
-      postId: postId || undefined,
-      videoId: targetVid || undefined,
-    }).catch(() => {
-      // ignore background cover persistence failure
-    });
-  }, [analysisId, capturedCover, config?.fileId, existingCoverUrl, mode, postId, poster, videoId]);
+    persistCover(coverToSave);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisId, capturedCover, config?.fileId, mode, postId, poster, videoId]);
 
   useImperativeHandle(ref, () => ({
     seekTo(seconds: number) {

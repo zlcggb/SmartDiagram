@@ -1,7 +1,10 @@
 """工作台内播放：prepare / 上传 Range / 代理 Range。"""
 from __future__ import annotations
 
+import base64
 import os
+import subprocess
+import threading
 from typing import Optional
 
 import requests
@@ -61,17 +64,86 @@ class MediaPrepareRequest(BaseModel):
         return self
 
 
+def _maybe_capture_cover_async(url: Optional[str], file_id: Optional[str], src: Optional[str]) -> None:
+    if not src:
+        return
+
+    def _worker():
+        try:
+            import repo
+            from db import is_postgres
+
+            if not is_postgres():
+                return
+            target_vid = None
+            with repo.db_cursor() as cur:
+                if file_id:
+                    cur.execute(
+                        "SELECT id, cover_url FROM videos WHERE id = %s",
+                        (file_id.strip(),),
+                    )
+                    r = cur.fetchone()
+                    if r and not r.get("cover_url"):
+                        target_vid = str(r["id"])
+                elif url:
+                    cur.execute(
+                        "SELECT id, cover_url FROM videos WHERE source_url = %s ORDER BY created_at DESC LIMIT 1",
+                        (url.strip(),),
+                    )
+                    r = cur.fetchone()
+                    if r and not r.get("cover_url"):
+                        target_vid = str(r["id"])
+            if not target_vid:
+                return
+            port = os.getenv("PORT", "4020")
+            stream_url = f"http://127.0.0.1:{port}{src}" if src.startswith("/") else src
+            jpg_bytes = subprocess.check_output(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    "0.3",
+                    "-i",
+                    stream_url,
+                    "-frames:v",
+                    "1",
+                    "-vf",
+                    "scale='min(480,iw)':-2",
+                    "-q:v",
+                    "4",
+                    "-f",
+                    "image2pipe",
+                    "-vcodec",
+                    "mjpeg",
+                    "pipe:1",
+                ],
+                stderr=subprocess.DEVNULL,
+                timeout=20,
+            )
+            if jpg_bytes:
+                data_url = "data:image/jpeg;base64," + base64.b64encode(jpg_bytes).decode("ascii")
+                repo.save_video_cover(cover_url=data_url, video_id=target_vid)
+        except Exception:
+            pass
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 @router.post("/api/media/prepare")
 def api_media_prepare(req: MediaPrepareRequest):
     browser = _normalize_browser(req.browser)
     try:
         if req.file_id:
-            return resolve_upload_playback(req.file_id.strip())
-        return resolve_url_playback(
+            res = resolve_upload_playback(req.file_id.strip())
+            _maybe_capture_cover_async(None, req.file_id, res.get("src"))
+            return res
+        res = resolve_url_playback(
             req.url or "",
             format_id=req.format_id,
             browser=browser,
         )
+        _maybe_capture_cover_async(req.url, None, res.get("src"))
+        return res
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
