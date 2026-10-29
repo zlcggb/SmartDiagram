@@ -6,12 +6,38 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
+from community_repo import video_has_community_playback_access
 from media_token import sign_playback_token, verify_playback_token
-from repo import delete_user_video, get_video, list_user_videos
-from session_auth import require_user
+from repo import delete_user_video, get_video, list_user_videos, save_video_cover
+from session_auth import optional_user, require_user
 
 router = APIRouter(tags=["library"])
+
+
+class SaveCoverRequest(BaseModel):
+    cover_url: str = Field(..., min_length=16, max_length=800000)
+    video_id: Optional[str] = None
+    analysis_id: Optional[str] = None
+    post_id: Optional[str] = None
+
+
+@router.post("/api/videos/cover")
+def api_save_video_cover(
+    req: SaveCoverRequest,
+    _user: Optional[dict] = Depends(optional_user),
+):
+    """将播放器自动截取的视频封面图持久化到 videos 与 community_posts 表。"""
+    saved = save_video_cover(
+        cover_url=req.cover_url,
+        video_id=req.video_id,
+        analysis_id=req.analysis_id,
+        post_id=req.post_id,
+    )
+    if not saved:
+        return {"ok": False}
+    return {"ok": True, **saved}
 
 
 @router.get("/api/library/videos")
@@ -64,7 +90,11 @@ def api_get_video_playback(video_id: str, user: dict = Depends(require_user)):
     if not video:
         raise HTTPException(status_code=404, detail="视频不存在")
 
-    if str(video["user_id"]) != user["id"] and user.get("role") != "admin":
+    if (
+        str(video["user_id"]) != user["id"]
+        and user.get("role") != "admin"
+        and not video_has_community_playback_access(video_id)
+    ):
         raise HTTPException(status_code=403, detail="无权播放此视频")
 
     storage_status = video.get("storage_status")

@@ -28,6 +28,7 @@ from admin_routes import router as admin_router
 from library_routes import router as library_router
 from docs_routes import router as docs_router
 from coach_lab.routes import router as coach_lab_router
+from community_routes import router as community_router
 
 logger = logging.getLogger(__name__)
 ensure_proxy_env()
@@ -78,6 +79,7 @@ app.include_router(admin_router)
 app.include_router(library_router)
 app.include_router(docs_router)
 app.include_router(coach_lab_router)
+app.include_router(community_router)
 
 
 ALLOWED_BROWSERS = {

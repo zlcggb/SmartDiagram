@@ -918,6 +918,7 @@ def api_summary(
             "webpage_url": (record and record.get("source_url")) or t.get("url") or "",
             "source_type": (record and record.get("source_type")) or t.get("source_type") or "",
             "duration": record.get("duration_sec") if record else None,
+            "cover_url": (record and record.get("cover_url")) or "",
             "share_token": sign_share_token(task_id),
             "readonly_share": bool(is_shared),
         }
@@ -952,6 +953,7 @@ def api_summary(
         "webpage_url": record.get("source_url") or "",
         "source_type": record.get("source_type"),
         "duration": record.get("duration_sec"),
+        "cover_url": record.get("cover_url") or "",
         "share_token": sign_share_token(task_id),
         "readonly_share": bool(is_shared),
     }
@@ -1005,6 +1007,11 @@ def _load_analysis_result(task_id: str, user: dict | None = None) -> dict | None
         user_id=user["id"] if user else None,
         is_admin=user.get("role") == "admin" if user else False,
     )
+    if not record and user:
+        from community_repo import analysis_visible_in_community
+
+        if analysis_visible_in_community(task_id):
+            record = get_analysis_for_user(task_id, is_admin=True)
     if record and record.get("status") == "done" and record.get("result"):
         return record["result"]
     return None

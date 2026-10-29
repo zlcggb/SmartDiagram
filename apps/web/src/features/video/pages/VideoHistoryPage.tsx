@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { readAuthSession } from '@/shared/lib/config/auth';
-import { deleteMyVideo, fetchMyVideos } from '../lib/api';
+import {
+  deleteMyVideo,
+  fetchMyVideos,
+  publishCommunityPost,
+  withdrawCommunityPost,
+} from '../lib/api';
 import { listGuestVideos, removeGuestVideo } from '../lib/guestHistory';
+import { VideoCoverThumb } from '../components/VideoCoverThumb';
+import { useVideoDialog } from '../components/VideoDialog';
 
 function formatDuration(seconds?: number): string {
   if (!seconds) return '';
@@ -17,6 +24,8 @@ export const VideoHistoryPage: React.FC = () => {
   const [videos, setVideos] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const { confirm: confirmDialog, notify, dialogElement } = useVideoDialog();
 
   const isGuest = !readAuthSession();
 
@@ -29,6 +38,7 @@ export const VideoHistoryPage: React.FC = () => {
         platform: r.source_url ? '在线链接' : '本地上传',
         created_at: r.created_at,
         duration_sec: r.duration_seconds,
+        cover_url: r.cover_url || null,
         tldr: r.summary_result?.tldr || '',
         latest_analysis_id: r.summary_task_id || r.id,
         quiz_count: r.quiz_count || (r.summary_result?.quiz ? 1 : 0),
@@ -60,7 +70,13 @@ export const VideoHistoryPage: React.FC = () => {
   }, []);
 
   const handleDelete = async (item: any) => {
-    if (!window.confirm(`确认删除「${item.title || '此视频'}」及所有分析研报吗？此操作无法恢复。`)) {
+    const ok = await confirmDialog({
+      title: '删除学习记录',
+      message: `确认删除「${item.title || '此视频'}」及所有分析研报吗？此操作无法恢复。`,
+      confirmText: '确认删除',
+      danger: true,
+    });
+    if (!ok) {
       return;
     }
     setDeletingId(item.id);
@@ -68,15 +84,74 @@ export const VideoHistoryPage: React.FC = () => {
       removeGuestVideo(item.id);
       await loadVideos(searchQuery);
       setDeletingId(null);
+      notify('已删除本地记录', 'info');
       return;
     }
     try {
       await deleteMyVideo(item.id);
       await loadVideos(searchQuery);
+      notify('已删除视频记录', 'info');
     } catch (err: any) {
-      window.alert(err?.message || '删除失败，请重试');
+      notify(err?.message || '删除失败，请重试', 'error');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleOneClickPublish = async (item: any) => {
+    const analysisId = item.latest_analysis_id;
+    if (!analysisId || publishingId) return;
+    setPublishingId(item.id);
+    try {
+      const post = await publishCommunityPost(analysisId, true);
+      setVideos((prev) =>
+        prev.map((v) =>
+          v.id === item.id
+            ? {
+                ...v,
+                community_post_id: post.id,
+                community_post_status: post.status || 'published',
+              }
+            : v,
+        ),
+      );
+      notify('已一键发布到学习社区', 'success');
+    } catch (err: any) {
+      notify(err?.message || '发布到社区失败', 'error');
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  const handleWithdrawFromCard = async (item: any) => {
+    if (!item.community_post_id || publishingId) return;
+    const ok = await confirmDialog({
+      title: '下架社区内容',
+      message: `确认从学习社区下架「${item.title || '此视频'}」吗？下架后您仍可随时重新发布。`,
+      confirmText: '确认下架',
+      danger: true,
+    });
+    if (!ok) {
+      return;
+    }
+    setPublishingId(item.id);
+    try {
+      await withdrawCommunityPost(item.community_post_id);
+      setVideos((prev) =>
+        prev.map((v) =>
+          v.id === item.id
+            ? {
+                ...v,
+                community_post_status: 'withdrawn',
+              }
+            : v,
+        ),
+      );
+      notify('已从学习社区下架', 'info');
+    } catch (err: any) {
+      notify(err?.message || '下架失败', 'error');
+    } finally {
+      setPublishingId(null);
     }
   };
 
@@ -197,25 +272,64 @@ export const VideoHistoryPage: React.FC = () => {
                 </div>
 
                 {item.quiz_count > 0 && (
-                  <div className="mt-2 flex items-center gap-1.5">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <span className="inline-flex items-center gap-1 rounded-full bg-[#0071e3]/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#0071e3]">
                       🎯 {item.last_score !== null && item.last_score !== undefined ? `学习测验 · ${Math.round(Number(item.last_score))}分` : '已保存学习测验'}
                     </span>
+                    {(item.community_post_status === 'published' ||
+                      item.community_post_status === 'outdated') && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        🌐 已分享至社区
+                      </span>
+                    )}
                   </div>
                 )}
+                {!item.quiz_count &&
+                  (item.community_post_status === 'published' ||
+                    item.community_post_status === 'outdated') && (
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        🌐 已分享至社区
+                      </span>
+                    </div>
+                  )}
 
-                <h2
-                  className="mt-3 line-clamp-2 text-[14.5px] font-semibold tracking-tight text-slate-900 group-hover:text-[#0071e3]"
-                  title={item.title}
-                >
-                  {item.title || item.original_filename || '未命名视频'}
-                </h2>
+                <div className="mt-3 flex items-start justify-between gap-3.5">
+                  <div className="min-w-0 flex-1">
+                    <h2
+                      onClick={() => {
+                        const analysisId = item.latest_analysis_id || item.id;
+                        navigate(`/video?analysis=${encodeURIComponent(analysisId)}`);
+                      }}
+                      className="cursor-pointer line-clamp-2 text-[14.5px] font-semibold leading-snug tracking-tight text-slate-900 group-hover:text-[#0071e3]"
+                      title={item.title}
+                    >
+                      {item.title || item.original_filename || '未命名视频'}
+                    </h2>
 
-                {item.tldr ? (
-                  <p className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-slate-500">{item.tldr}</p>
-                ) : (
-                  <p className="mt-2 text-[12px] italic text-slate-400">暂无研报摘要</p>
-                )}
+                    {item.tldr ? (
+                      <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-slate-500">
+                        {item.tldr}
+                      </p>
+                    ) : (
+                      <p className="mt-1.5 text-[12px] italic text-slate-400">暂无研报摘要</p>
+                    )}
+                  </div>
+
+                  <div
+                    onClick={() => {
+                      const analysisId = item.latest_analysis_id || item.id;
+                      navigate(`/video?analysis=${encodeURIComponent(analysisId)}`);
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <VideoCoverThumb
+                      coverUrl={item.cover_url}
+                      durationSec={item.duration_sec}
+                      title={item.title}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="mt-4 border-t border-slate-100 pt-3">
@@ -224,23 +338,72 @@ export const VideoHistoryPage: React.FC = () => {
                   {item.duration_sec ? <span>{formatDuration(item.duration_sec)}</span> : null}
                 </div>
 
-                <div className="mt-3 flex items-center justify-between gap-2">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       const analysisId = item.latest_analysis_id || item.id;
                       navigate(`/video?analysis=${encodeURIComponent(analysisId)}`);
                     }}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0071e3]/10 py-1.5 text-[12px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0071e3]/10 py-1.5 px-2.5 text-[12px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white"
                   >
                     <span>查看研报与回放</span>
                   </button>
+
+                  {!isGuest &&
+                    item.latest_analysis_id &&
+                    item.latest_analysis_status === 'done' && (
+                      <>
+                        {item.community_post_id &&
+                        (item.community_post_status === 'published' ||
+                          item.community_post_status === 'outdated') ? (
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigate(
+                                  `/video/community/${encodeURIComponent(
+                                    item.community_post_id,
+                                  )}`,
+                                )
+                              }
+                              className="rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11.5px] font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                              title="打开社区详情页"
+                            >
+                              🌐 社区页
+                            </button>
+                            <button
+                              type="button"
+                              disabled={publishingId === item.id}
+                              onClick={() => void handleWithdrawFromCard(item)}
+                              className="rounded-xl border border-rose-200 bg-rose-50/70 px-2 py-1.5 text-[11.5px] font-medium text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
+                              title="从学习社区下架"
+                            >
+                              下架
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={publishingId === item.id}
+                            onClick={() => void handleOneClickPublish(item)}
+                            className="inline-flex items-center gap-1 rounded-xl border border-[#0071e3]/30 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white disabled:opacity-50"
+                            title="一键分享至学习社区"
+                          >
+                            <span>🚀</span>
+                            <span>
+                              {publishingId === item.id ? '发布中…' : '发布到社区'}
+                            </span>
+                          </button>
+                        )}
+                      </>
+                    )}
 
                   <button
                     type="button"
                     disabled={deletingId === item.id}
                     onClick={() => void handleDelete(item)}
-                    className="grid h-8 w-8 place-items-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-600"
                     title="删除记录"
                   >
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
@@ -257,6 +420,7 @@ export const VideoHistoryPage: React.FC = () => {
           ))}
         </div>
       )}
+      {dialogElement}
     </div>
   );
 };

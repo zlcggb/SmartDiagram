@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { prepareMedia, resolveVideoMediaUrl } from '../lib/api';
+import { prepareMedia, resolveVideoMediaUrl, saveVideoCover } from '../lib/api';
+import { updateGuestVideoCover } from '../lib/guestHistory';
 
 export interface VideoPlayerConfig {
   url?: string;
@@ -18,6 +19,11 @@ interface VideoPlayerProps {
   config: VideoPlayerConfig | null;
   poster?: string;
   title?: string;
+  analysisId?: string;
+  postId?: string;
+  videoId?: string;
+  existingCoverUrl?: string | null;
+  onCoverCaptured?: (coverUrl: string) => void;
 }
 
 const PORTRAIT_PROVIDERS = new Set(['tiktok', 'douyin']);
@@ -29,7 +35,16 @@ function withEmbedParent(url: string): string {
 }
 
 export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
-  { config, poster, title },
+  {
+    config,
+    poster,
+    title,
+    analysisId,
+    postId,
+    videoId,
+    existingCoverUrl,
+    onCoverCaptured,
+  },
   ref,
 ) {
   const [loading, setLoading] = useState(false);
@@ -39,12 +54,15 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const [embedSrc, setEmbedSrc] = useState('');
   const [embedKey, setEmbedKey] = useState(0);
   const [portraitByMeta, setPortraitByMeta] = useState(false);
+  const [capturedCover, setCapturedCover] = useState<string>('');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const reqIdRef = useRef(0);
   const pendingSeekRef = useRef<number | null>(null);
   const lastKnownTimeRef = useRef<number>(0);
   const autoRetryCountRef = useRef<number>(0);
+  const blackFrameNudgedRef = useRef<boolean>(false);
+  const syncedCoverKeyRef = useRef<string>('');
 
   const mode = playback?.mode || '';
   const provider = playback?.provider || '';
@@ -190,9 +208,88 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     pendingSeekRef.current = null;
     lastKnownTimeRef.current = 0;
     autoRetryCountRef.current = 0;
+    blackFrameNudgedRef.current = false;
+    syncedCoverKeyRef.current = '';
+    setCapturedCover('');
     void loadPlayback();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config?.url, config?.fileId, config?.formatId, config?.browser, config?.localSrc]);
+
+  const tryCaptureVideoFrame = (v: HTMLVideoElement | null) => {
+    if (!v || existingCoverUrl || capturedCover) return;
+    const vw = v.videoWidth || 0;
+    const vh = v.videoHeight || 0;
+    if (!vw || !vh || v.readyState < 2) return;
+    try {
+      const maxDim = 480;
+      const scale = Math.min(1, maxDim / Math.max(vw, vh));
+      const cw = Math.max(1, Math.round(vw * scale));
+      const ch = Math.max(1, Math.round(vh * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(v, 0, 0, cw, ch);
+
+      // 检测首帧是否接近纯黑（不少视频 0.00s 为黑场渐入），若是则自动微移至 0.25s 截取真实画面
+      const sample = ctx.getImageData(0, 0, cw, ch).data;
+      let lumaSum = 0;
+      let count = 0;
+      const step = Math.max(4, Math.floor(sample.length / 256) * 4);
+      for (let i = 0; i < sample.length; i += step) {
+        lumaSum += sample[i] * 0.299 + sample[i + 1] * 0.587 + sample[i + 2] * 0.114;
+        count += 1;
+      }
+      const avgLuma = count > 0 ? lumaSum / count : 50;
+      if (
+        avgLuma < 8 &&
+        !blackFrameNudgedRef.current &&
+        v.paused &&
+        v.currentTime < 0.08 &&
+        (v.duration || 0) > 0.5
+      ) {
+        blackFrameNudgedRef.current = true;
+        try {
+          v.currentTime = Math.min(0.3, (v.duration || 1) * 0.1);
+          return;
+        } catch {
+          // ignore
+        }
+      }
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      if (dataUrl && dataUrl.startsWith('data:image/')) {
+        setCapturedCover(dataUrl);
+        onCoverCaptured?.(dataUrl);
+      }
+    } catch {
+      // ignore cross-origin or canvas error
+    }
+  };
+
+  useEffect(() => {
+    if (existingCoverUrl) return;
+    const coverToSave = capturedCover || (mode === 'embed' && poster ? poster : '');
+    if (!coverToSave) return;
+    const targetVid = videoId || config?.fileId || '';
+    if (!analysisId && !postId && !targetVid) return;
+    const syncKey = `${analysisId || ''}|${postId || ''}|${targetVid}|${coverToSave.slice(0, 48)}`;
+    if (syncedCoverKeyRef.current === syncKey) return;
+    syncedCoverKeyRef.current = syncKey;
+
+    if (analysisId) {
+      updateGuestVideoCover(analysisId, coverToSave);
+    }
+    void saveVideoCover({
+      coverUrl: coverToSave,
+      analysisId: analysisId || undefined,
+      postId: postId || undefined,
+      videoId: targetVid || undefined,
+    }).catch(() => {
+      // ignore background cover persistence failure
+    });
+  }, [analysisId, capturedCover, config?.fileId, existingCoverUrl, mode, postId, poster, videoId]);
 
   useImperativeHandle(ref, () => ({
     seekTo(seconds: number) {
@@ -278,8 +375,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
           key={videoSrc}
           ref={videoRef}
           src={videoSrc}
-          poster={poster || undefined}
-          preload="metadata"
+          poster={poster || existingCoverUrl || undefined}
+          preload="auto"
           controls
           playsInline
           className="h-full w-full object-contain bg-black"
@@ -290,9 +387,16 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
             }
             applyPendingSeek(v);
           }}
+          onLoadedData={(e) => {
+            tryCaptureVideoFrame(e.currentTarget);
+          }}
           onCanPlay={(e) => {
             autoRetryCountRef.current = 0;
             applyPendingSeek(e.currentTarget);
+            tryCaptureVideoFrame(e.currentTarget);
+          }}
+          onSeeked={(e) => {
+            tryCaptureVideoFrame(e.currentTarget);
           }}
           onTimeUpdate={(e) => {
             const cur = e.currentTarget.currentTime;

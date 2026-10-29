@@ -2,6 +2,11 @@ import { readAuthSession } from '@/shared/lib/config/auth';
 import { readGuestSession } from '@/shared/lib/config/guestSession';
 import type {
   ChatRouterMeta,
+  CommunityActivityResponse,
+  CommunityComment,
+  CommunityCommentReport,
+  CommunityPost,
+  CommunityUserProfile,
   QuizData,
   QuizScoreResult,
   UploadMeta,
@@ -36,8 +41,10 @@ export function resolveVideoMediaUrl(src?: string | null): string {
 async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
+    cache: 'no-store',
     headers: getAuthHeaders({
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
       ...((options.headers as Record<string, string>) || {}),
     }),
     ...options,
@@ -249,11 +256,29 @@ export function getSummary(
   video_title?: string;
   webpage_url?: string;
   duration?: number;
+  cover_url?: string;
   share_token?: string;
   readonly_share?: boolean;
 }> {
   const qs = shareToken ? `?share=${encodeURIComponent(shareToken)}` : '';
   return request(`/summary/${taskId}${qs}`);
+}
+
+export function saveVideoCover(payload: {
+  coverUrl: string;
+  videoId?: string;
+  analysisId?: string;
+  postId?: string;
+}): Promise<{ ok: boolean; video_id?: string; cover_url?: string }> {
+  return request('/videos/cover', {
+    method: 'POST',
+    body: JSON.stringify({
+      cover_url: payload.coverUrl,
+      video_id: payload.videoId || undefined,
+      analysis_id: payload.analysisId || undefined,
+      post_id: payload.postId || undefined,
+    }),
+  });
 }
 
 export function cancelSummarize(taskId: string) {
@@ -509,5 +534,287 @@ export function fetchVideoDocsList(): Promise<{
 
 export function fetchVideoDocContent(docPath: string): Promise<VideoDocContentResponse> {
   return request(`/docs/content?path=${encodeURIComponent(docPath)}`);
+}
+
+// ── 认证资料与学习社区 API ──
+
+export function fetchAuthMe(): Promise<{
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+}> {
+  return request('/auth/me');
+}
+
+export function updateAuthProfile(payload: {
+  display_name?: string | null;
+  avatar_url?: string | null;
+}): Promise<{
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+}> {
+  return request('/auth/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchCommunityFeed(
+  params: { sort?: 'new' | 'hot'; page?: number; pageSize?: number } = {},
+): Promise<{
+  items: CommunityPost[];
+  total: number;
+  page: number;
+  page_size: number;
+  sort: string;
+}> {
+  const qs = new URLSearchParams();
+  qs.set('sort', params.sort || 'new');
+  qs.set('page', String(params.page || 1));
+  qs.set('page_size', String(params.pageSize || 20));
+  return request(`/community/posts?${qs.toString()}`);
+}
+
+export function fetchCommunityMine(
+  params: { page?: number; pageSize?: number } = {},
+): Promise<{
+  items: CommunityPost[];
+  total: number;
+  page: number;
+  page_size: number;
+}> {
+  const qs = new URLSearchParams();
+  qs.set('page', String(params.page || 1));
+  qs.set('page_size', String(params.pageSize || 30));
+  return request(`/community/posts/mine?${qs.toString()}`);
+}
+
+export function fetchCommunityFavorites(
+  params: { page?: number; pageSize?: number } = {},
+): Promise<{
+  items: CommunityPost[];
+  total: number;
+  page: number;
+  page_size: number;
+}> {
+  const qs = new URLSearchParams();
+  qs.set('page', String(params.page || 1));
+  qs.set('page_size', String(params.pageSize || 30));
+  return request(`/community/favorites?${qs.toString()}`);
+}
+
+export function fetchCommunityPost(postId: string): Promise<CommunityPost> {
+  return request(`/community/posts/${encodeURIComponent(postId)}`);
+}
+
+export function fetchCommunityPostSummary(postId: string): Promise<{
+  task_id: string;
+  status: string;
+  stage?: string;
+  percent?: number;
+  stage_message?: string | null;
+  result?: any;
+  error?: string | null;
+  error_code?: string | null;
+  partial_transcript?: any[];
+  timing?: any;
+  video_id?: string;
+  video_title?: string;
+  webpage_url?: string;
+  source_type?: 'upload' | 'url';
+  duration?: number;
+  cover_url?: string;
+  share_token?: string | null;
+  readonly_share?: boolean;
+  community_post_id?: string;
+}> {
+  return request(`/community/posts/${encodeURIComponent(postId)}/summary?_t=${Date.now()}`);
+}
+
+export function fetchCommunityPlayback(postId: string): Promise<{
+  mode: string;
+  stream_type?: string;
+  storage_status?: string;
+  src?: string;
+  mime?: string;
+  expires_in?: number;
+  source_url?: string;
+  platform?: string;
+  message?: string;
+}> {
+  return request(`/community/posts/${encodeURIComponent(postId)}/playback`);
+}
+
+export function fetchCommunityPostByAnalysis(
+  analysisId: string,
+): Promise<{ post: CommunityPost | null }> {
+  return request(`/community/posts/by-analysis/${encodeURIComponent(analysisId)}`);
+}
+
+export async function publishCommunityPost(
+  analysisId: string,
+  confirm = true,
+): Promise<CommunityPost> {
+  const res = await request<{ ok?: boolean; post?: CommunityPost } & CommunityPost>(
+    '/community/posts',
+    {
+      method: 'POST',
+      body: JSON.stringify({ analysis_id: analysisId, confirm }),
+    },
+  );
+  return (res && res.post ? res.post : res) as CommunityPost;
+}
+
+export function withdrawCommunityPost(postId: string): Promise<{ ok: boolean }> {
+  return request(`/community/posts/${encodeURIComponent(postId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function syncCommunityPost(postId: string): Promise<CommunityPost> {
+  const res = await request<{ ok?: boolean; post?: CommunityPost } & CommunityPost>(
+    `/community/posts/${encodeURIComponent(postId)}/sync`,
+    {
+      method: 'PATCH',
+    },
+  );
+  return (res && res.post ? res.post : res) as CommunityPost;
+}
+
+export function toggleCommunityLike(
+  postId: string,
+): Promise<{ liked: boolean; like_count: number }> {
+  return request(`/community/posts/${encodeURIComponent(postId)}/like`, {
+    method: 'POST',
+  });
+}
+
+export function toggleCommunityFavorite(
+  postId: string,
+): Promise<{ favorited: boolean; favorite_count: number }> {
+  return request(`/community/posts/${encodeURIComponent(postId)}/favorite`, {
+    method: 'POST',
+  });
+}
+
+export function fetchCommunityComments(
+  postId: string,
+): Promise<{ items: CommunityComment[] }> {
+  return request(`/community/posts/${encodeURIComponent(postId)}/comments`);
+}
+
+export async function postCommunityComment(
+  postId: string,
+  body: string,
+): Promise<CommunityComment> {
+  const res = await request<{ ok?: boolean; item?: CommunityComment } & CommunityComment>(
+    `/community/posts/${encodeURIComponent(postId)}/comments`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    },
+  );
+  return (res && res.item ? res.item : res) as CommunityComment;
+}
+
+export function reportCommunityComment(
+  commentId: string,
+  reason = '',
+): Promise<{ ok: boolean; report_id?: number; status?: string }> {
+  return request(`/community/comments/${encodeURIComponent(commentId)}/report`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function fetchCommunityUserMe(): Promise<CommunityUserProfile> {
+  return request('/community/users/me');
+}
+
+export function fetchCommunityUserProfile(userId: string): Promise<CommunityUserProfile> {
+  return request(`/community/users/${encodeURIComponent(userId)}`);
+}
+
+export function fetchCommunityUserPosts(
+  userId: string,
+  params: { page?: number; pageSize?: number } = {},
+): Promise<{
+  items: CommunityPost[];
+  total: number;
+  page: number;
+  page_size: number;
+}> {
+  const qs = new URLSearchParams();
+  qs.set('page', String(params.page || 1));
+  qs.set('page_size', String(params.pageSize || 20));
+  return request(`/community/users/${encodeURIComponent(userId)}/posts?${qs.toString()}`);
+}
+
+export function fetchCommunityUserActivity(
+  userId: string,
+  weeks = 52,
+): Promise<CommunityActivityResponse> {
+  const qs = new URLSearchParams();
+  qs.set('weeks', String(weeks));
+  return request(`/community/users/${encodeURIComponent(userId)}/activity?${qs.toString()}`);
+}
+
+export function fetchAdminCommunityPosts(
+  params: { page?: number; pageSize?: number; status?: string } = {},
+): Promise<{
+  items: CommunityPost[];
+  total: number;
+  page: number;
+  page_size: number;
+}> {
+  const qs = new URLSearchParams();
+  qs.set('page', String(params.page || 1));
+  qs.set('page_size', String(params.pageSize || 30));
+  if (params.status) qs.set('status', params.status);
+  return request(`/admin/community/posts?${qs.toString()}`);
+}
+
+export function adminWithdrawCommunityPost(postId: string): Promise<{ ok: boolean }> {
+  return request(`/admin/community/posts/${encodeURIComponent(postId)}/withdraw`, {
+    method: 'PATCH',
+  });
+}
+
+export function adminHideCommunityComment(commentId: string): Promise<{ ok: boolean }> {
+  return request(`/admin/community/comments/${encodeURIComponent(commentId)}/hide`, {
+    method: 'PATCH',
+  });
+}
+
+export function fetchAdminCommentReports(
+  params: { status?: string; page?: number; pageSize?: number } = {},
+): Promise<{
+  items: CommunityCommentReport[];
+  total: number;
+  page: number;
+  page_size: number;
+}> {
+  const qs = new URLSearchParams();
+  qs.set('status', params.status ?? 'open');
+  qs.set('page', String(params.page || 1));
+  qs.set('page_size', String(params.pageSize || 30));
+  return request(`/admin/community/comment-reports?${qs.toString()}`);
+}
+
+export function resolveAdminCommentReport(
+  reportId: number | string,
+  payload: { action: 'hide' | 'dismiss'; admin_note?: string },
+): Promise<{ ok: boolean; action: string }> {
+  return request(`/admin/community/comment-reports/${encodeURIComponent(String(reportId))}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
 }
 

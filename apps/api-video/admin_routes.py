@@ -323,12 +323,20 @@ def admin_list_videos(
 
 @router.delete("/videos/{video_id}")
 def admin_delete_video(video_id: str, admin: dict = Depends(require_admin)):
+    from community_repo import mark_posts_invalid_for_video
+
     with db_cursor() as cur:
         cur.execute("SELECT storage_path FROM videos WHERE id = %s", (video_id,))
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="视频记录不存在")
 
+    try:
+        mark_posts_invalid_for_video(video_id)
+    except Exception:
+        pass
+
+    with db_cursor() as cur:
         # 级联删除数据库记录
         cur.execute("DELETE FROM videos WHERE id = %s", (video_id,))
 

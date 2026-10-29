@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '@/features/diagram/model/chatStore';
-import { askQuestionStream, fileDownloadUrl } from '../lib/api';
+import { usePlatformAuth } from '@/shared/store/authStore';
+import {
+  askQuestionStream,
+  fetchCommunityPostByAnalysis,
+  fileDownloadUrl,
+  publishCommunityPost,
+  withdrawCommunityPost,
+} from '../lib/api';
 import {
   exportMindmapElixirPng,
   exportMindmapElixirSvg,
@@ -14,11 +21,13 @@ import { normalizeMindmapMarkdown } from '../lib/mindElixirHelpers';
 import type {
   ChatAction,
   ChatMessageItem,
+  CommunityPost,
   SummaryState,
   TranscriptSegment,
   TranslationState,
 } from '../lib/types';
 import { QuizPanel } from './QuizPanel';
+import { useVideoDialog } from './VideoDialog';
 import { VideoMindmapCanvas, type VideoMindmapCanvasHandle } from './VideoMindmapCanvas';
 
 interface SummaryPanelProps {
@@ -140,6 +149,8 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
   onSeek,
 }) => {
   const navigate = useNavigate();
+  const session = usePlatformAuth((state) => state.session);
+  const openLogin = usePlatformAuth((state) => state.openLogin);
   const [targetLang, setTargetLang] = useState('zh');
   const [transLang, setTransLang] = useState('zh');
   const [reportStyle, setReportStyle] = useState('deep_report');
@@ -147,6 +158,11 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
   const [activeTab, setActiveTab] = useState<'summary' | 'chapters' | 'mindmap' | 'transcript' | 'quiz' | 'chat'>('summary');
   const [customPrompt, setCustomPrompt] = useState('');
   const [copiedShareLink, setCopiedShareLink] = useState(false);
+
+  const [communityPost, setCommunityPost] = useState<CommunityPost | null>(null);
+  const [communityBusy, setCommunityBusy] = useState(false);
+  const [justPublishedToast, setJustPublishedToast] = useState(false);
+  const { confirm: confirmDialog, notify, dialogElement } = useVideoDialog();
 
   const handleCopyShareLink = () => {
     if (!summaryTaskId || !shareToken || typeof window === 'undefined') return;
@@ -281,6 +297,69 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
     setAsking(false);
     setChatMessages(Array.isArray(result?.chat_history) ? [...result.chat_history] : []);
   }, [summaryTaskId]);
+
+  useEffect(() => {
+    if (!summaryTaskId || !isDone || readOnly || !session?.access_token) {
+      setCommunityPost(null);
+      return;
+    }
+    let cancelled = false;
+    fetchCommunityPostByAnalysis(summaryTaskId)
+      .then((res) => {
+        if (!cancelled) {
+          setCommunityPost(res?.post || null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCommunityPost(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [summaryTaskId, isDone, readOnly, session?.access_token]);
+
+  const handleOneClickPublishCommunity = async () => {
+    if (!summaryTaskId || communityBusy) return;
+    if (!session) {
+      openLogin();
+      return;
+    }
+    setCommunityBusy(true);
+    try {
+      const post = await publishCommunityPost(summaryTaskId, true);
+      setCommunityPost({ ...post, status: post.status || 'published' });
+      setJustPublishedToast(true);
+      notify('已一键发布到学习社区', 'success');
+      setTimeout(() => setJustPublishedToast(false), 3000);
+    } catch (e: any) {
+      notify(e?.message || '发布到社区失败', 'error');
+    } finally {
+      setCommunityBusy(false);
+    }
+  };
+
+  const handleWithdrawCommunity = async () => {
+    if (!communityPost?.id || communityBusy) return;
+    const ok = await confirmDialog({
+      title: '下架社区内容',
+      message: `确认从学习社区下架「${result?.title || videoTitle || '该视频研报'}」吗？下架后其他成员将不再可见，您仍可随时重新发布。`,
+      confirmText: '确认下架',
+      danger: true,
+    });
+    if (!ok) return;
+    setCommunityBusy(true);
+    try {
+      await withdrawCommunityPost(communityPost.id);
+      setCommunityPost((prev) => (prev ? { ...prev, status: 'withdrawn' } : null));
+      notify('已从学习社区下架', 'info');
+    } catch (e: any) {
+      notify(e?.message || '下架失败', 'error');
+    } finally {
+      setCommunityBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (Array.isArray(result?.chat_history) && chatMessages.length === 0 && result.chat_history.length > 0) {
@@ -592,6 +671,54 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                 <span>{copiedShareLink ? '✓' : '🔗'}</span>
                 <span>{copiedShareLink ? '已复制' : '分享'}</span>
               </button>
+            )}
+
+            {isDone && summaryTaskId && (
+              <>
+                {communityPost &&
+                (communityPost.status === 'published' ||
+                  communityPost.status === 'outdated') ? (
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(
+                          `/video/community/${encodeURIComponent(communityPost.id)}`,
+                        )
+                      }
+                      className={`inline-flex h-6.5 items-center gap-1 rounded-full border px-2 text-[11.5px] font-semibold transition lg:h-7 lg:px-2.5 lg:text-[12px] ${
+                        justPublishedToast
+                          ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700'
+                          : 'border-emerald-500/30 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                      }`}
+                      title="已在学习社区展示，点击打开社区详情页"
+                    >
+                      <span>{justPublishedToast ? '✓' : '🌐'}</span>
+                      <span>{justPublishedToast ? '已发布' : '社区页'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={communityBusy}
+                      onClick={() => void handleWithdrawCommunity()}
+                      className="inline-flex h-6.5 items-center rounded-full border border-rose-200 bg-rose-50/70 px-2 text-[11px] font-medium text-rose-600 transition hover:bg-rose-100 disabled:opacity-50 lg:h-7 lg:px-2.5"
+                      title="从学习社区下架"
+                    >
+                      下架
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={communityBusy}
+                    onClick={() => void handleOneClickPublishCommunity()}
+                    className="inline-flex h-6.5 items-center gap-1 rounded-full border border-[#0071e3]/30 bg-[#0071e3]/10 px-2.5 text-[11.5px] font-semibold text-[#0071e3] transition hover:bg-[#0071e3] hover:text-white disabled:opacity-50 lg:h-7 lg:px-3 lg:text-[12px]"
+                    title="一键将视频、AI 研报、思维导图与测验分享至学习社区"
+                  >
+                    <span>🚀</span>
+                    <span>{communityBusy ? '发布中…' : '发布到社区'}</span>
+                  </button>
+                )}
+              </>
             )}
             <div className="relative hidden sm:block">
               <select
@@ -1511,6 +1638,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
           </div>
         </div>
       )}
+      {dialogElement}
     </div>
   );
 };

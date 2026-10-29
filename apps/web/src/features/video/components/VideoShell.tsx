@@ -2,6 +2,53 @@ import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { isAdminSession } from '@/shared/lib/config/auth';
 import { usePlatformAuth } from '@/shared/store/authStore';
+import { fetchAuthMe, updateAuthProfile } from '../lib/api';
+
+function fileToCompressedAvatarDataUrl(file: File, maxSide = 128): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      reject(new Error('请选择图片文件'));
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      reject(new Error('图片不能超过 8 MB'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('读取图片失败'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('不支持的图片格式'));
+      img.onload = () => {
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        if (!w || !h) {
+          reject(new Error('图片尺寸无效'));
+          return;
+        }
+        const side = Math.min(w, h);
+        const sx = Math.floor((w - side) / 2);
+        const sy = Math.floor((h - side) / 2);
+        const canvas = document.createElement('canvas');
+        canvas.width = maxSide;
+        canvas.height = maxSide;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('浏览器不支持图像处理'));
+          return;
+        }
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, maxSide, maxSide);
+        let dataUrl = canvas.toDataURL('image/webp', 0.86);
+        if (!dataUrl.startsWith('data:image/webp')) {
+          dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+        }
+        resolve(dataUrl);
+      };
+      img.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
@@ -15,12 +62,53 @@ export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }
   const openLogin = usePlatformAuth((state) => state.openLogin);
   const logout = usePlatformAuth((state) => state.logout);
   const isAdmin = isAdminSession(session);
+
+  const [videoProfile, setVideoProfile] = useState<{
+    id: string;
+    display_name?: string | null;
+    avatar_url?: string | null;
+  } | null>(null);
+
   const userName =
+    videoProfile?.display_name ||
     session?.user?.display_name ||
     session?.user?.email?.split('@')[0] ||
     '';
+  const userAvatar = videoProfile?.avatar_url || '';
+
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const [profileDialogMode, setProfileDialogMode] = useState<'' | 'nickname' | 'avatar'>('');
+  const [nicknameDraft, setNicknameDraft] = useState('');
+  const [avatarUrlDraft, setAvatarUrlDraft] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
+
+  useEffect(() => {
+    if (!session?.access_token) {
+      setVideoProfile(null);
+      return;
+    }
+    let cancelled = false;
+    fetchAuthMe()
+      .then((me) => {
+        if (!cancelled && me) {
+          setVideoProfile({
+            id: me.id,
+            display_name: me.display_name,
+            avatar_url: me.avatar_url,
+          });
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token]);
 
   useEffect(() => {
     if (!userMenuOpen) return;
@@ -38,6 +126,97 @@ export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }
     navigate('/video');
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('vidgrab:reset-home'));
+    }
+  };
+
+  const openNicknameDialog = () => {
+    setUserMenuOpen(false);
+    setProfileError('');
+    setNicknameDraft(userName);
+    setProfileDialogMode('nickname');
+  };
+
+  const openAvatarDialog = () => {
+    setUserMenuOpen(false);
+    setProfileError('');
+    setAvatarPreview(userAvatar);
+    setAvatarUrlDraft(userAvatar.startsWith('http') ? userAvatar : '');
+    setProfileDialogMode('avatar');
+  };
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (!file) return;
+    setProfileError('');
+    try {
+      const dataUrl = await fileToCompressedAvatarDataUrl(file, 128);
+      setAvatarPreview(dataUrl);
+      setAvatarUrlDraft('');
+    } catch (err: any) {
+      setProfileError(err?.message || '处理图片失败');
+    }
+  };
+
+  const saveNickname = async () => {
+    const name = nicknameDraft.trim();
+    if (!name) {
+      setProfileError('请输入昵称');
+      return;
+    }
+    setProfileSaving(true);
+    setProfileError('');
+    try {
+      const updated = await updateAuthProfile({ display_name: name });
+      setVideoProfile({
+        id: updated.id,
+        display_name: updated.display_name,
+        avatar_url: updated.avatar_url,
+      });
+      setProfileDialogMode('');
+    } catch (err: any) {
+      setProfileError(err?.message || '保存失败');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const saveAvatar = async () => {
+    setProfileSaving(true);
+    setProfileError('');
+    try {
+      const nextUrl = avatarUrlDraft.trim() || avatarPreview || '';
+      const updated = await updateAuthProfile({ avatar_url: nextUrl });
+      setVideoProfile({
+        id: updated.id,
+        display_name: updated.display_name,
+        avatar_url: updated.avatar_url,
+      });
+      setProfileDialogMode('');
+    } catch (err: any) {
+      setProfileError(err?.message || '保存失败');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const clearAvatar = async () => {
+    setProfileSaving(true);
+    setProfileError('');
+    try {
+      const updated = await updateAuthProfile({ avatar_url: '' });
+      setVideoProfile({
+        id: updated.id,
+        display_name: updated.display_name,
+        avatar_url: updated.avatar_url,
+      });
+      setAvatarPreview('');
+      setAvatarUrlDraft('');
+      setProfileDialogMode('');
+    } catch (err: any) {
+      setProfileError(err?.message || '恢复默认头像失败');
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -139,6 +318,20 @@ export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }
             </NavLink>
 
             <NavLink
+              to="/video/community"
+              className={({ isActive }) =>
+                `inline-flex items-center gap-1.5 rounded-full px-3 py-1 transition-all ${
+                  isActive
+                    ? 'bg-white font-semibold text-[#0071e3] shadow-2xs'
+                    : 'font-medium text-slate-600 hover:text-slate-900'
+                }`
+              }
+            >
+              <span>🌐</span>
+              <span>学习社区</span>
+            </NavLink>
+
+            <NavLink
               to="/video/docs"
               className={({ isActive }) =>
                 `inline-flex items-center gap-1.5 rounded-full px-3 py-1 transition-all ${
@@ -191,27 +384,66 @@ export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }
                 className="inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200/80 bg-white px-2.5 text-[12px] font-medium text-slate-700 shadow-2xs transition hover:border-[#0071e3]/40 active:scale-95 cursor-pointer"
                 title={`已登录账号：${userName}`}
               >
-                <span className="grid h-5 w-5 place-items-center rounded-full bg-gradient-to-tr from-[#0071e3] to-indigo-500 text-[10.5px] font-bold text-white">
-                  {userName.slice(0, 1).toUpperCase()}
+                <span className="grid h-5 w-5 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-tr from-[#0071e3] to-indigo-500 text-[10.5px] font-bold text-white">
+                  {userAvatar ? (
+                    <img src={userAvatar} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    userName.slice(0, 1).toUpperCase()
+                  )}
                 </span>
                 <span className="max-w-[72px] truncate sm:max-w-[96px]">{userName}</span>
               </button>
 
               {userMenuOpen && (
-                <div className=" absolute right-0 top-10 z-50 w-48 rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-xl backdrop-blur-xl">
+                <div className="absolute right-0 top-10 z-50 w-52 rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-xl backdrop-blur-xl">
                   <div className="border-b border-slate-100 px-2.5 py-2">
                     <div className="truncate text-[12.5px] font-semibold text-slate-900">{userName}</div>
                     {session?.user?.email && (
                       <div className="truncate text-[11px] text-slate-500">{session.user.email}</div>
                     )}
                   </div>
+
+                  {videoProfile?.id && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        navigate(`/video/community/users/${encodeURIComponent(videoProfile.id)}`);
+                      }}
+                      className="mt-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-medium text-slate-700 transition hover:bg-slate-100 cursor-pointer"
+                    >
+                      <span>👤</span>
+                      <span>我的社区主页</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={openNicknameDialog}
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-medium text-slate-700 transition hover:bg-slate-100 cursor-pointer"
+                  >
+                    <span>✏️</span>
+                    <span>修改昵称</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={openAvatarDialog}
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-medium text-slate-700 transition hover:bg-slate-100 cursor-pointer"
+                  >
+                    <span>🖼️</span>
+                    <span>修改头像</span>
+                  </button>
+
+                  <div className="my-1 border-t border-slate-100" />
+
                   <button
                     type="button"
                     onClick={() => {
                       setUserMenuOpen(false);
                       logout();
                     }}
-                    className="mt-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-rose-600 transition hover:bg-rose-50 cursor-pointer"
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-medium text-rose-600 transition hover:bg-rose-50 cursor-pointer"
                   >
                     <span>退出登录</span>
                   </button>
@@ -274,7 +506,7 @@ export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }
         <NavLink
           to="/video/history"
           className={({ isActive }) =>
-            `flex min-w-[64px] flex-col items-center justify-center gap-0.5 rounded-xl py-0.5 text-[10.5px] transition-transform active:scale-95 ${
+            `flex min-w-[56px] flex-col items-center justify-center gap-0.5 rounded-xl py-0.5 text-[10.5px] transition-transform active:scale-95 ${
               isActive ? 'font-semibold text-[#0071e3]' : 'font-medium text-[#86868b]'
             }`
           }
@@ -284,6 +516,22 @@ export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }
             <path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span>学习记录</span>
+        </NavLink>
+
+        <NavLink
+          to="/video/community"
+          className={({ isActive }) =>
+            `flex min-w-[56px] flex-col items-center justify-center gap-0.5 rounded-xl py-0.5 text-[10.5px] transition-transform active:scale-95 ${
+              isActive ? 'font-semibold text-[#0071e3]' : 'font-medium text-[#86868b]'
+            }`
+          }
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3.6 9h16.8M3.6 15h16.8" strokeLinecap="round" />
+            <path d="M12 3a14.5 14.5 0 0 0 0 18 14.5 14.5 0 0 0 0-18z" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>学习社区</span>
         </NavLink>
 
         <NavLink
@@ -339,6 +587,130 @@ export const VideoShell: React.FC<{ children: React.ReactNode }> = ({ children }
           </NavLink>
         )}
       </nav>
+
+      {/* 修改昵称 / 修改头像 弹窗 */}
+      {profileDialogMode && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs"
+          onClick={() => setProfileDialogMode('')}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {profileDialogMode === 'nickname' ? (
+              <>
+                <h3 className="text-[15px] font-bold text-slate-900">修改显示昵称</h3>
+                <p className="mt-1 text-[12px] text-slate-500">
+                  昵称将显示在顶栏、学习社区及评论中（最多 64 字）
+                </p>
+                <input
+                  value={nicknameDraft}
+                  onChange={(e) => setNicknameDraft(e.target.value)}
+                  type="text"
+                  maxLength={64}
+                  placeholder="请输入新昵称"
+                  className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-[13px] text-slate-900 outline-none focus:border-[#0071e3]"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void saveNickname();
+                  }}
+                />
+                {profileError && (
+                  <p className="mt-2 text-[12px] text-rose-600">{profileError}</p>
+                )}
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setProfileDialogMode('')}
+                    className="rounded-xl border border-slate-200 px-3.5 py-1.5 text-[12.5px] font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    disabled={profileSaving}
+                    onClick={() => void saveNickname()}
+                    className="rounded-xl bg-[#0071e3] px-4 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#0077ed] disabled:opacity-50"
+                  >
+                    {profileSaving ? '保存中…' : '保存'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-[15px] font-bold text-slate-900">修改个人头像</h3>
+                <p className="mt-1 text-[12px] text-slate-500">
+                  支持上传本地图片（自动裁剪压缩为 128×128）或填写图片链接
+                </p>
+
+                <div className="mt-3 flex items-center gap-3.5">
+                  <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-tr from-[#0071e3] to-indigo-500 text-lg font-bold text-white shadow-xs">
+                    {avatarPreview || avatarUrlDraft ? (
+                      <img
+                        src={avatarUrlDraft || avatarPreview}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span>{userName.slice(0, 1).toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-medium text-slate-700 transition hover:bg-slate-100">
+                      <span>上传本地图片…</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => void handleAvatarFileChange(e)}
+                      />
+                    </label>
+                    {(avatarPreview || avatarUrlDraft || userAvatar) && (
+                      <button
+                        type="button"
+                        onClick={() => void clearAvatar()}
+                        className="text-left text-[11.5px] text-rose-600 hover:underline"
+                      >
+                        恢复默认字母头像
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <input
+                  value={avatarUrlDraft}
+                  onChange={(e) => setAvatarUrlDraft(e.target.value)}
+                  type="url"
+                  placeholder="或粘贴图片 https:// 链接（可选）"
+                  className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-1.5 text-[12.5px] text-slate-900 outline-none focus:border-[#0071e3]"
+                />
+
+                {profileError && (
+                  <p className="mt-2 text-[12px] text-rose-600">{profileError}</p>
+                )}
+
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setProfileDialogMode('')}
+                    className="rounded-xl border border-slate-200 px-3.5 py-1.5 text-[12.5px] font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    disabled={profileSaving}
+                    onClick={() => void saveAvatar()}
+                    className="rounded-xl bg-[#0071e3] px-4 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#0077ed] disabled:opacity-50"
+                  >
+                    {profileSaving ? '保存中…' : '保存头像'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

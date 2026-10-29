@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 JWT_ALG = "HS256"
 JWT_EXPIRE_DAYS = int(os.environ.get("AUTH_JWT_EXPIRE_DAYS", "30"))
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_MAX_AVATAR_URL_LEN = 320_000
+_AVATAR_DATA_URL_RE = re.compile(
+    r"^data:image/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=\s]+$",
+    re.IGNORECASE,
+)
 
 
 class AuthError(ValueError):
@@ -136,7 +141,7 @@ def ensure_platform_user_synced(platform_user: dict[str, Any]) -> dict[str, Any]
         # 先按 id 或 email 查找
         cur.execute(
             """
-            SELECT id, email, role, status, display_name, created_at, last_login_at
+            SELECT id, email, role, status, display_name, avatar_url, created_at, last_login_at
             FROM users
             WHERE id = %s OR LOWER(email) = LOWER(%s)
             ORDER BY (id = %s) DESC
@@ -157,7 +162,7 @@ def ensure_platform_user_synced(platform_user: dict[str, Any]) -> dict[str, Any]
                     role = %s,
                     display_name = COALESCE(NULLIF(display_name, ''), %s)
                 WHERE id = %s
-                RETURNING id, email, role, status, display_name, created_at, last_login_at
+                RETURNING id, email, role, status, display_name, avatar_url, created_at, last_login_at
                 """,
                 (new_role, display_name, existing["id"]),
             )
@@ -170,7 +175,7 @@ def ensure_platform_user_synced(platform_user: dict[str, Any]) -> dict[str, Any]
             VALUES (%s, %s, %s, %s, 'active', %s, now())
             ON CONFLICT (id) DO UPDATE SET
                 last_login_at = now()
-            RETURNING id, email, role, status, display_name, created_at, last_login_at
+            RETURNING id, email, role, status, display_name, avatar_url, created_at, last_login_at
             """,
             (uid, email, "platform_sso", role, display_name),
         )
@@ -255,6 +260,7 @@ def _serialize_user_row(row: dict | None) -> dict | None:
         "role": row.get("role") or "user",
         "status": row.get("status") or "active",
         "display_name": row.get("display_name"),
+        "avatar_url": row.get("avatar_url"),
         "created_at": row["created_at"].isoformat() if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
         "last_login_at": (
             row["last_login_at"].isoformat()
@@ -269,7 +275,7 @@ def get_user_by_id(user_id: str) -> dict | None:
     with db_cursor() as cur:
         cur.execute(
             """
-            SELECT id, email, role, status, display_name, created_at, last_login_at
+            SELECT id, email, role, status, display_name, avatar_url, created_at, last_login_at
             FROM users WHERE id = %s
             """,
             (uid,),
@@ -278,12 +284,76 @@ def get_user_by_id(user_id: str) -> dict | None:
     return _serialize_user_row(row)
 
 
+def _validate_avatar_url(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    s = raw.strip()
+    if not s:
+        return None
+    if len(s) > _MAX_AVATAR_URL_LEN:
+        raise AuthError("头像数据过大，请压缩后重试（建议正方形小图）")
+    low = s.lower()
+    if low.startswith("https://") or low.startswith("http://"):
+        if any(c in s for c in ("\n", "\r", "\0", " ")):
+            raise AuthError("头像链接格式无效")
+        return s
+    if _AVATAR_DATA_URL_RE.match(s):
+        return re.sub(r"\s+", "", s)
+    raise AuthError("头像须为 http(s) 图片链接或上传生成的图片数据")
+
+
+def update_user_profile(
+    user_id: str,
+    *,
+    display_name: str | None = None,
+    avatar_url: str | None = None,
+    patch_display_name: bool = False,
+    patch_avatar_url: bool = False,
+) -> dict:
+    """更新当前用户的昵称与头像（供顶栏与社区展示）。"""
+    uid = _to_valid_uuid(user_id)
+    sets: list[str] = []
+    params: list[Any] = []
+    if patch_display_name:
+        dn = (display_name or "").strip() if display_name is not None else ""
+        if len(dn) > 64:
+            raise AuthError("昵称最多 64 个字符")
+        sets.append("display_name = %s")
+        params.append(dn or None)
+    if patch_avatar_url:
+        av = _validate_avatar_url(avatar_url)
+        sets.append("avatar_url = %s")
+        params.append(av)
+    if not sets:
+        row = get_user_by_id(uid)
+        if not row:
+            raise AuthError("用户不存在")
+        return row
+    sets.append("updated_at = now()")
+    params.append(uid)
+    with db_cursor() as cur:
+        cur.execute(
+            f"""
+            UPDATE users SET {", ".join(sets)}
+            WHERE id = %s
+            RETURNING id, email, role, status, display_name, avatar_url, created_at, last_login_at
+            """,
+            tuple(params),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise AuthError("用户不存在")
+    out = _serialize_user_row(row)
+    assert out is not None
+    return out
+
+
 def get_user_by_email(email: str) -> dict | None:
     email = email.strip().lower()
     with db_cursor() as cur:
         cur.execute(
             """
-            SELECT id, email, password_hash, role, status, display_name, created_at, last_login_at
+            SELECT id, email, password_hash, role, status, display_name, avatar_url, created_at, last_login_at
             FROM users WHERE LOWER(email) = LOWER(%s)
             """,
             (email,),
@@ -323,7 +393,7 @@ def register_user(
                 """
                 INSERT INTO users (email, password_hash, role, status, display_name)
                 VALUES (%s, %s, %s, 'active', %s)
-                RETURNING id, email, role, status, display_name, created_at
+                RETURNING id, email, role, status, display_name, avatar_url, created_at
                 """,
                 (email, hash_password(password), role, name),
             )
@@ -355,6 +425,7 @@ def authenticate_user(email: str, password: str) -> dict:
         "role": row.get("role") or "user",
         "status": row.get("status") or "active",
         "display_name": row.get("display_name"),
+        "avatar_url": row.get("avatar_url"),
     }
 
 

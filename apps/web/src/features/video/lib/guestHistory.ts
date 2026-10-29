@@ -60,6 +60,10 @@ export function saveGuestVideo(record: Partial<VideoHistoryItem> & { title?: str
     title: record.title || '未命名视频',
     source_type: record.source_type || (record.source_url ? 'url' : 'upload'),
     source_url: record.source_url || '',
+    cover_url:
+      record.cover_url ||
+      (existingIdx >= 0 ? list[existingIdx].cover_url : null) ||
+      null,
     file_id: record.file_id || '',
     duration_seconds: Number(record.duration_seconds) || 0,
     file_size_bytes: Number(record.file_size_bytes) || 0,
@@ -117,5 +121,19 @@ export function updateGuestVideoQuiz(
   if (quizState?.score_result?.score !== undefined) {
     target.last_score = quizState.score_result.score;
   }
+  writeStorage(list);
+}
+
+export function updateGuestVideoCover(summaryTaskId: string, coverUrl: string) {
+  if (!summaryTaskId || !coverUrl) return;
+  const list = readStorage();
+  const idx = list.findIndex(
+    (item) =>
+      item.summary_task_id === summaryTaskId ||
+      item.id === `guest_${summaryTaskId}` ||
+      item.id === summaryTaskId,
+  );
+  if (idx < 0) return;
+  list[idx].cover_url = coverUrl;
   writeStorage(list);
 }

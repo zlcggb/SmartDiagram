@@ -36,6 +36,7 @@ def create_video(
     duration_sec: float | None = None,
     storage_status: str = "link_only",
     original_bytes: int | None = None,
+    cover_url: str | None = None,
     video_id: str | None = None,
 ) -> dict:
     vid = video_id or str(uuid.uuid4())
@@ -44,8 +45,8 @@ def create_video(
             """
             INSERT INTO videos (
                 id, user_id, source_type, source_url, platform, title,
-                original_filename, duration_sec, storage_status, original_bytes
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                original_filename, duration_sec, storage_status, original_bytes, cover_url
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -59,10 +60,76 @@ def create_video(
                 duration_sec,
                 storage_status,
                 original_bytes,
+                cover_url,
             ),
         )
         row = cur.fetchone()
     return dict(row)
+
+
+def save_video_cover(
+    *,
+    cover_url: str,
+    video_id: str | None = None,
+    analysis_id: str | None = None,
+    post_id: str | None = None,
+) -> dict | None:
+    clean_cover = (cover_url or "").strip()
+    if not clean_cover or len(clean_cover) > 800_000:
+        return None
+    target_vid = (video_id or "").strip() or None
+    with db_cursor() as cur:
+        if not target_vid and analysis_id:
+            cur.execute("SELECT video_id FROM analyses WHERE id = %s", (str(analysis_id).strip(),))
+            r = cur.fetchone()
+            if r and r.get("video_id"):
+                target_vid = str(r["video_id"])
+        if not target_vid and post_id:
+            cur.execute("SELECT video_id FROM community_posts WHERE id = %s", (str(post_id).strip(),))
+            r = cur.fetchone()
+            if r and r.get("video_id"):
+                target_vid = str(r["video_id"])
+        if not target_vid:
+            return None
+        cur.execute(
+            """
+            UPDATE videos
+            SET cover_url = %s, updated_at = now()
+            WHERE id = %s
+            RETURNING id, source_url, cover_url
+            """,
+            (clean_cover, target_vid),
+        )
+        vrow = cur.fetchone()
+        if vrow and vrow.get("source_url"):
+            cur.execute(
+                """
+                UPDATE videos
+                SET cover_url = %s, updated_at = now()
+                WHERE source_url = %s AND (cover_url IS NULL OR cover_url = '')
+                """,
+                (clean_cover, vrow["source_url"]),
+            )
+            cur.execute(
+                """
+                UPDATE community_posts
+                SET cover_url = %s, updated_at = now()
+                WHERE video_id IN (SELECT id FROM videos WHERE id = %s OR source_url = %s)
+                """,
+                (clean_cover, target_vid, vrow["source_url"]),
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE community_posts
+                SET cover_url = %s, updated_at = now()
+                WHERE video_id = %s
+                """,
+                (clean_cover, target_vid),
+            )
+    if not vrow:
+        return None
+    return {"video_id": str(vrow["id"]), "cover_url": vrow["cover_url"]}
 
 
 def update_video(video_id: str, **kwargs) -> dict | None:
@@ -194,6 +261,13 @@ def finish_analysis(
                     f"UPDATE videos SET {', '.join(up_fields)}, updated_at = now() WHERE id = %s",
                     tuple(up_values),
                 )
+    if row and result and status == "done":
+        try:
+            from community_repo import mark_posts_outdated_for_video
+
+            mark_posts_outdated_for_video(str(row["video_id"]), str(task_id))
+        except Exception as e:
+            logger.warning("同步社区过时标记失败: %s", e)
 
 
 def resolve_analysis_id_by_prefix(hex_prefix: str) -> str | None:
@@ -226,7 +300,7 @@ def get_analysis_for_user(
             cur.execute(
                 """
                 SELECT a.*, v.source_type, v.source_url, v.title as video_title,
-                       v.platform, v.duration_sec, v.storage_status
+                       v.platform, v.duration_sec, v.storage_status, v.cover_url
                 FROM analyses a
                 JOIN videos v ON a.video_id = v.id
                 WHERE a.id = %s
@@ -237,7 +311,7 @@ def get_analysis_for_user(
             cur.execute(
                 """
                 SELECT a.*, v.source_type, v.source_url, v.title as video_title,
-                       v.platform, v.duration_sec, v.storage_status
+                       v.platform, v.duration_sec, v.storage_status, v.cover_url
                 FROM analyses a
                 JOIN videos v ON a.video_id = v.id
                 WHERE a.id = %s AND (a.user_id = %s OR v.user_id = %s)
@@ -249,7 +323,7 @@ def get_analysis_for_user(
             cur.execute(
                 """
                 SELECT a.*, v.source_type, v.source_url, v.title as video_title,
-                       v.platform, v.duration_sec, v.storage_status
+                       v.platform, v.duration_sec, v.storage_status, v.cover_url
                 FROM analyses a
                 JOIN videos v ON a.video_id = v.id
                 WHERE a.id = %s AND a.user_id IS NULL
@@ -476,8 +550,10 @@ def list_user_videos(
             SELECT v.id, v.source_type, v.source_url, v.platform, v.title,
                    v.original_filename, v.duration_sec, v.storage_status,
                    v.storage_bytes, v.created_at,
+                   COALESCE(v.cover_url, cp.cover_url) as cover_url,
                    a.id as latest_analysis_id, a.status as latest_analysis_status,
-                   a.result as analysis_result
+                   a.result as analysis_result,
+                   cp.id as community_post_id, cp.status as community_post_status
             FROM videos v
             LEFT JOIN LATERAL (
                 SELECT id, status, result FROM analyses
@@ -485,6 +561,7 @@ def list_user_videos(
                 ORDER BY created_at DESC
                 LIMIT 1
             ) a ON true
+            LEFT JOIN community_posts cp ON cp.video_id = v.id
             {where_clause}
             ORDER BY v.created_at DESC
             LIMIT %s OFFSET %s
@@ -507,12 +584,15 @@ def list_user_videos(
                 "platform": r.get("platform"),
                 "title": r.get("title") or analysis_res.get("title") or "未命名视频",
                 "tldr": analysis_res.get("tldr"),
+                "cover_url": r.get("cover_url"),
                 "original_filename": r.get("original_filename"),
                 "duration_sec": r.get("duration_sec"),
                 "storage_status": r["storage_status"],
                 "storage_bytes": r.get("storage_bytes") or 0,
                 "latest_analysis_id": r.get("latest_analysis_id"),
                 "latest_analysis_status": r.get("latest_analysis_status"),
+                "community_post_id": str(r["community_post_id"]) if r.get("community_post_id") else None,
+                "community_post_status": r.get("community_post_status"),
                 "quiz_count": 1 if quiz_obj else 0,
                 "last_score": last_score,
                 "created_at": _serialize_dt(r["created_at"]),
@@ -529,6 +609,8 @@ def list_user_videos(
 
 def delete_user_video(video_id: str, user_id: str, is_admin: bool = False) -> str | None:
     """删除视频及级联分析，返回物理存储路径以便清理磁盘。"""
+    from community_repo import mark_posts_invalid_for_video
+
     with db_cursor() as cur:
         if is_admin:
             cur.execute("SELECT storage_path FROM videos WHERE id = %s", (video_id,))
@@ -538,6 +620,11 @@ def delete_user_video(video_id: str, user_id: str, is_admin: bool = False) -> st
         if not row:
             return None
         storage_path = row.get("storage_path")
+    try:
+        mark_posts_invalid_for_video(video_id)
+    except Exception as e:
+        logger.warning("删除视频前标记社区失效异常: %s", e)
+    with db_cursor() as cur:
         cur.execute("DELETE FROM videos WHERE id = %s", (video_id,))
     return storage_path
 

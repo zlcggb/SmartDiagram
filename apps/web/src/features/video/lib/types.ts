@@ -190,6 +190,7 @@ export interface VideoHistoryItem {
   title?: string;
   source_type?: 'upload' | 'url';
   source_url?: string;
+  cover_url?: string | null;
   duration_seconds?: number;
   file_size_bytes?: number;
   status?: string;
@@ -231,4 +232,107 @@ export interface AdminUserItem {
   video_count?: number;
   attempt_count?: number;
   avg_score?: number;
+}
+
+export interface CommunityAuthor {
+  id: string;
+  label: string;
+  email?: string;
+  avatar_url?: string | null;
+}
+
+export interface CommunityPost {
+  id: string;
+  video_id: string;
+  analysis_id: string;
+  author_id: string;
+  status: 'published' | 'outdated' | 'withdrawn' | 'invalid';
+  title: string;
+  tldr?: string;
+  cover_url?: string | null;
+  source_type?: 'upload' | 'url';
+  source_url?: string;
+  platform?: string;
+  duration_sec?: number;
+  storage_status?: string;
+  like_count: number;
+  favorite_count: number;
+  comment_count: number;
+  liked?: boolean;
+  favorited?: boolean;
+  viewer_liked?: boolean;
+  viewer_favorited?: boolean;
+  is_author?: boolean;
+  author_label?: string;
+  author_email?: string;
+  author_display_name?: string;
+  author_avatar_url?: string | null;
+  author?: CommunityAuthor;
+  created_at?: string;
+  updated_at?: string;
+  published_at?: string;
+}
+
+export interface CommunityComment {
+  id: string;
+  post_id?: string;
+  author_id?: string;
+  user_id?: string;
+  body: string;
+  status?: string;
+  author_label?: string;
+  author_email?: string;
+  author_display_name?: string;
+  author_avatar_url?: string | null;
+  author?: CommunityAuthor;
+  created_at?: string;
+}
+
+export interface CommunityUserProfile {
+  id: string;
+  label: string;
+  email: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  member_since?: string;
+  is_self?: boolean;
+  stats: {
+    public_posts: number;
+    comments: number;
+  };
+}
+
+export interface CommunityActivityDay {
+  date: string;
+  total: number;
+  analyses: number;
+  quizzes: number;
+  posts: number;
+  comments: number;
+  level: 0 | 1 | 2 | 3 | 4;
+}
+
+export interface CommunityActivityResponse {
+  days: CommunityActivityDay[];
+  start_date: string;
+  end_date: string;
+  weeks: number;
+}
+
+export interface CommunityCommentReport {
+  id: number;
+  comment_id: string;
+  reporter_id?: string;
+  reason?: string | null;
+  status: 'open' | 'dismissed' | 'reviewed' | 'resolved_hidden';
+  admin_note?: string | null;
+  created_at?: string;
+  resolved_at?: string | null;
+  comment_body?: string;
+  comment_status?: string;
+  post_id?: string;
+  comment_author_id?: string;
+  post_title?: string;
+  reporter_email?: string;
+  comment_author_email?: string;
 }

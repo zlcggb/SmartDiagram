@@ -75,6 +75,7 @@ export const VideoWorkspacePage: React.FC = () => {
   });
 
   const [summaryTaskId, setSummaryTaskId] = useState('');
+  const [existingCoverUrl, setExistingCoverUrl] = useState('');
   const [summary, setSummary] = useState<SummaryState>({
     status: 'idle',
     stage: '',
@@ -144,6 +145,7 @@ export const VideoWorkspacePage: React.FC = () => {
     summaryPollInFlightRef.current = false;
     summaryPollFailCountRef.current = 0;
     setSummaryTaskId('');
+    setExistingCoverUrl('');
     setSummary({
       status: 'idle',
       stage: '',
@@ -202,6 +204,9 @@ export const VideoWorkspacePage: React.FC = () => {
       if (p.share_token) {
         setShareToken(p.share_token);
       }
+      if (p.cover_url) {
+        setExistingCoverUrl((prev) => prev || p.cover_url || '');
+      }
 
       if (p.status === 'done') {
         if (summaryTimerRef.current) {
@@ -221,6 +226,7 @@ export const VideoWorkspacePage: React.FC = () => {
               '未命名视频',
             source_type: p.source_type || (uploadMeta ? 'upload' : 'url'),
             source_url: p.webpage_url || currentSourceUrl || info?.webpage_url || '',
+            cover_url: existingCoverUrl || p.cover_url || '',
             duration_seconds: p.duration || info?.duration || uploadMeta?.duration || 0,
             summary_result: p.result,
           });
@@ -640,6 +646,7 @@ export const VideoWorkspacePage: React.FC = () => {
         } else if (sParam || shareParam) {
           setShareToken(sParam || shareParam);
         }
+        setExistingCoverUrl(data.cover_url || '');
         setSummary({
           status: (data.status as any) || 'done',
           stage: data.stage || 'done',
@@ -762,8 +769,12 @@ export const VideoWorkspacePage: React.FC = () => {
               <VideoPlayer
                 ref={videoPlayerRef}
                 config={playerConfig}
-                poster={info?.thumbnail || ''}
+                poster={existingCoverUrl || info?.thumbnail || ''}
                 title={info?.title || uploadMeta?.filename || ''}
+                analysisId={summaryTaskId}
+                videoId={uploadMeta?.file_id || ''}
+                existingCoverUrl={existingCoverUrl}
+                onCoverCaptured={(coverUrl) => setExistingCoverUrl(coverUrl)}
               />
             </div>
             {info ? (
