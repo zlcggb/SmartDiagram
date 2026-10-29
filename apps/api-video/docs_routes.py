@@ -33,6 +33,7 @@ CATEGORIES = [
         "title": "🏛️ 核心架构与系统设计",
         "items": [
             {"id": "product-overview", "file": "产品发布会说明书与架构全景.md", "title": "🌟 产品全景与发布会说明书"},
+            {"id": "learning-community", "file": "学习社区与知识共享全栈架构.md", "title": "🌐 学习社区与一键分享全栈架构"},
             {"id": "system-architecture", "file": "系统架构与技术全景.md", "title": "系统全栈架构深度白皮书"},
             {"id": "system-design", "file": "方案设计.md", "title": "系统方案与数据契约设计"},
             {"id": "requirements-sla", "file": "需求分析.md", "title": "产品需求与 SLA 规格说明"},
@@ -46,6 +47,15 @@ CATEGORIES = [
             {"id": "ai-quiz-architecture", "file": "AI智能测验与双源出题架构.md", "title": "AI 智能测验与双源出题架构"},
             {"id": "concurrent-pipeline", "file": "四点并发与极速总结管线.md", "title": "四点并发与极速总结管线"},
             {"id": "engineering-log", "file": "执行记录.md", "title": "工程迭代与排坑实录"},
+        ],
+    },
+    {
+        "id": "qa",
+        "title": "🛡️ 质量工程、AI 评测与面试宝典",
+        "items": [
+            {"id": "ai-agent-qa-whitepaper", "file": "AI智能体专项评测与全链路质量工程白皮书.md", "title": "🌟 AI 智能体专项评测与全链路质量工程白皮书"},
+            {"id": "ai-agent-interview-playbook", "file": "AI智能体测试组长深度面试题库与答辩手册.md", "title": "🎯 AI Agent 测试组长 15 道深度面试题库"},
+            {"id": "ai-agent-resume-guide", "file": "AI智能体测试组长定制简历与STAR项目指南.md", "title": "📄 AI Agent 测试组长定制简历与 STAR 指南"},
         ],
     },
     {

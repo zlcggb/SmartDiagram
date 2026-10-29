@@ -15,6 +15,7 @@ interface ZoomDiagramState {
 
 const LEGACY_FILE_TO_ID: Record<string, string> = {
   '产品发布会说明书与架构全景.md': 'product-overview',
+  '学习社区与知识共享全栈架构.md': 'learning-community',
   '系统架构与技术全景.md': 'system-architecture',
   '方案设计.md': 'system-design',
   '需求分析.md': 'requirements-sla',
@@ -35,6 +36,9 @@ const LEGACY_FILE_TO_ID: Record<string, string> = {
   'postgresql持久化与双写存储架构.md': 'postgres-storage',
   '会员支付-stripe方案设计.md': 'stripe-billing-design',
   '会员支付-开发与验收指南.md': 'stripe-sandbox-guide',
+  'ai智能体专项评测与全链路质量工程白皮书.md': 'ai-agent-qa-whitepaper',
+  'ai智能体测试组长深度面试题库与答辩手册.md': 'ai-agent-interview-playbook',
+  'ai智能体测试组长定制简历与star项目指南.md': 'ai-agent-resume-guide',
 };
 
 function toCanonicalDocId(raw?: string | null): string {
@@ -402,7 +406,7 @@ export function VideoDocsPage() {
             className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 transition hover:bg-white hover:text-[#0071e3]"
           >
             <span>🚀</span>
-            <span>查看版本演进 (Changelog v2.7.0)</span>
+            <span>查看版本演进 (Changelog v2.9.1)</span>
           </Link>
           <Link
             to="/video"

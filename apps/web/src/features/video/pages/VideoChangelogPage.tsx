@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-type CategoryId = 'all' | 'ai' | 'asr' | 'arch' | 'quiz' | 'platform';
+type CategoryId = 'all' | 'community' | 'qa' | 'ai' | 'asr' | 'arch' | 'quiz' | 'platform';
 
 const CATEGORIES: Array<{ id: CategoryId; label: string }> = [
   { id: 'all', label: '全部更新' },
+  { id: 'community', label: '学习社区与分享' },
+  { id: 'qa', label: '质量评测与面试题库' },
   { id: 'ai', label: 'AI 研报总结' },
   { id: 'asr', label: '流式 ASR (35.4s)' },
   { id: 'arch', label: '全栈架构' },
@@ -13,7 +15,9 @@ const CATEGORIES: Array<{ id: CategoryId; label: string }> = [
 ];
 
 const VERSIONS = [
-  { id: 'v2.8.2', label: 'v2.8.2', latest: true, date: '2026年10月25日' },
+  { id: 'v2.9.1', label: 'v2.9.1', latest: true, date: '2026年10月29日' },
+  { id: 'v2.9.0', label: 'v2.9.0', date: '2026年10月26日' },
+  { id: 'v2.8.2', label: 'v2.8.2', date: '2026年10月25日' },
   { id: 'v2.8.1', label: 'v2.8.1', date: '2026年10月25日' },
   { id: 'v2.8.0', label: 'v2.8.0', date: '2026年10月25日' },
   { id: 'v2.7.0', label: 'v2.7.0', date: '2026年10月24日' },
@@ -25,13 +29,175 @@ const VERSIONS = [
   { id: 'v1.0.0', label: 'v1.0.0', date: '2026年6月10日' },
 ];
 
+interface InterviewQuestionItem {
+  id: string;
+  question: string;
+  conclusion: string;
+  anchor: string;
+  metrics: string;
+}
+
+interface InterviewModuleGroup {
+  id: string;
+  title: string;
+  badge: string;
+  items: InterviewQuestionItem[];
+}
+
+const INTERVIEW_MODULES: InterviewModuleGroup[] = [
+  {
+    id: 'mod-1',
+    title: '① 非确定性输出与 Eval 评测体系 (Q1 ~ Q3)',
+    badge: 'Eval Harness & Guardrails',
+    items: [
+      {
+        id: 'Q1',
+        question: '大模型输出天生具有非确定性（每次生成的代码/JSON 可能有微小差异或包裹多余围栏），如何设计不依赖外部 LLM Judge、可 100% 确定性复现的自动化评测与拦截体系？',
+        conclusion: '推行「确定性状态机护栏 + 契约化 AST/Schema 断言」双轨制：将评测从逐字文本匹配升维为“意图路由契约 + 语法树合法性 + 确定性自愈规则命中率（applied_rules）”，用零 Token 开销的 Validator -> Repair 管道消化概率抖动。',
+        anchor: 'apps/api-diagram/evals/evaluator.py · app/services/output_validation.py · app/services/output_repair.py',
+        metrics: '图表 53 样本 P50 0.02ms / P95 0.03ms；20 条 P0 Badcase Pass@1 0% -> Pass@Repair 100%（命中 19 条确定性算子）',
+      },
+      {
+        id: 'Q2',
+        question: '当修改了 Router 提示词或新增业务模块（图表 10 引擎、AI 招聘、视频学习、PPT）后，如何防止意图识别退化或跨模块评分漂移？基准集与 Badcase 库如何演进？',
+        conclusion: '建立「83 样本双轨 JSONL 基准库（53 图表 + 30 跨模块多模态）+ 四步红绿灯 Badcase 闭环 SOP」；任何线上缺陷先转化为 badcases.jsonl 红灯用例，补充确定性规则验证绿灯后合入，CI --strict 对 Badcase 实行零容忍阻断。',
+        anchor: 'apps/api-diagram/evals/golden_cases.jsonl · badcases.jsonl · multimodal_cases.jsonl · multimodal_evaluator.py',
+        metrics: '意图路由准确率 100%（红线 >=95%）；招聘 Rubric-v3 证据缺失自动 <=58 分降级、Knockout 一票否决 <=59 分封顶；Jeff 0.78 门控 100%',
+      },
+      {
+        id: 'Q3',
+        question: '在多智能体（LangGraph）协作流中，某个节点陷入死循环或单租户突发高频请求耗尽 Token 预算时，测试与运行时护栏如何联防？',
+        conclusion: '前置 RuntimeGuardService 实施三道闸门：① 租户级滑动窗口限流（Redis + 内存双后端兜底）；② 估算 Token 预算两级控制（超降级线置 degraded=True，超硬上限 12,000 直接熔断）；③ StreamLoopGuard 实时统计事件数与同一 Agent 连续重入次数（>max_agent_repeats 即刻断流）。',
+        anchor: 'apps/api-diagram/app/services/runtime_guard_service.py · app/agents/orchestrator.py',
+        metrics: '100 并发 5 租户突发限流精度 100%（放行 30 / 拦截 70）；死循环熔断率 100%（重入上限 4 次即截断）；Redis 断连 memory_fallback 100%',
+      },
+    ],
+  },
+  {
+    id: 'mod-2',
+    title: '② 多轮记忆、RAG 抗幻觉与 PPT 几何碰撞检测 (Q4 ~ Q6)',
+    badge: 'Memory · RAG · Geometry',
+    items: [
+      {
+        id: 'Q4',
+        question: '用户在多轮对话中追问“把刚才架构图里的 Redis 改成集群模式”或“换个配色”，如何测试并保障 Agent 不会丢失画布上下文或误跳回通用闲聊（general）？',
+        conclusion: '构建「多轮上下文状态锚定矩阵」测试集，在 router.py 中对携带 current_engine 且含局部修改语义的请求实施状态继承锁，除非显式 @tag 切换引擎，否则强制沿用当前画布引擎。',
+        anchor: 'apps/api-diagram/app/agents/router.py · evals/golden_cases.jsonl (multi_turn_memory)',
+        metrics: '多轮上下文保持率（multi_turn_retention_rate）实测 100.0%（准出红线 >=95.0%），零误跳 general 闲聊',
+      },
+      {
+        id: 'Q5',
+        question: '企业级 RAG 知识库接入后，大模型可能“忽略企业强制规范词”或“编造禁用术语（幻觉）”，如何做自动化抗幻觉评测与拦截？',
+        conclusion: '在生成后、导出前嵌入 Consistency Agent 确定性核查关卡，自动比对知识切片中的强约束词（required_terms / 必须包含 与 forbidden_terms / 禁止包含）；检出违规立即置 needs_user_input=True 阻断导出并展示知识溯源 Citations。',
+        anchor: 'apps/api-diagram/app/agents/consistency_agent.py · app/services/knowledge_consistency.py',
+        metrics: 'RAG 知识一致性抗幻觉率（knowledge_consistency_rate）100.0%，强约束违规阻断率 100.0%',
+      },
+      {
+        id: 'Q6',
+        question: 'AI 生成 PPT（SVG / SmartSlide DSL）或图表时，常出现文字溢出、文本框重叠碰撞、字号过小或导演配音聚焦框偏移，如何做自动化视觉与几何质量门禁？',
+        conclusion: '将视觉规范编译为确定性几何与 DOM 契约（DESIGN_BLUEPRINT + 双轮修复门禁）：自动计算 BBox 包围盒重叠度、字阶下限、可见截断与空文本框；配音视频仅允许 transcript 波形对齐且覆盖率达标的 cue 驱动聚焦框。',
+        anchor: 'packages/agents/src/designKnowledge/ · packages/slide-ir/ · apps/service-ppt-renderer/src/lib/focusResolver.ts',
+        metrics: 'LangGraph Send 扇出并行生成 100% 保持页序；双轮几何门禁 100% 拦截字号越界与容器碰撞；FFmpeg 音视频双流完整解码校验',
+      },
+    ],
+  },
+  {
+    id: 'mod-3',
+    title: '③ Pytest + Playwright SSE 故障注入与安全红队 (Q7 ~ Q9)',
+    badge: 'Chaos E2E · Async Bench · Redteam',
+    items: [
+      {
+        id: 'Q7',
+        question: 'SSE 流式输出在弱网或网关超时下容易出现“半途断流、JSON 帧截断、前端假死转圈”，如何用 Pytest + Playwright 实现无真实 LLM 消耗的端到端混沌测试？',
+        conclusion: '自研 SpaTestServer 与 SseFaultInjector 故障注入器，在真实 Headless Chromium 中驱动 React SPA，按帧注入 mid_stream_disconnect、malformed_json_chunk、rate_limit_429 与 flaky_502_then_recover，断言前端错误提示、画布保留已收节点且输入框 100% 恢复可交互。',
+        anchor: 'apps/api-diagram/e2e/sse_fault_injector.py · tests/test_playwright_e2e.py · scripts/run_playwright_e2e.py',
+        metrics: '6 大浏览器 UI 与 SSE 混沌注入场景 6/6 (100%) PASS，全套耗时 ~2.1s，外部 LLM Token 消耗为 0',
+      },
+      {
+        id: 'Q8',
+        question: '针对 50~100 路并发 SSE 长连接流，如何用 Python 异步框架设计高并发压测，验证首字延迟（TTFT）、Chunk 吞吐与多租户限流隔离？',
+        conclusion: '基于 asyncio.gather + Semaphore 编写纯异步压测引擎 sse_concurrency_bench.py，模拟 50 路并发流式消费与 100 路跨 5 租户突发洪峰，精确采集 TTFT P50/P95、E2E P50/P95、每秒流吞吐（streams/s）与每秒帧吞吐（chunks/s）。',
+        anchor: 'apps/api-diagram/benchmarks/sse_concurrency_bench.py · tests/test_sse_concurrency_bench.py',
+        metrics: '50 路并发成功率 100%，吞吐达 3,611+ streams/s（92,951+ chunks/s），TTFT P95 0.62ms，E2E P95 13.45ms（红线 <200ms）',
+      },
+      {
+        id: 'Q9',
+        question: '当 Agent 支持生成 HTML 邮件/网页报告或检索企业知识库时，如何防范 Prompt Injection（提示词注入）、知识库投毒与前端 XSS 跨站脚本攻击？',
+        conclusion: '构建“输入清洗 + 产物白名单沙盒 + 大盘转义”纵深防御：① 知识库拦截 Ignore previous instructions 等越狱指令与跨租户越权；② Office HTML 剥离 <script>、on*= 事件与 javascript:/data: 伪协议，仅放行 https:///mailto:/站内锚点；③ 测试大盘强制 html.escape。',
+        anchor: 'apps/api-diagram/app/services/output_repair.py · evals/dashboard_generator.py · tests/test_qa_dashboard.py',
+        metrics: '红队安全测试集（Prompt 注入、知识投毒、HTML XSS、越权访问）拦截率 100.0%，残余可执行恶意载荷为 0',
+      },
+    ],
+  },
+  {
+    id: 'mod-4',
+    title: '④ 全链路五步排障法与 CI/CD 部署自诊断闭环 (Q10 ~ Q11)',
+    badge: 'Troubleshooting & DevSecOps',
+    items: [
+      {
+        id: 'Q10',
+        question: 'SmartDiagram 包含统一前端、3 个 Python/Node 后端、共享 Jeff 模型容器、PostgreSQL 三库、Redis 与 Nginx 网关，线上出现“流式问答卡顿、视频拖动归零或 502”时如何排障？',
+        conclusion: '执行标准化「五步全链路排障法」：① 网关层查 Nginx proxy_buffering off 与 HTTP 206 Range 头；② 护栏层查 Redis/内存频控与配额日志；③ 路由层按 SSE router 事件拆分系统 1 Jeff 耗时与系统 2 LLM TTFT 耗时并查 mmap 内存水位；④ 持久层核对三库隔离连接池；⑤ 复现载荷写入 badcases.jsonl。',
+        anchor: 'gateway/nginx.conf · apps/api-video/qa.py · apps/api-diagram/app/api/routes.py',
+        metrics: 'Jeff safetensors mmap 内存从 4.81 GB 降至 685 MiB；210s 视频总结从 58.8s 降至 35.4s；视频 Range 跳转 0ms 响应',
+      },
+      {
+        id: 'Q11',
+        question: '如何解决“本地改完直接推线上导致远端迁移破坏数据库、容器起不来却无人知晓、或者告警日志泄露数据库密码/API Key”的工程痛点？',
+        conclusion: '打造「左移 pre-push 门禁 + 非破坏性 SQL 审计 + 远端 ERR Trap 自诊断 + 正则脱敏多渠道 Webhook」四合一闭环：local-preflight.sh 拦截 DROP/TRUNCATE；deploy.sh 异常自动抓取失败行与容器尾部日志；deploy-notify.sh 经 sanitize_sensitive_text() 脱敏后推送飞书/企微/钉钉/Slack。',
+        anchor: 'scripts/local-preflight.sh · scripts/remote-deploy.sh · deploy.sh · scripts/deploy-notify.sh · .github/workflows/qa-ci.yml',
+        metrics: '本地 --fast 预检 ~8s 跑完 207 passed Python 单测与双轨评测；11 项部署安全与凭证脱敏审计 100% 通过',
+      },
+    ],
+  },
+  {
+    id: 'mod-5',
+    title: '⑤ AI 辅助测试提效与 2-5 人测试团队管理 (Q12 ~ Q15)',
+    badge: 'AI Efficiency & QA Leadership',
+    items: [
+      {
+        id: 'Q12',
+        question: '作为 AI Agent 测试组长，你如何利用 AI Agent 与自动化工具链赋能测试工程本身，实现成倍的质量交付提效？',
+        conclusion: '践行「用 AI 造数据、用确定性代码做裁判、用一键脚本替代人工巡检」：利用大模型批量扩充边缘对抗样本并固化为静态 .jsonl；用零 LLM 开销的确定性算子与 SpaTestServer 执行毫秒级回归；一键生成离线可交互 latest_qa_dashboard.html 总控大盘。',
+        anchor: 'apps/api-diagram/evals/dashboard_generator.py · scripts/generate_qa_dashboard.py',
+        metrics: '83 条评测 + 6 场景 E2E + 5 场景并发压测 + 207 项单测全量回归从人工数小时缩短至 <15s，日常回归 Token 成本 ¥0',
+      },
+      {
+        id: 'Q13',
+        question: '如果让你带领 2~5 人的 AI 测试小组负责全栈多智能体平台，你如何划分团队职责、设定 KPI 并避免团队沦为“手工贴 Prompt 的点工”？',
+        conclusion: '推行「1+3 矩阵式分工与代码化准出契约」：组长把控质量架构与门禁红线；组员按「① Agent 评测与数据工程」、「② 全栈 E2E 与混沌工程」、「③ 性能压测与 DevSecOps 门禁」深耕，强制要求所有手工 Bug 必须在 24 小时内转化为自动化用例。',
+        anchor: 'docs/qa/AI_AGENT_QA_AND_DEPLOY_GUIDE.md · /video/docs/ai-agent-interview-playbook',
+        metrics: '核心 KPI：线上 P0/P1 逃逸率 0、Badcase 24h 自动化转化率 100%、PR 门禁反馈 <3min、跨模块评测覆盖率 100%',
+      },
+      {
+        id: 'Q14',
+        question: '当业务算法/后端团队为了赶进度，要求“临时关掉 --strict 评测门禁或跳过某条失败的 Badcase 强行上线”时，你作为测试组长如何处理？',
+        conclusion: '坚持「数据说话、分级处置、绝不盲目放行」：① 用 HTML 大盘与 applied_rules 诊断当场定位是“真实退化”还是“合理产品变更”；② 合理变更 5 分钟内协同更新 golden_cases.jsonl 契约；③ 真实退化坚决一票否决，并提供 output_repair.py 确定性补丁协助 15 分钟内低成本修复。',
+        anchor: 'apps/api-diagram/scripts/run_agent_evals.py (--strict) · app/services/output_repair.py',
+        metrics: '依靠 19 条确定性自愈规则，90% 以上模型格式抖动无需回滚模型，在 Repair 层即可 100% 无损兜底',
+      },
+      {
+        id: 'Q15',
+        question: '请用 1 分钟总结你在本项目中构建的 AI 质量工程体系的核心技术壁垒，以及为什么你能胜任「AI Agent 测试组长」岗位？',
+        conclusion: '兼具全栈自动化深度（Pytest / Playwright / Asyncio 压测 / Docker CI/CD）与多智能体架构视野（LangGraph 状态机、双系统快慢思考路由、RAG 强约束核查、Rubric 防幻觉与 AST 自愈），已落地工业级五层防御闭环，能直接带领团队实现 99.9% 高可靠 AI 交付。',
+        anchor: '/video/docs/ai-agent-qa-whitepaper · /video/docs/ai-agent-interview-playbook · /video/docs/ai-agent-resume-guide',
+        metrics: '全栈 207 passed 自动化单测 + 83/83 双轨评测 100% 达标 + 6/6 浏览器混沌 E2E + 5/5 高并发韧性基准全绿通过',
+      },
+    ],
+  },
+];
+
 export function VideoChangelogPage() {
   const [activeCategory, setActiveCategory] = useState<CategoryId>('all');
   const [expandAll, setExpandAll] = useState(true);
-  const [activeVersion, setActiveVersion] = useState('v2.8.2');
+  const [activeVersion, setActiveVersion] = useState('v2.9.1');
   const [copySuccess, setCopySuccess] = useState(false);
   const [archMode, setArchMode] = useState<'architecture' | 'sequence' | 'benchmark'>('architecture');
   const [collapseState, setCollapseState] = useState<Record<string, boolean>>({
+    'v2.9.1-features': true,
+    'v2.9.1-fixes': true,
+    'v2.9.0-features': true,
+    'v2.9.0-interview': true,
     'v2.8.2-features': true,
     'v2.8.1-features': true,
     'v2.8.0-features': true,
@@ -64,11 +230,13 @@ export function VideoChangelogPage() {
 
   const shouldShowVersion = (vId: string): boolean => {
     if (activeCategory === 'all') return true;
-    if (activeCategory === 'ai' && ['v2.8.2', 'v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.0.0'].includes(vId)) return true;
+    if (activeCategory === 'community' && ['v2.9.1'].includes(vId)) return true;
+    if (activeCategory === 'qa' && ['v2.9.0'].includes(vId)) return true;
+    if (activeCategory === 'ai' && ['v2.9.1', 'v2.9.0', 'v2.8.2', 'v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.0.0'].includes(vId)) return true;
     if (activeCategory === 'asr' && ['v2.7.0', 'v2.5.0', 'v2.3.0'].includes(vId)) return true;
-    if (activeCategory === 'arch' && ['v2.8.2', 'v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v1.0.0'].includes(vId)) return true;
-    if (activeCategory === 'quiz' && ['v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.4.0'].includes(vId)) return true;
-    if (activeCategory === 'platform' && ['v2.8.2', 'v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.3.0', 'v1.0.0'].includes(vId)) return true;
+    if (activeCategory === 'arch' && ['v2.9.1', 'v2.9.0', 'v2.8.2', 'v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v1.0.0'].includes(vId)) return true;
+    if (activeCategory === 'quiz' && ['v2.9.1', 'v2.9.0', 'v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.4.0'].includes(vId)) return true;
+    if (activeCategory === 'platform' && ['v2.9.1', 'v2.9.0', 'v2.8.2', 'v2.8.1', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.3.0', 'v1.0.0'].includes(vId)) return true;
     return false;
   };
 
@@ -83,7 +251,20 @@ export function VideoChangelogPage() {
   const handleCopyChangelog = async () => {
     const md = `# 视频学习助手 (SmartDiagram /video) 更新记录与架构全景
 
-## v2.8.2 (2026-10-25 · LATEST)
+## v2.9.1 (2026-10-29 · LATEST)
+- 🌐 学习社区全栈上线与一键发布 (🚀 发布到社区)：发现/我的发布/我的收藏三视图、只读双栏详情页、点赞收藏、纯文本评论防刷与管理台举报审核闭环。
+- 🖼️ 视频首帧封面自动截取与左文右图精致卡片 (VideoCoverThumb)：前端 Canvas (含黑帧自动微调至 0.3s) + 后端 FFmpeg 异步双保险截帧落库，旧记录点入即自动补全封面；横竖屏毛玻璃自适应缩略图 + 时长角标。
+- 👤 成员个人主页与 52 周学习贡献热力图：AuthorChip 头像昵称展示、个人资料编辑 (006 迁移)、他人查看邮箱脱敏、52 周按日贡献热力看板。
+- 🪟 内置 Apple 毛玻璃弹窗 (VideoDialog) 与无遮挡双栏布局：将社区点赞/收藏/评论区置于左侧播放器下方，右侧 100% 高度展示 AI 研报。
+
+## v2.9.0 (2026-10-26)
+- 🛡️ 83 样本双轨 AI Agent 评测与 19 条确定性自愈算子：图表 53 样本（Pass@1 0% -> Pass@Repair 100%）+ 跨模块 30 样本（招聘 Rubric-v3 防幻觉降级、Knockout <=59 封顶、视频 Jeff 0.78 门控、PPT Send 并行编排）。
+- 🎭 Playwright 浏览器 UI 与 SSE 流式混沌工程：内置 SpaTestServer 零 Token 开销，覆盖半途 error 断流、截断 JSON 帧容错、HTTP 429 限流与 502 重试自愈（6/6 PASS）。
+- ⚡ 50 路 SSE 异步高并发压测与运行时护栏：吞吐达 3,611+ streams/s（92,951+ chunks/s），100 并发 5 租户突发限流精度 100%，StreamLoopGuard 死循环熔断率 100%，Redis 断连 memory_fallback 100%。
+- 🚀 本地 8s pre-push 安检门 + 远程部署脱敏告警 + HTML 大盘：串联 207 passed Python 测试与评测门禁，内置 deploy-notify.sh 凭证脱敏与多渠道 Webhook，自动生成 latest_qa_dashboard.html。
+- 🎯 AI Agent 测试组长 15 道深度面试题库与 STAR 定制简历指南上线：覆盖非确定性评测、RAG 抗幻觉、SSE 混沌注入、全链路五步排障与测试团队管理，并接入文档中心 (/video/docs/ai-agent-interview-playbook)。
+
+## v2.8.2 (2026-10-25)
 - 📐 手机端前置摄像头等比无畸变取景与自然镜像：修复竖屏传感器画面在横屏画布中拉伸变形问题，支持「满屏裁剪(Cover)/完整保留(Contain)」切换与 2×2 拼图真实宽高比自适应。
 - ⚡ 设备性能自适应动态降帧与多模型奇偶拍错峰推理：实时监测推理耗时动态调节 18/12/8 FPS，移动端奇偶帧交替跑全身骨骼与手部/面部模型，单帧峰值阻塞减半，彻底消除中低配手机卡顿。
 - 🎨 画面内毛玻璃全局暂停 HUD 与移动端紧凑布局重塑：将暂停与配额提示整合进视频取景框内全局覆盖层，消除顶栏与四角 HUD 重叠，精简控制按钮与模式分段条。
@@ -138,7 +319,7 @@ export function VideoChangelogPage() {
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-medium text-slate-700 transition hover:border-[#0071e3]/40 hover:text-[#0071e3]"
             >
               <span>📖</span>
-              <span>打开文档中心 (30篇)</span>
+              <span>打开文档中心 (33篇)</span>
             </Link>
             <button
               type="button"
@@ -155,7 +336,7 @@ export function VideoChangelogPage() {
       <div className="mx-auto max-w-[1240px] px-3 pt-3 pb-2.5 sm:px-6 sm:pt-8 sm:pb-6">
         <div className="max-w-3xl">
           <div className="mb-2 hidden items-center gap-2 rounded-full bg-[#0071e3]/10 px-3 py-1 text-[11.5px] font-bold text-[#0071e3] sm:inline-flex">
-            <span>🚀 SmartDiagram Unified Platform · Video Learning v2.8.0</span>
+            <span>🚀 SmartDiagram Unified Platform · v2.9.1</span>
           </div>
           <div className="flex items-center justify-between gap-2">
             <h1 className="text-[18px] font-bold tracking-tight text-slate-900 sm:text-[32px] md:text-[38px]">
@@ -170,7 +351,7 @@ export function VideoChangelogPage() {
             </button>
           </div>
           <p className="mt-2.5 hidden text-[14.5px] leading-relaxed text-slate-600 sm:block">
-            实时追踪视频学习助手从独立终端到融合进 SmartDiagram 统一工作台的特性升级、并发性能基准与底层架构演进。
+            实时追踪视频学习助手从独立终端到融合进 SmartDiagram 统一工作台的特性升级、AI Agent 质量工程基准与底层架构演进。
           </p>
         </div>
 
@@ -207,6 +388,413 @@ export function VideoChangelogPage() {
       {/* 正文双栏：左侧版本时间轴 + 右侧 Sticky 版本导航 */}
       <div className="mx-auto grid max-w-[1240px] grid-cols-1 gap-4 px-3 sm:gap-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="min-w-0 space-y-3.5 sm:space-y-10 lg:space-y-14">
+          {/* ================= v2.9.1 (学习社区全栈上线、一键发布分享、视频首帧封面自动截取与左文右图卡片) ================= */}
+          {shouldShowVersion('v2.9.1') && (
+            <section
+              id="v2.9.1"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-3 md:gap-8 rounded-2xl sm:rounded-3xl border border-[#0071e3]/35 bg-white p-3.5 sm:p-6 shadow-xs"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.9.1</span>
+                  <span className="rounded-full bg-[#0071e3] px-1.5 py-0.5 text-[9.5px] font-bold text-white uppercase tracking-wider sm:px-2 sm:text-[10px]">
+                    LATEST
+                  </span>
+                  <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3] md:hidden">
+                    🌐 学习社区与封面自动截取
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-slate-400 font-mono sm:text-[12.5px] sm:text-slate-500">2026-10-29</p>
+                <p className="hidden text-[11.5px] text-[#0071e3] font-semibold md:block">
+                  🌐 学习社区 · 🚀 一键发布 · 🖼️ 首帧自动封面 · 📊 52周热力
+                </p>
+              </div>
+
+              <div className="min-w-0 space-y-3 sm:space-y-5">
+                <div>
+                  <h2 className="text-[15px] font-bold leading-snug tracking-tight text-slate-900 sm:text-[20px]">
+                    学习社区全栈上线、一键免弹窗发布分享、视频首帧封面自动截取与「左文右图」精致卡片重塑
+                  </h2>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 sm:mt-2 sm:text-[13.5px]">
+                    将个人视频研报升级为团队共享知识资产：在工作台研报顶栏与「我的学习记录」卡片新增 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">🚀 发布到社区</code> 一键直发能力，当前页状态即时刷新；上线「发现 / 我的发布 / 我的收藏」三视图、只读双栏详情页（左栏视频播放+点赞收藏评论、右栏全高研报/导图/字幕/测验）、成员个人主页与 52 周学习贡献热力图；同时研发前端 Canvas 黑帧过滤 + 后端 FFmpeg 0.3s 异步兜底的双端首帧截帧引擎，配合 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">VideoCoverThumb</code> 毛玻璃横竖屏自适应缩略图实现左文右图卡片呈现。
+                  </p>
+                </div>
+
+                {/* 快捷跳转文档与功能入口胶囊条 */}
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#0071e3]/20 bg-[#0071e3]/[0.04] p-2.5 sm:p-3">
+                  <span className="text-[11.5px] font-bold text-slate-700 mr-1">
+                    📚 学习社区架构白皮书与功能直达：
+                  </span>
+                  <Link
+                    to="/video/docs/learning-community"
+                    className="inline-flex items-center gap-1 rounded-full bg-[#0071e3] px-3 py-1 text-[11.5px] font-semibold text-white shadow-2xs transition hover:brightness-105"
+                  >
+                    <span>📖 学习社区全栈架构白皮书</span>
+                  </Link>
+                  <Link
+                    to="/video/community"
+                    className="inline-flex items-center gap-1 rounded-full border border-[#0071e3]/30 bg-white px-3 py-1 text-[11.5px] font-semibold text-[#0071e3] shadow-2xs transition hover:bg-[#0071e3]/10"
+                  >
+                    <span>🌐 进入学习社区广场</span>
+                  </Link>
+                  <Link
+                    to="/video/history"
+                    className="inline-flex items-center gap-1 rounded-full border border-emerald-600/30 bg-white px-3 py-1 text-[11.5px] font-semibold text-emerald-700 shadow-2xs transition hover:bg-emerald-50"
+                  >
+                    <span>📚 从学习记录一键发布</span>
+                  </Link>
+                </div>
+
+                {/* 四大核心特性卡片网格 */}
+                <div className="grid grid-cols-1 gap-2 text-[11.5px] sm:grid-cols-2 lg:grid-cols-4 sm:gap-3 sm:text-[12px]">
+                  <div className="rounded-xl border border-[#0071e3]/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-[#0071e3]">1. 🚀 双入口一键发布与即时状态刷新</div>
+                    <p className="text-slate-600 leading-snug">
+                      工作台 <code className="font-mono text-[11px]">SummaryPanel</code> 与学习记录卡片均支持一键直发社区，免除二次确认弹窗，发布后当前页按钮毫秒级切换为「已发布社区 · 查看 · 下架」。
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-500/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-emerald-600">2. 🖼️ 双端首帧自动截取与旧记录补全</div>
+                    <p className="text-slate-600 leading-snug">
+                      <code className="font-mono text-[11px]">VideoPlayer</code> 加载就绪即自动截取非黑首帧（<code className="font-mono text-[11px]">avgLuma &lt; 8</code> 自动微移 0.3s）+ 后端 <code className="font-mono text-[11px]">/api/media/prepare</code> FFmpeg 异步兜底，旧记录点入即自动生成封面。
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-indigo-500/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-indigo-600">3. 🎨 左文右图卡片与横竖屏毛玻璃封面</div>
+                    <p className="text-slate-600 leading-snug">
+                      新增 <code className="font-mono text-[11px]">VideoCoverThumb</code> 组件，底层毛玻璃环境光虚化 + 顶层高清完整前景 + 右下角时长角标，9:16 竖屏与 16:9 横屏封面同框饱满展示。
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-violet-500/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-violet-600">4. 👤 个人贡献主页、52周热力图与合规治理</div>
+                    <p className="text-slate-600 leading-snug">
+                      支持修改昵称与头像（006 迁移）、他人邮箱自动脱敏、52 周 GitHub 式活跃度热力图；纯文本评论防刷拦截与管理台举报审核。
+                    </p>
+                  </div>
+                </div>
+
+                {/* 可折叠详情 1：v2.9.1-features */}
+                <div className="rounded-xl sm:rounded-2xl border border-slate-200/80 bg-white overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapse('v2.9.1-features')}
+                    className="flex w-full items-center justify-between px-3 py-2.5 sm:p-4 text-left transition hover:bg-slate-50 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="text-[12.5px] sm:text-[14px] font-bold text-slate-900">
+                        🌐 v2.9.1 学习社区、首帧封面与数据库迁移规格明细
+                      </span>
+                      <span className="rounded-full bg-[#0071e3]/10 px-2 py-0.5 text-[10.5px] sm:text-[11px] font-semibold text-[#0071e3]">
+                        Migrations 004 ~ 007
+                      </span>
+                    </div>
+                    <span className="text-[11.5px] sm:text-[12.5px] text-slate-400">
+                      {collapseState['v2.9.1-features'] ? '收起 ▲' : '展开 ▼'}
+                    </span>
+                  </button>
+                  {collapseState['v2.9.1-features'] && (
+                    <div className="border-t border-slate-100 p-3 sm:p-4 space-y-2.5 text-[12px] sm:text-[13px] text-slate-700 leading-relaxed">
+                      <div>
+                        • <strong>数据库增量迁移（004 ~ 007）</strong>：新增 <code className="font-mono text-[11.5px]">004_community.sql</code>（帖子、点赞、收藏、评论、屏蔽词表）、<code className="font-mono text-[11.5px]">005_community_comment_reports.sql</code>（评论举报表）、<code className="font-mono text-[11.5px]">006_user_avatar_url.sql</code>（用户头像列）与 <code className="font-mono text-[11.5px]">007_video_cover_url.sql</code>（<code className="font-mono text-[11.5px]">videos.cover_url</code> 与 <code className="font-mono text-[11.5px]">community_posts.cover_url</code>）。
+                      </div>
+                      <div>
+                        • <strong>只读双栏无遮挡详情页（/video/community/:postId）</strong>：左栏上方为视频播放器，下方紧接点赞、收藏与评论互动区（<code className="font-mono text-[11.5px]">CommunityInteractBar</code>）；右栏 100% 高度完整承载研报总结、章节导览、MindElixir 导图、双语字幕、测验与问答。
+                      </div>
+                      <div>
+                        • <strong>内置 Apple 毛玻璃弹窗系统（VideoDialog.tsx）</strong>：提供 <code className="font-mono text-[11.5px]">useVideoDialog</code> Hook（<code className="font-mono text-[11.5px]">confirm</code> 确认模态框 + <code className="font-mono text-[11.5px]">notify</code> 顶部毛玻璃 Toast），全面替换浏览器原生 <code className="font-mono text-[11.5px]">window.confirm</code> 与 <code className="font-mono text-[11.5px]">window.alert</code>。
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 可折叠详情 2：v2.9.1-fixes */}
+                <div className="rounded-xl sm:rounded-2xl border border-slate-200/80 bg-white overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapse('v2.9.1-fixes')}
+                    className="flex w-full items-center justify-between px-3 py-2.5 sm:p-4 text-left transition hover:bg-slate-50 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="text-[12.5px] sm:text-[14px] font-bold text-slate-900">
+                        🛠️ v2.9.1 关键工程排坑与稳定性修复
+                      </span>
+                    </div>
+                    <span className="text-[11.5px] sm:text-[12.5px] text-slate-400">
+                      {collapseState['v2.9.1-fixes'] ? '收起 ▲' : '展开 ▼'}
+                    </span>
+                  </button>
+                  {collapseState['v2.9.1-fixes'] && (
+                    <div className="border-t border-slate-100 p-3 sm:p-4 space-y-2 text-[12px] sm:text-[13px] text-slate-700 leading-relaxed">
+                      <div>
+                        • <strong>修复社区详情页 410 Gone 与浏览器启发式磁盘强缓存</strong>：在 <code className="font-mono text-[11.5px]">community_repo.py</code> 中使用 <code className="font-mono text-[11.5px]">SELECT p.status AS post_status</code> 防止被 <code className="font-mono text-[11.5px]">analyses.status</code> 覆盖，并增加 <code className="font-mono text-[11.5px]">Cache-Control: no-store</code>。
+                      </div>
+                      <div>
+                        • <strong>修复 React 18 自动批处理导致首帧落库短路</strong>：<code className="font-mono text-[11.5px]">VideoPlayer.tsx</code> 截帧成功后在同一同步调用栈直接执行 <code className="font-mono text-[11.5px]">persistCover(dataUrl)</code>，不再受父组件 <code className="font-mono text-[11.5px]">existingCoverUrl</code> 批处理更新影响。
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ================= v2.9.0 (全平台 AI Agent 专项评测、Playwright SSE 混沌注入、50 路高并发压测、部署自诊断门禁与 15 道核心面试题库) ================= */}
+          {shouldShowVersion('v2.9.0') && (
+            <section
+              id="v2.9.0"
+              className="scroll-mt-20 grid grid-cols-1 md:grid-cols-[170px_minmax(0,1fr)] gap-3 md:gap-8 rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-3.5 sm:p-6 shadow-xs"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.9.0</span>
+                  <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3] md:hidden">
+                    🛡️ AI 评测与 15 道面试题库
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-slate-400 font-mono sm:text-[12.5px] sm:text-slate-500">2026-10-26</p>
+                <p className="hidden text-[11.5px] text-[#0071e3] font-semibold md:block">
+                  🛡️ AI 质量工程 · 83 样本评测 · 混沌压测 · 15 道面试宝典
+                </p>
+              </div>
+
+              <div className="min-w-0 space-y-3 sm:space-y-5">
+                <div>
+                  <h2 className="text-[15px] font-bold leading-snug tracking-tight text-slate-900 sm:text-[20px]">
+                    全平台 AI Agent 专项评测（83 样本）、Playwright SSE 混沌注入、50 路异步高并发压测、部署自诊断门禁与 15 道核心面试题库
+                  </h2>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 sm:mt-2 sm:text-[13.5px]">
+                    面向多智能体系统「输出非确定性、流式长连接脆弱性、多模块并发限流与生产交付风险」，全面建成 SmartDiagram 五层质量工程防御闭环：涵盖 83 样本双轨确定性评测（53 图表 + 30 跨模块多模态）、19 条零 LLM 开销自愈算子、Playwright 真实 Chromium SSE 故障注入、50 路异步高并发吞吐基准与本地 8s <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11.5px]">pre-push</code> 门禁；同步上线「AI Agent 测试组长」白皮书、15 道深度面试题库与 STAR 定制简历指南。
+                  </p>
+                </div>
+
+                {/* 快捷跳转文档胶囊条 */}
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#0071e3]/20 bg-[#0071e3]/[0.04] p-2.5 sm:p-3">
+                  <span className="text-[11.5px] font-bold text-slate-700 mr-1">
+                    📚 专项质量工程与面试文档直达：
+                  </span>
+                  <Link
+                    to="/video/docs/ai-agent-qa-whitepaper"
+                    className="inline-flex items-center gap-1 rounded-full bg-[#0071e3] px-3 py-1 text-[11.5px] font-semibold text-white shadow-2xs transition hover:brightness-105"
+                  >
+                    <span>📖 质量工程白皮书</span>
+                  </Link>
+                  <Link
+                    to="/video/docs/ai-agent-interview-playbook"
+                    className="inline-flex items-center gap-1 rounded-full border border-[#0071e3]/30 bg-white px-3 py-1 text-[11.5px] font-semibold text-[#0071e3] shadow-2xs transition hover:bg-[#0071e3]/10"
+                  >
+                    <span>🎯 15 道深度面试题库</span>
+                  </Link>
+                  <Link
+                    to="/video/docs/ai-agent-resume-guide"
+                    className="inline-flex items-center gap-1 rounded-full border border-emerald-600/30 bg-white px-3 py-1 text-[11.5px] font-semibold text-emerald-700 shadow-2xs transition hover:bg-emerald-50"
+                  >
+                    <span>📄 STAR 定制简历指南</span>
+                  </Link>
+                </div>
+
+                {/* 四大核心特性卡片网格 */}
+                <div className="grid grid-cols-1 gap-2 text-[11.5px] sm:grid-cols-2 lg:grid-cols-4 sm:gap-3 sm:text-[12px]">
+                  <div className="rounded-xl border border-[#0071e3]/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-[#0071e3]">1. 83 样本双轨评测 + 19 条确定性自愈算子</div>
+                    <p className="text-slate-600 leading-snug">
+                      图表 53 样本（<code className="font-mono text-[11px]">Pass@1 0% -&gt; Pass@Repair 100%</code>）+ 跨模块 30 样本（招聘 <code className="font-mono text-[11px]">Rubric-v3</code> 防幻觉降级、Knockout <code className="font-mono text-[11px]">&lt;=59</code> 封顶、视频 Jeff 门控、PPT <code className="font-mono text-[11px]">Send</code> 并行编排）。
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-500/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-emerald-600">2. Playwright 浏览器 UI 与 SSE 流式混沌工程</div>
+                    <p className="text-slate-600 leading-snug">
+                      内置 <code className="font-mono text-[11px]">SpaTestServer</code> 零 Token 开销，覆盖半途 <code className="font-mono text-[11px]">error</code> 断流、截断 JSON 帧容错、HTTP <code className="font-mono text-[11px]">429</code> 限流与 <code className="font-mono text-[11px]">502</code> 重试自愈（<code className="font-mono text-[11px]">6/6 PASS</code>）。
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-indigo-500/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-indigo-600">3. 50 路 SSE 异步高并发压测与运行时护栏</div>
+                    <p className="text-slate-600 leading-snug">
+                      吞吐达 <code className="font-mono text-[11px]">3,611+ streams/s</code>（<code className="font-mono text-[11px]">92,951+ chunks/s</code>），100 并发 5 租户突发限流精度 <code className="font-mono text-[11px]">100%</code>，<code className="font-mono text-[11px]">StreamLoopGuard</code> 死循环熔断率 <code className="font-mono text-[11px]">100%</code>，Redis 断连 <code className="font-mono text-[11px]">memory_fallback</code> <code className="font-mono text-[11px]">100%</code>。
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-amber-500/25 bg-slate-50/70 p-2.5 sm:p-3 space-y-1">
+                    <div className="font-bold text-amber-600">4. 本地 8s pre-push 安检门 + 远程部署脱敏告警 + HTML 大盘</div>
+                    <p className="text-slate-600 leading-snug">
+                      串联 <code className="font-mono text-[11px]">207 passed</code> Python 测试与评测门禁，内置 <code className="font-mono text-[11px]">deploy-notify.sh</code> 凭证脱敏与多渠道 Webhook，自动生成离线可交互 <code className="font-mono text-[11px]">latest_qa_dashboard.html</code>。
+                    </p>
+                  </div>
+                </div>
+
+                {/* 可折叠详情 1：v2.9.0-features 核心实测指标汇总表与常用命令速查 */}
+                <div className="rounded-xl sm:rounded-2xl border border-slate-200/80 bg-white overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapse('v2.9.0-features')}
+                    className="flex w-full items-center justify-between px-3 py-2.5 sm:p-4 text-left transition hover:bg-slate-50 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="text-[12.5px] sm:text-[14px] font-bold text-slate-900">
+                        📊 v2.9.0 核心实测指标汇总与全链路质检命令速查
+                      </span>
+                      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10.5px] sm:text-[11px] font-semibold text-emerald-700">
+                        207 单测 + 83 评测全绿
+                      </span>
+                    </div>
+                    <span className="text-[11.5px] sm:text-[12.5px] text-slate-400">
+                      {collapseState['v2.9.0-features'] ? '收起 ▲' : '展开 ▼'}
+                    </span>
+                  </button>
+                  {collapseState['v2.9.0-features'] && (
+                    <div className="border-t border-slate-100 p-3 sm:p-4 space-y-3 text-[12px] sm:text-[13px] text-slate-700 leading-relaxed">
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-left text-[11.5px] sm:text-[12px] border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
+                              <th className="py-2 px-3 whitespace-nowrap">质量工程支柱</th>
+                              <th className="py-2 px-3 whitespace-nowrap">关键实测指标</th>
+                              <th className="py-2 px-3 whitespace-nowrap">准出红线 (--strict)</th>
+                              <th className="py-2 px-3 whitespace-nowrap">一键验证命令</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            <tr>
+                              <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">图表 Agent 专项评测 (53 样本)</td>
+                              <td className="py-2 px-3 text-emerald-700 font-medium">路由/多轮/RAG/安全均 100%，20 条 Badcase 自愈率 100% (P95 0.03ms)</td>
+                              <td className="py-2 px-3 text-slate-500 whitespace-nowrap">&gt;=95% ~ 100%</td>
+                              <td className="py-2 px-3 font-mono text-[11px] text-[#0071e3] whitespace-nowrap">npm run eval:agent</td>
+                            </tr>
+                            <tr>
+                              <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">跨模块多模态评测 (30 样本)</td>
+                              <td className="py-2 px-3 text-emerald-700 font-medium">招聘 Rubric-v3 防幻觉/Knockout 100%，视频 Jeff 门控/测验 100%，PPT Send 100%</td>
+                              <td className="py-2 px-3 text-slate-500 whitespace-nowrap">&gt;=95% ~ 100%</td>
+                              <td className="py-2 px-3 font-mono text-[11px] text-[#0071e3] whitespace-nowrap">npm run eval:multimodal</td>
+                            </tr>
+                            <tr>
+                              <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">Playwright UI 与 SSE 混沌工程</td>
+                              <td className="py-2 px-3 text-emerald-700 font-medium">6/6 PASS (半途断流、畸形 JSON 帧、HTTP 429 限流、502 自动恢复)</td>
+                              <td className="py-2 px-3 text-slate-500 whitespace-nowrap">6/6 (100% PASS)</td>
+                              <td className="py-2 px-3 font-mono text-[11px] text-[#0071e3] whitespace-nowrap">npm run test:e2e</td>
+                            </tr>
+                            <tr>
+                              <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">50 路异步 SSE 高并发压测</td>
+                              <td className="py-2 px-3 text-emerald-700 font-medium">3,611+ streams/s (92,951+ chunks/s)，TTFT P95 0.62ms，限流/熔断/降级 100%</td>
+                              <td className="py-2 px-3 text-slate-500 whitespace-nowrap">E2E P95 &lt; 200ms</td>
+                              <td className="py-2 px-3 font-mono text-[11px] text-[#0071e3] whitespace-nowrap">npm run bench:sse</td>
+                            </tr>
+                            <tr>
+                              <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">可视化 QA 总控 HTML 大盘</td>
+                              <td className="py-2 px-3 text-emerald-700 font-medium">单文件离线可交互报表 + XSS 安全转义 (latest_qa_dashboard.html)</td>
+                              <td className="py-2 px-3 text-slate-500 whitespace-nowrap">0 XSS 漏洞</td>
+                              <td className="py-2 px-3 font-mono text-[11px] text-[#0071e3] whitespace-nowrap">npm run qa:dashboard</td>
+                            </tr>
+                            <tr>
+                              <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">本地左移预检与 Git pre-push</td>
+                              <td className="py-2 px-3 text-emerald-700 font-medium">~8s 完成 Env 契约 + 破坏性 SQL 扫描 + 207 passed 单测 + 双轨评测</td>
+                              <td className="py-2 px-3 text-slate-500 whitespace-nowrap">0 Error / 0 Fail</td>
+                              <td className="py-2 px-3 font-mono text-[11px] text-[#0071e3] whitespace-nowrap">npm run preflight</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 可折叠详情 2：v2.9.0-interview 15 道必考深度面试题与核心答辩要点速查 */}
+                <div className="rounded-xl sm:rounded-2xl border border-[#0071e3]/30 bg-slate-50/60 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapse('v2.9.0-interview')}
+                    className="flex w-full items-center justify-between px-3 py-2.5 sm:p-4 text-left transition hover:bg-[#0071e3]/[0.06] cursor-pointer"
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <span className="text-[12.5px] sm:text-[14px] font-bold text-slate-900">
+                        🎯 AI Agent 测试组长（大模型方向）15 道必考深度面试题与核心答辩要点速查
+                      </span>
+                      <span className="rounded-full bg-[#0071e3] px-2 py-0.5 text-[10px] sm:text-[11px] font-bold text-white">
+                        5 大模块 · Q1~Q15 全收录
+                      </span>
+                    </div>
+                    <span className="shrink-0 text-[11.5px] sm:text-[12.5px] font-semibold text-[#0071e3]">
+                      {collapseState['v2.9.0-interview'] ? '收起题库 ▲' : '展开题库 ▼'}
+                    </span>
+                  </button>
+
+                  {collapseState['v2.9.0-interview'] && (
+                    <div className="border-t border-[#0071e3]/20 p-3 sm:p-4 space-y-4 bg-white">
+                      {INTERVIEW_MODULES.map((mod) => (
+                        <div
+                          key={mod.id}
+                          className="rounded-xl border border-slate-200/90 bg-slate-50/50 p-3 sm:p-4 space-y-2.5"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+                            <h3 className="text-[12.5px] sm:text-[13.5px] font-bold text-slate-900">
+                              {mod.title}
+                            </h3>
+                            <span className="rounded-full bg-[#0071e3]/10 px-2.5 py-0.5 font-mono text-[10.5px] font-semibold text-[#0071e3]">
+                              {mod.badge}
+                            </span>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            {mod.items.map((item) => (
+                              <div
+                                key={item.id}
+                                className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:p-3.5 space-y-1.5 shadow-2xs"
+                              >
+                                <div className="flex items-start gap-2">
+                                  <span className="mt-0.5 shrink-0 rounded-md bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">
+                                    {item.id}
+                                  </span>
+                                  <div className="text-[12px] sm:text-[13px] font-bold text-slate-900 leading-snug">
+                                    {item.question}
+                                  </div>
+                                </div>
+                                <div className="pl-0 sm:pl-8 space-y-1 text-[11.5px] sm:text-[12.5px] leading-relaxed">
+                                  <p className="text-slate-700">
+                                    <strong className="text-[#0071e3]">💡 核心破局结论：</strong>
+                                    {item.conclusion}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5 text-[11px] sm:text-[11.5px]">
+                                    <span className="text-slate-500">
+                                      <strong className="text-slate-700">🔗 源码锚点：</strong>
+                                      <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">
+                                        {item.anchor}
+                                      </code>
+                                    </span>
+                                    <span className="text-emerald-700 font-medium">
+                                      <strong>📈 量化实测：</strong>
+                                      {item.metrics}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-900 px-3.5 py-2.5 text-xs text-white">
+                        <span>
+                          💡 想要查看每道面试题的完整 STAR 话术、追问攻防与架构图？
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            to="/video/docs/ai-agent-interview-playbook"
+                            className="rounded-full bg-[#0071e3] px-3 py-1 text-[11.5px] font-bold text-white hover:brightness-110"
+                          >
+                            阅读完整 15 道面试题库手册 →
+                          </Link>
+                          <Link
+                            to="/video/docs/ai-agent-resume-guide"
+                            className="rounded-full bg-white/15 px-3 py-1 text-[11.5px] font-semibold text-white hover:bg-white/25"
+                          >
+                            查看定制简历指南 →
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* ================= v2.8.2 (最新体验精修：摄像头等比无畸变取景、动态降帧错峰防卡顿与画面内全局暂停 HUD) ================= */}
           {shouldShowVersion('v2.8.2') && (
             <section
@@ -216,9 +804,6 @@ export function VideoChangelogPage() {
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 md:block md:space-y-1.5 md:border-none md:pb-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <span className="text-[16px] font-bold text-slate-900 sm:text-[20px]">v2.8.2</span>
-                  <span className="rounded-full bg-[#0071e3] px-1.5 py-0.5 text-[9.5px] font-bold text-white uppercase tracking-wider sm:px-2 sm:text-[10px]">
-                    LATEST
-                  </span>
                   <span className="rounded-md bg-[#0071e3]/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-[#0071e3] md:hidden">
                     📐 镜头等比自适应与降帧防卡顿
                   </span>

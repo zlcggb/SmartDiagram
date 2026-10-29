@@ -1,17 +1,17 @@
-# SmartDiagram 视频学习助手 (`/video`) v2.7.0 · 工业级技术知识库中心
+# SmartDiagram 视频学习助手 (`/video`) v2.9.0 · 工业级技术知识库中心
 
-> **系统定位**：SmartDiagram 视频学习助手（`/video` 工作台，原 VidGrab 核心引擎）是面向高净值深度学习者与专业研究员的**高性能视频学习工作台与商业智库研报系统**（v2.7.0 · 2026-10）。  
-> **工程愿景**：在 SmartDiagram Monorepo 统一工作台下，以第一性原理打造集“React 18 + Tailwind v4 Apple 毛玻璃交互外壳、多平台爬虫集群与 100% 自动流式下载、四点并发极速总结管线（6 线程 ASR + 主研报与双语翻译双线程并行，210s 视频总耗时压降至 `35.4s`）、Jeff 系统 1 三层高置信意图门控、MindElixir 跨工作台导图协同、Study Deck / Paper Sheet 双模式测验，以及 PostgreSQL 16 (`vidgrab` 库) + `localStorage` 双重持久化”于一体的全栈架构。
+> **系统定位**：SmartDiagram 视频学习助手（`/video` 工作台，原 VidGrab 核心引擎）是面向高净值深度学习者与专业研究员的**高性能视频学习工作台与商业智库研报系统**（v2.9.0 · 2026-10）。  
+> **工程愿景**：在 SmartDiagram Monorepo 统一工作台下，以第一性原理打造集“React 18 + Tailwind v4 Apple 毛玻璃交互外壳、多平台爬虫集群与 100% 自动流式下载、四点并发极速总结管线（6 线程 ASR + 主研报与双语翻译双线程并行，210s 视频总耗时压降至 `35.4s`）、Jeff 系统 1 三层高置信意图门控、MindElixir 跨工作台导图协同、Study Deck / Paper Sheet 双模式测验、PostgreSQL 16 (`vidgrab` 库) + `localStorage` 双重持久化，以及 **83 样本双轨 AI Agent 专项评测 + 50 路 SSE 并发压测 + 全链路质量工程体系**”于一体的全栈架构。
 
 ---
 
-## 快速导航矩阵 · 六大知识卷轴
+## 快速导航矩阵 · 七大知识卷轴
 
 <div class="not-prose my-6 w-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/60 p-4">
   <div class="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5 dark:border-slate-800">
     <div class="flex items-center gap-2">
       <span class="inline-block h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse"></span>
-      <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">SmartDiagram /video v2.7.0 工业技术知识库拓扑全景 (Engineering Hub Map)</span>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">SmartDiagram /video v2.9.0 工业技术知识库拓扑全景 (Engineering Hub Map)</span>
     </div>
     <span class="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full dark:bg-blue-950/60 dark:text-blue-400">Monorepo 统一架构 · 核心卷轴矩阵</span>
   </div>
@@ -66,7 +66,7 @@
       <g transform="translate(365, 205)" filter="url(#svg-card-shadow)">
         <rect width="230" height="70" rx="35" fill="url(#hub-center-grad)" stroke="#ffffff" stroke-width="2.5" />
         <text x="115" y="35" fill="#ffffff" font-size="13.5" font-weight="bold" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, sans-serif">📚 SmartDiagram /video</text>
-        <text x="115" y="53" fill="#dbeafe" font-size="10.5" text-anchor="middle">v2.7.0 · 四点并发 · PG16 双写</text>
+        <text x="115" y="53" fill="#dbeafe" font-size="10.5" text-anchor="middle">v2.9.0 · 四点并发 · 83样本评测</text>
       </g>
 
       <!-- 卷一：系统总览与全栈架构 (左上) -->
@@ -178,6 +178,7 @@
 
 | 文档名称 | 核心技术要点与规格 | 适用对象 |
 |---|---|---|
+| 🌐 **[学习社区与一键分享全栈架构](学习社区与知识共享全栈架构.md)** | **【v2.9.1 核心新增】** 详解工作台/学习记录/社区详情三处一键发布/下架幂等流转、左视频+左下点赞收藏评论+右研报双栏布局、前端 Canvas + 后端 `ffmpeg` 双通道首帧封面截取、「左文右图」卡片与内置毛玻璃弹窗体系。 | 全体研发 / 产品 / 架构师 |
 | 📐 **[系统架构与技术全景](系统架构与技术全景.md)** | **【核心基石】** React 18 + Tailwind v4 毛玻璃交互层（`VideoShell` + Portal 居中切换）、`api-video :4020` / `gateway :9237` 编排层、6 线程并发 ASR (`ASR_MAX_WORKERS=6`)、主研报与双语翻译双线程并行（210s 视频总耗时压降至 `35.4s`）、MindElixir 跨工作台移交 `/diagram`、Study Deck / Paper Sheet 双模式测验及 PG16 + `localStorage` 双写拓扑。 | 全体研发 / 架构师 |
 | 🛠️ **[方案设计与开闭原则](方案设计.md)** | 四点并发极速流水线、零网络等待协同缓存、HTTP 206 Range 初始态 `readyState` 校准、快慢双系统 SSE 问答契约（`POST /api/ask/stream`）与异步熔断设计。 | 后端开发 / 算法工程 |
 | 📋 **[系统需求规格说明 (SRS)](需求分析.md)** | 严格对齐 SmartDiagram `/video` v2.7.0 代码实现的工业级需求规格书，涵盖六维学习闭环、功能边界与 SLA 指标。 | 产品经理 / 系统架构师 |
@@ -226,22 +227,32 @@
 
 ---
 
-### 📜 卷六：历史沉淀与项目演进 (Archives & Engineering Milestones)
+### 🛡️ 卷六：AI 智能体专项评测与全链路质量工程 (AI Agent Evaluation & QA Engineering)
 
-- **[优化记录与技术演进](优化记录与技术演进.md)**：最新系统架构突破与 v2.7.0 演进指南。
+| 文档名称 | 核心技术要点与规格 | 状态 |
+|---|---|---|
+| 🛡️ **[AI 智能体专项评测与全链路质量工程白皮书](AI智能体专项评测与全链路质量工程白皮书.md)** | **【质量工程基石】** 四层测试金字塔（**207 项 Pytest** + 6 包 TS 单测）、四层确定性收敛漏斗（**19 条自愈算子**将 `Pass@1 (0%)` 拉升至 `Pass@Repair (100%)`）、**83 样本双轨评测基准**（53 图表域 + 30 跨模块多模态：招聘 `Rubric-v3` 防幻觉/Knockout + 视频 Jeff 门控 + PPT `Send` 编排）、Playwright 6 场景 SSE 混沌故障注入、**50 路并发 SSE 压测（`3,611+ streams/s`）** 与离线可交互 `latest_qa_dashboard.html` 质量总控大盘。 | **v2.9.0 核心标准** |
+| 🎯 **[AI 智能体测试组长深度面试题库与答辩手册](AI智能体测试组长深度面试题库与答辩手册.md)** | **【答辩宝典】** 5 大考核模块 × 15 道必考母题（非确定性测试、Golden Dataset、多轮记忆、RAG 与简历防幻觉、SVG 计算几何视觉质检、SSE 混沌注入与 50 路高并发压测、30/60/90 天团队管理），附 5 分钟量化速查卡。 | 面试答辩必备 |
+| 📄 **[AI 智能体测试组长定制简历与 STAR 项目指南](AI智能体测试组长定制简历与STAR项目指南.md)** | **【定制简历】** 3 版差异化个人总结、5 大模块技能清单、双项目 STAR 深度拆解（83 样本双轨评测 + 207 单测/Playwright/50 路并发压测）与 20 项 ATS 高频关键词 100% 映射表。 | 简历定制指南 |
+
+---
+
+### 📜 卷七：历史沉淀与项目演进 (Archives & Engineering Milestones)
+
+- **[优化记录与技术演进](优化记录与技术演进.md)**：最新系统架构突破与 v2.9.0 演进指南。
 - **[执行记录与踩坑沉淀](执行记录.md)**：历史环境适配、Windows 便携版 Python、证书修复等历史踩坑全纪实。
 - **[2026-06-25-稳定性与总结加速迭代](2026-06-25-稳定性与总结加速迭代.md)**：早期总结加速与熔断器设计记录。
 - **[2026-08-07-洲明视频学习助手与AI测验](2026-08-07-洲明视频学习助手与AI测验.md)**：本地音视频拖拽上传与 AI 测验系统设计。
 
 ---
 
-## 核心系统 SLA 指标看板 (v2.7.0)
+## 核心系统 SLA 指标看板 (v2.9.0)
 
 <div class="not-prose my-6 w-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/60 p-4">
   <div class="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5 dark:border-slate-800">
     <div class="flex items-center gap-2">
       <span class="inline-block h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse"></span>
-      <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">SmartDiagram /video v2.7.0 全链路性能指标与可用性保障看板 (Core SLA Performance Dashboard)</span>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">SmartDiagram /video v2.9.0 全链路性能指标与可用性保障看板 (Core SLA Performance Dashboard)</span>
     </div>
     <span class="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full dark:bg-blue-950/60 dark:text-blue-400">工业级 SLA · 毫秒级监控</span>
   </div>
